@@ -4,6 +4,22 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.8] — 2026-07-05
+
+### Added
+- **Plugin icon shipped inside the addon (`addons/claude_bridge/icon.png`).** A
+  128×128 icon (a Godot-blue node bridged to a Claude-terracotta node) added for
+  the Godot Asset Library listing. It was committed to `main` after the `v0.4.7`
+  tag, so it was absent from the `v0.4.7` tag tree; this release tags it in-tree
+  so an Asset Library install now drops the icon into a user's
+  `res://addons/claude_bridge/` alongside the addon. Non-functional asset — no
+  code or tool behavior changes.
+
+### Changed
+- Version realigned to **0.4.8** across `host/package.json` (+ lockfile), both
+  `plugin.cfg`s, and both `ADDON_VERSION`s (canonical + `example/` vendored copy).
+  This is the tag the Asset Library submission should reference.
+
 ## [0.4.7] — 2026-07-05
 
 ### Changed
