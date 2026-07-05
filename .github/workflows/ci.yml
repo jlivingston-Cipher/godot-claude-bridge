@@ -52,8 +52,11 @@ jobs:
       - name: Assert the resolved SDK is still 1.x
         # A v2 major changes the registerTool / import surface and needs the
         # migration in README before the package.json range is bumped.
+        # Read the installed package.json off disk: the SDK's "exports" map does
+        # not expose "./package.json", so require('@…/sdk/package.json').version
+        # resolves to undefined on current Node and this check throws spuriously.
         run: |
-          node -e "const v=require('@modelcontextprotocol/sdk/package.json').version; console.log('resolved @modelcontextprotocol/sdk', v); if(!v.startsWith('1.')){console.error('::error::@modelcontextprotocol/sdk resolved to '+v+' (not 1.x). Apply the SDK v2 migration in README before bumping the range.'); process.exit(1);}"
+          node -e "const v=JSON.parse(require('node:fs').readFileSync('node_modules/@modelcontextprotocol/sdk/package.json','utf8')).version; console.log('resolved @modelcontextprotocol/sdk', v); if(!v || !v.startsWith('1.')){console.error('::error::@modelcontextprotocol/sdk resolved to '+v+' (not 1.x). Apply the SDK v2 migration in README before bumping the range.'); process.exit(1);}"
 
   test:
     name: host tests (node ${{ matrix.node }})
