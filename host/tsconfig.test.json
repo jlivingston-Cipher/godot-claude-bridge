@@ -1,0 +1,10 @@
+{
+  "//": "Compiles src + test together into dist-test/ so the suite runs on the built JS with node:test. Kept out of the published tarball by package.json 'files' and out of git by .gitignore.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist-test",
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

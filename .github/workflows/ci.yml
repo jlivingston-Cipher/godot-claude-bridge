@@ -54,3 +54,28 @@ jobs:
         # migration in README before the package.json range is bumped.
         run: |
           node -e "const v=require('@modelcontextprotocol/sdk/package.json').version; console.log('resolved @modelcontextprotocol/sdk', v); if(!v.startsWith('1.')){console.error('::error::@modelcontextprotocol/sdk resolved to '+v+' (not 1.x). Apply the SDK v2 migration in README before bumping the range.'); process.exit(1);}"
+
+  test:
+    name: host tests (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    # Unit + loopback-socket integration tests (node:test, zero extra deps).
+    # Fully headless — no Godot editor/LSP/DAP; the socket protocols are
+    # exercised against in-process mock servers on 127.0.0.1.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [ '18', '20', '22' ]
+    defaults:
+      run:
+        working-directory: host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install against the real registry (reproducible)
+        run: npm ci
+      - name: Compile the suite and run it (node:test)
+        run: npm test

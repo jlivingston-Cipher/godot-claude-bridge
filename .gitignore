@@ -1,6 +1,7 @@
 # Node / TypeScript
 host/node_modules/
 host/dist/
+host/dist-test/
 host/*.log
 npm-debug.log*
 
