@@ -1,11 +1,12 @@
 # Godot–Claude Bridge
 
-> **Status: v0.4.7 — live-validated and hardened.** All four capability planes were
+> **Status: v0.4.9 — live-validated and hardened.** All four capability planes were
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build on Node 18/20/22. Full history
-> in `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus an 80-test host suite
+> and a real-Godot integration smoke** on Node 18/20/22. Full history in
+> `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
 
 Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**59 tools + 5 MCP resources**):
 

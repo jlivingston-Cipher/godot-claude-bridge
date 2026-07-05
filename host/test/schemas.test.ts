@@ -16,7 +16,7 @@ test("every entry in outputSchemas is a valid ZodRawShape", () => {
 });
 
 test("representative success shapes validate against their schema", () => {
-  schemaOf("editor_ping").parse({ pong: true, addon_version: "0.4.8", godot: "4.4.1" });
+  schemaOf("editor_ping").parse({ pong: true, addon_version: "0.4.9", godot: "4.4.1" });
   schemaOf("godot_version").parse({ version: "4.4.1", raw: { code: 0, stdout: "…", stderr: "", timedOut: false } });
   schemaOf("project_get_setting").parse({ name: "application/config/name", value: "My Game" });
   schemaOf("dbg_scopes").parse({ scopes: [{ name: "Locals", variables_ref: 1001 }] });
@@ -54,7 +54,7 @@ test("schemas are non-strict: EXTRA runtime fields still validate (catalog is a 
 
 test("a deliberately WRONG shape is rejected (B1 enforcement)", () => {
   // pong must be boolean.
-  assert.throws(() => schemaOf("editor_ping").parse({ pong: "yes", addon_version: "0.4.8", godot: "4.4.1" }), z.ZodError);
+  assert.throws(() => schemaOf("editor_ping").parse({ pong: "yes", addon_version: "0.4.9", godot: "4.4.1" }), z.ZodError);
   // required field missing.
   assert.throws(() => schemaOf("scene_get_tree").parse({ name: "Main", path: "/root/Main", script: null, child_count: 0 }), z.ZodError);
   // stream must be one of the enum members.

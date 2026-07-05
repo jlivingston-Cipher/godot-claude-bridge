@@ -4,6 +4,47 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.9] — 2026-07-05
+
+### Added
+- **Phase 1 LSP-depth — two new semantic tools.**
+  - `gd_signature_help` — call-signature / active-parameter hints at a position
+    (`textDocument/signatureHelp`), resolving `[start,end]` parameter labels
+    against the signature label. **Confirmed returning signatures live in CI**
+    against a real Godot 4.3-stable editor.
+  - `gd_code_action` — the lightbulb menu (`textDocument/codeAction`): quick
+    fixes / refactors for a range, listed read-only with a `has_edit` flag and
+    any attached `command` (both CodeAction and bare Command shapes normalized).
+- **Phase 1 debugger-depth — two new DAP tools.**
+  - `dbg_set_exception_breakpoints` — enable/replace the adapter's exception
+    breakpoint filters (`setExceptionBreakpoints`) and report the
+    `available_filters` it advertises. Config-only, not gated.
+  - `dbg_set_variable` — change a variable's value in a stopped frame
+    (`setVariable`). **Elicitation-gated** (destructive) and feature-detected:
+    returns a clear "unsupported" message without prompting when the adapter
+    advertises `supportsSetVariable: false`.
+- **Live D7 probe in the editor-plane integration job.** Reports, against a real
+  editor, whether `workspace/symbol` returns results and smokes the new LSP
+  tools (grep-able `D7_CAPS` / `D7_WS_RAW` / `PROBE` markers; log-only, never
+  gates a merge).
+
+### Changed
+- **`gd_code_action` degrades gracefully (D7 finding).** The CI probe showed
+  Godot 4.3-stable advertises `codeActionProvider: false` and replies `-32601`,
+  so the tool now feature-detects (mirroring `gd_workspace_symbols`) and returns
+  a clear "unsupported" message instead of leaking a raw JSON-RPC error.
+- **`gd_workspace_symbols` framing re-confirmed (D7).** The same probe showed 4.3
+  advertises `workspaceSymbolProvider: true` yet still replies `-32601` to every
+  query — validating the existing "unsupported" handling and its
+  belt-and-suspenders `-32601` catch. Documented in `README.md` /
+  `docs/TOOL_CATALOG.md`.
+- Surface **55 → 59 tools** (8 → 10 LSP, 10 → 12 DAP). The registration meta-test,
+  frozen output schemas, `docs/TOOL_CATALOG.md` (entries + index + gating list),
+  and `README.md` were updated in lockstep; `contract_check.py` stays green
+  (59 ↔ 59, 52 catalog JSON blocks). +8 loopback mock-server tests (**80 total**).
+- Version realigned to **0.4.9** across `host/package.json` (+ lockfile), both
+  `plugin.cfg`s, and both `ADDON_VERSION`s (canonical + `example/` vendored copy).
+
 ## [0.4.8] — 2026-07-05
 
 ### Added
