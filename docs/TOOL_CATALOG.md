@@ -446,8 +446,8 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }`
 
-### `gd_workspace_symbols` ⚠️ · non-functional against Godot 4.7
-> **Engine limitation (found in live validation):** Godot 4.7's GDScript language server replies `-32601 Method not found` to `workspace/symbol`, so this tool always errors at runtime. The gap is in the engine, not the host — the input/output contract below is correct and the tool is retained for forward compatibility. Backlog: feature-detect and hide it, or return a clearer "unsupported by this Godot build" message.
+### `gd_workspace_symbols` ⚠️ · unsupported by Godot ≤ 4.7 (handled gracefully)
+> **Engine limitation (found in live validation):** Godot 4.7's GDScript language server replies `-32601 Method not found` to `workspace/symbol`. The gap is in the engine, not the host — the input/output contract below is correct and the tool is retained for forward compatibility (it will start returning results on a Godot build that implements the method). **As of v0.4.5** the host feature-detects this: it checks the server's advertised `workspaceSymbolProvider` capability (and still catches a `-32601` from builds that advertise it but don't honour it), returning an explicit `isError` "unsupported by the connected Godot build — use gd_document_symbols instead" message rather than leaking a raw JSON-RPC error. On the success path (a future capable build) the `symbols` output shape below is unchanged.
 - **Input** `{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }`
 - **Output** same `symbols` shape as `gd_document_symbols`, each with an added `uri`.
 
@@ -672,7 +672,7 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 | `gd_references` | D / LSP | ✅ | – |
 | `gd_rename` | D / LSP | ✅ | ✔ |
 | `gd_document_symbols` | D / LSP | ✅ | – |
-| `gd_workspace_symbols` | D / LSP | ⚠️ engine-missing | – |
+| `gd_workspace_symbols` | D / LSP | ⚠️ engine-missing (handled) | – |
 | `gd_diagnostics` | D / LSP | ✅ | – |
 | `dbg_launch` | D / DAP | ✅ | runs code |
 | `dbg_attach` | D / DAP | ✅ | – |

@@ -1,6 +1,6 @@
 # Claude Bridge (Godot editor addon)
 
-Loopback TCP/JSON bridge that exposes the live Godot editor to an MCP host so Claude can drive it. Part of the [godot-claude-bridge](../../../README.md) Phase 0-1 scaffold.
+Loopback TCP/JSON bridge that exposes the live Godot editor (and, via the runtime autoload, the running game) to an MCP host so Claude can drive it. Part of [godot-claude-bridge](../../../README.md) — the live-validated v0.4.x build.
 
 ## Install
 1. Copy this `claude_bridge/` folder into your project's `addons/` directory so the path is `res://addons/claude_bridge/`.

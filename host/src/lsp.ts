@@ -33,6 +33,7 @@ export class LspClient {
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private initialized: Promise<unknown> | null = null;
+  private serverCapabilities: Record<string, unknown> | null = null;
   private opened = new Set<string>();
   private diagnostics = new Map<string, Diagnostic[]>();
   private diagWaiters = new Map<string, Array<() => void>>();
@@ -142,6 +143,7 @@ export class LspClient {
     }
     this.pending.clear();
     this.initialized = null;
+    this.serverCapabilities = null;
     this.opened.clear();
   }
 
@@ -168,7 +170,7 @@ export class LspClient {
   private ensureInitialized(): Promise<unknown> {
     if (!this.initialized) {
       this.initialized = (async () => {
-        const result = await this.rawRequest("initialize", {
+        const result = (await this.rawRequest("initialize", {
           processId: process.pid,
           rootUri: this.rootUri,
           rootPath: decodeURIComponent(this.rootUri.replace(/^file:\/\//, "")),
@@ -187,7 +189,8 @@ export class LspClient {
           },
           workspaceFolders: [{ uri: this.rootUri, name: "godot-project" }],
           clientInfo: { name: "godot-claude-bridge", version: "0.2.0" },
-        });
+        })) as { capabilities?: Record<string, unknown> } | null;
+        this.serverCapabilities = result?.capabilities ?? {};
         await this.notify("initialized", {});
         return result;
       })();
@@ -198,6 +201,17 @@ export class LspClient {
   async request<T = unknown>(method: string, params: unknown, timeoutMs?: number): Promise<T> {
     await this.ensureInitialized();
     return this.rawRequest<T>(method, params, timeoutMs);
+  }
+
+  /**
+   * The server's advertised capabilities from the `initialize` handshake (an
+   * empty object if the server advertised none). Lets a tool feature-detect an
+   * optional LSP method — e.g. `workspaceSymbolProvider` — before calling it,
+   * instead of surfacing a raw `-32601 Method not found` to the caller.
+   */
+  async getServerCapabilities(): Promise<Record<string, unknown>> {
+    await this.ensureInitialized();
+    return this.serverCapabilities ?? {};
   }
 
   async ensureOpen(uri: string, text: string): Promise<void> {

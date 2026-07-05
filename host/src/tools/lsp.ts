@@ -38,6 +38,28 @@ function fail(err: unknown) {
   };
 }
 
+/**
+ * Returned by gd_workspace_symbols when the connected Godot build's GDScript
+ * language server has no `workspace/symbol` method. This is an engine limitation
+ * (observed through Godot 4.7, which replies -32601 Method not found), not a host
+ * fault, so the message is explicit and points at the working alternative rather
+ * than leaking a raw JSON-RPC error code.
+ */
+function unsupportedWorkspaceSymbols() {
+  return {
+    isError: true as const,
+    content: [{
+      type: "text" as const,
+      text:
+        "gd_workspace_symbols is unsupported by the connected Godot build: its GDScript " +
+        "language server does not implement LSP 'workspace/symbol' (replies -32601 Method " +
+        "not found; observed through Godot 4.7). This is an engine limitation, not a host " +
+        "error. Use gd_document_symbols for a single file's symbols, or gd_definition / " +
+        "gd_references to navigate by a known name.",
+    }],
+  };
+}
+
 function normalizeLocations(result: unknown): Array<{ uri: string; line: number; character: number }> {
   if (!result) return [];
   const arr = Array.isArray(result) ? result : [result];
@@ -214,11 +236,21 @@ export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config)
     "gd_workspace_symbols",
     {
       title: "GDScript workspace symbols",
-      description: "Search symbols across the whole project by name.",
+      description:
+        "Search symbols across the whole project by name. Note: Godot's GDScript " +
+        "language server does not implement LSP 'workspace/symbol' (observed through " +
+        "4.7), so on those builds this returns a clear 'unsupported' error rather " +
+        "than results — use gd_document_symbols for per-file symbols.",
       inputSchema: { query: z.string().describe("Symbol name query") },
     },
     async ({ query }) => {
       try {
+        // Feature-detect before calling: if the server never advertised
+        // workspaceSymbolProvider, skip the request and return a clear message
+        // instead of provoking a raw -32601.
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.workspaceSymbolProvider) return unsupportedWorkspaceSymbols();
+
         const result = (await lsp.request("workspace/symbol", { query })) as unknown[] | null;
         const symbols = (result ?? []).map((s) => {
           const sym = s as { name?: string; kind?: number; location?: Location };
@@ -230,7 +262,16 @@ export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config)
           };
         });
         return ok({ symbols });
-      } catch (err) { return fail(err); }
+      } catch (err) {
+        // Belt-and-suspenders: some builds advertise the capability but still
+        // answer -32601 (or the equivalent "method not found"). Treat that as the
+        // same engine limitation rather than an opaque protocol error.
+        const e = err as { code?: number | string; message?: string };
+        if (e.code === -32601 || /method not found/i.test(e.message ?? "")) {
+          return unsupportedWorkspaceSymbols();
+        }
+        return fail(err);
+      }
     },
   );
 

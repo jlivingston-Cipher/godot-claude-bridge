@@ -4,6 +4,38 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.5] — 2026-07-05
+
+### Changed
+- **`gd_workspace_symbols` now degrades gracefully.** Godot's GDScript language
+  server (through 4.7) has no `workspace/symbol` method and replies
+  `-32601 Method not found`, which the tool previously surfaced as a raw
+  `LSP error [-32601]: …`. The host now feature-detects the gap: `LspClient`
+  captures the server's advertised capabilities from the `initialize` handshake
+  (`getServerCapabilities()`), and the tool skips the request when
+  `workspaceSymbolProvider` is absent — still catching a `-32601` (or "method not
+  found") from builds that advertise the capability but don't honour it — and
+  returns an explicit `isError` message pointing at `gd_document_symbols` as the
+  working alternative. The success-path `symbols` output shape is unchanged, so
+  the tool will start returning results unmodified on a future Godot build that
+  implements the method. Output-schema enforcement is unaffected (the MCP SDK
+  exempts `isError` results from `outputSchema` validation).
+
+- **Aligned addon version metadata for distribution.** `addon/…/plugin.cfg` was
+  still `version="0.1.0"` with a "Phase 0-1 scaffold" description (the file the
+  Asset Library and the Godot plugin list actually read), while
+  `operations.gd`'s `ADDON_VERSION` said `0.4.3`. Bumped both to **0.4.5** and
+  rewrote the stale plugin/README descriptions to the shipped four-plane reality,
+  so a plugin-list entry and an Asset Library submission read correctly. Repo-wide
+  tags mean host and addon share the one repo version at each tag.
+
+### Added
+- **D5 — distribution guide (`docs/DISTRIBUTION.md`).** Documents publishing the
+  host to npm and the addon to the Godot Asset Library, and states the remote
+  caveat honestly: a cloud sandbox cannot see a local editor and frame capture
+  needs a GPU/Xvfb, so a remote deployment is a degraded subset without a local
+  relay. No code depends on this; it captures the decisions and steps.
+
 ## [0.4.4] — 2026-07-05
 
 ### Changed
