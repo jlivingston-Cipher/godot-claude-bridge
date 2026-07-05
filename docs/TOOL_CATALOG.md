@@ -489,7 +489,9 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
   "properties": {
     "path": { "type": "string" },
     "lines": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
-    "conditions": { "type": "array", "items": { "type": ["string", "null"] } } } }
+    "conditions": { "type": "array", "items": { "type": ["string", "null"] } },
+    "hit_conditions": { "type": "array", "items": { "type": ["string", "null"] }, "description": "Per-line hit expressions aligned to lines, e.g. '>3' or '%5'" },
+    "log_messages": { "type": "array", "items": { "type": ["string", "null"] }, "description": "Per-line log messages aligned to lines; makes that breakpoint a logpoint (logs, never halts)" } } }
 ```
 - **Output** `{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } } } }`
 
@@ -513,6 +515,19 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ### `dbg_evaluate` ✅ · destructive (arbitrary code execution — gate hard)
 - **Input** `{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" } } }`
 - **Output** `{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+
+### `dbg_watch` ✅
+Manage a persistent set of watch expressions and re-evaluate them in the current stopped frame. Evaluated in DAP `watch` context (side-effect-free), so it is **not** gated. Results are only meaningful while stopped at a breakpoint.
+- **Input**
+```json
+{ "type": "object",
+  "properties": {
+    "add": { "type": "array", "items": { "type": "string" }, "description": "Expressions to add to the watch set" },
+    "remove": { "type": "array", "items": { "type": "string" }, "description": "Expressions to remove" },
+    "clear": { "type": "boolean", "description": "Clear all watches before applying add" },
+    "frame_id": { "type": "integer", "description": "Frame id from dbg_stack_trace; omit for the top frame" } } }
+```
+- **Output** `{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }`
 
 ---
 
@@ -683,6 +698,7 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 | `dbg_scopes` | D / DAP | ✅ | – |
 | `dbg_variables` | D / DAP | ✅ | – |
 | `dbg_evaluate` | D / DAP | ✅ | ✔ arbitrary code |
+| `dbg_watch` | D / DAP | ✅ | – |
 | `runtime_get_tree` | C / Runtime | ✅ | – |
 | `runtime_get_property` | C / Runtime | ✅ | – |
 | `runtime_set_property` | C / Runtime | ✅ | ✔ |

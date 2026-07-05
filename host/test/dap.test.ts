@@ -199,3 +199,88 @@ test("a failed DAP request surfaces as an isError result", async () => {
   dap.close();
   await srv.close();
 });
+
+// ---- dbg_watch (watch expressions) ----------------------------------------
+
+test("dbg_watch adds expressions, evaluates them in 'watch' context, and reports per-expression errors", async () => {
+  const { srv, received } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "evaluate") {
+      const expr = (m.arguments as { expression: string }).expression;
+      // DAP error responses carry a TOP-LEVEL `message`, not one inside `body`.
+      if (expr === "bogus") { writeFrame(s, { seq: 0, type: "response", request_seq: m.seq, success: false, command: m.command, message: "not in scope" }); return; }
+      dapResponse(s, m, { result: `${expr}=7`, type: "int" });
+    }
+  });
+  const { dap, rec } = dapHarness(srv.port);
+  await rec.handler("dbg_launch")({ scene: "main" });
+  const res = (await rec.handler("dbg_watch")({ add: ["hp", "bogus"] })) as ToolResultLike;
+  const sc = res.structuredContent as { watches: Array<{ expression: string; value: string; type: string; error: string | null }> };
+  assert.equal(sc.watches.length, 2);
+  assert.deepEqual(sc.watches[0], { expression: "hp", value: "hp=7", type: "int", error: null });
+  assert.equal(sc.watches[1].expression, "bogus");
+  assert.match(sc.watches[1].error ?? "", /not in scope/);
+  const ev = received.find((m) => m.command === "evaluate");
+  assert.equal((ev!.arguments as { context: string }).context, "watch", "watches must evaluate in the side-effect-free 'watch' context");
+  dap.close();
+  await srv.close();
+});
+
+test("dbg_watch persists the set and re-evaluates on a bare call (after a step/continue)", async () => {
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "evaluate") dapResponse(s, m, { result: "v", type: "int" });
+  });
+  const { dap, rec } = dapHarness(srv.port);
+  await rec.handler("dbg_launch")({ scene: "main" });
+  await rec.handler("dbg_watch")({ add: ["a", "b"] });
+  const res = (await rec.handler("dbg_watch")({})) as ToolResultLike; // no mutation → re-read
+  const sc = res.structuredContent as { watches: Array<{ expression: string }> };
+  assert.deepEqual(sc.watches.map((w) => w.expression), ["a", "b"]);
+  dap.close();
+  await srv.close();
+});
+
+test("dbg_watch remove and clear mutate the persistent set", async () => {
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "evaluate") dapResponse(s, m, { result: "v", type: "T" });
+  });
+  const { dap, rec } = dapHarness(srv.port);
+  await rec.handler("dbg_launch")({ scene: "main" });
+  await rec.handler("dbg_watch")({ add: ["a", "b", "c"] });
+  let sc = ((await rec.handler("dbg_watch")({ remove: ["b"] })) as ToolResultLike).structuredContent as { watches: Array<{ expression: string }> };
+  assert.deepEqual(sc.watches.map((w) => w.expression), ["a", "c"]);
+  sc = ((await rec.handler("dbg_watch")({ clear: true, add: ["z"] })) as ToolResultLike).structuredContent as { watches: Array<{ expression: string }> };
+  assert.deepEqual(sc.watches.map((w) => w.expression), ["z"]);
+  dap.close();
+  await srv.close();
+});
+
+test("dbg_set_breakpoints forwards conditions, hit conditions, and log messages to the adapter (aligned by line)", async () => {
+  let bpReq: DapMsg | undefined;
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "setBreakpoints") { bpReq = m; dapResponse(s, m, { breakpoints: [{ line: 10, verified: true }, { line: 20, verified: true }] }); }
+  });
+  const { dap, rec } = dapHarness(srv.port);
+  await rec.handler("dbg_launch")({ scene: "main" });
+  await rec.handler("dbg_set_breakpoints")({
+    path: "player.gd",
+    lines: [10, 20],
+    conditions: ["hp < 0"],
+    hit_conditions: [null, ">3"],
+    log_messages: [null, "hit {hp}"],
+  });
+  const bps = (bpReq!.arguments as { breakpoints: Array<Record<string, unknown>> }).breakpoints;
+  assert.equal(bps[0].line, 10);
+  assert.equal(bps[0].condition, "hp < 0");
+  assert.equal(bps[0].hitCondition, undefined);
+  assert.equal(bps[0].logMessage, undefined);
+  assert.equal(bps[1].line, 20);
+  assert.equal(bps[1].condition, undefined);
+  assert.equal(bps[1].hitCondition, ">3");
+  assert.equal(bps[1].logMessage, "hit {hp}");
+  dap.close();
+  await srv.close();
+});

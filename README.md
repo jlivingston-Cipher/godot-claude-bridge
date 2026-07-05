@@ -7,16 +7,37 @@
 > pinned to `^1.17.0` (D1), and CI runs the real build on Node 18/20/22. Full history
 > in `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
 
-Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**54 tools + 5 MCP resources**):
+Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**55 tools + 5 MCP resources**):
 
 - **Plane B — Headless CLI** (`godot_*` tools): launch the editor, run the project, export, import, run headless scripts/tests. Works with no editor open.
 - **Plane A — Live Editor Bridge** (`editor_*`, `scene_*`, `node_*`, … tools): a Godot `EditorPlugin` opens a loopback TCP/JSON server that the MCP host drives — scene/node/resource CRUD **with full undo/redo**, project settings, `ClassDB` introspection, selection, and editor-viewport screenshots.
-- **Plane D — Semantic & Debugging** (`gd_*`, `dbg_*` tools): the host connects as a client to Godot's **built-in GDScript language server (LSP, 6005)** and **Debug Adapter (DAP, 6006)** — type-aware completion, hover, definition/references, rename, symbols, and **diagnostics**; plus real debugging: breakpoints, stepping, stack/scopes/variables, and expression evaluation. Reuses Godot's own protocol servers rather than reimplementing them.
+- **Plane D — Semantic & Debugging** (`gd_*`, `dbg_*` tools): the host connects as a client to Godot's **built-in GDScript language server (LSP, 6005)** and **Debug Adapter (DAP, 6006)** — type-aware completion, hover, definition/references, rename, symbols, and **diagnostics**; plus real debugging: conditional/hit-count/logpoint breakpoints, stepping, stack/scopes/variables, **watch expressions**, and expression evaluation. Reuses Godot's own protocol servers rather than reimplementing them.
 - **Plane C — Runtime Bridge** (`runtime_*` tools): an autoload (`ClaudeRuntimeBridge`) the plugin auto-registers into every run opens a loopback TCP server inside the **running game** — live SceneTree, runtime property get/set, method calls, signal emission, input injection for play-testing, Performance monitors (incl. audio), and in-game frame capture.
 
 Together these turn Claude from a scaffolder into a co-developer that can author scenes, write type-checked GDScript, run it, watch it, debug it, and drive the live game.
 
 **Safety & UX polish (all implemented):** destructive tools are **elicitation-gated** (a client-side confirmation prompt, with a `confirm: true` override and a safe block when the client can't prompt); long jobs (`godot_export`/`godot_import`/`godot_run_headless_script`) stream **progress notifications**; `godot_run_managed` + `godot_output` capture the game's full `print()`/error console host-side; and five **MCP resources** (`godot://scene-tree`, `godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose pull-on-demand context.
+
+## Why this one
+
+There are a dozen Godot MCP servers. Most are *scene builders* — they create and edit nodes, and the better ones can also read a running game. **godot-claude-bridge is the only one that also gives the AI a real IDE loop over GDScript: type-aware code intelligence *and* a genuine step-debugger** — both by speaking Godot's own **LSP** and **Debug Adapter** protocols rather than reimplementing them. In practice the agent can autocomplete and jump to a definition while writing code, then set a conditional breakpoint, step through the failure, watch an expression, and read live variables from real program state — the loop a human developer actually uses, not just "edit the scene and hope."
+
+The table compares the capabilities that separate these tools (as of July 2026, from each project's own docs/source — corrections welcome via an issue):
+
+| | Step-debugger¹ | GDScript LSP² | Live runtime | Local-only | License |
+|---|:--:|:--:|:--:|:--:|---|
+| **godot-claude-bridge** | ● full | ● full | ● | ● | MIT |
+| Godot MCP Native | ● full | ◐ custom index³ | ● | ● | MIT |
+| Godot .NET MCP | ◐ partial⁴ | ○ diagnostics only | ◐ | ● | MIT |
+| Wick (C#) | ○ inspect only⁵ | ● GDScript + C# | ● | ● | MIT |
+| Godot MCP Pro | ○ | ○ | ● | ● | Proprietary |
+| Godot-MCP (C#) | ○ | ○ reflection | ◐ | ○ cloud default | Apache-2.0 |
+
+¹ real breakpoints **and** stepping, not just reading paused state.  ² completion / hover / go-to-definition via Godot's language server.  ³ hand-rolled symbol index — navigation only, no completion or hover.  ⁴ `step_over` only, no variable scopes.  ⁵ can read a paused stack but cannot set a breakpoint or step.
+
+*(The other servers in the Asset Library — Beckett, Godot MCP Enhanced, and several more — have neither a step-debugger nor a language server; they run a "play the game and read the logs" loop.)*
+
+Only godot-claude-bridge pairs a **complete** step-debugger with **true language-server** intelligence, and does it locally with enforced output schemas and confirmation-gated destructive tools. If you write **C#**, Wick or Godot .NET MCP will serve you better today; if you want the deepest **GDScript** authoring-and-debugging loop, this is the one.
 
 ```
 ┌───────────────────── Claude (Code / Desktop) ─────────────────────┐

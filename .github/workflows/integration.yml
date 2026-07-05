@@ -1,0 +1,105 @@
+name: integration
+
+# Real host <-> Godot integration tests. Installs a Godot binary on the runner
+# and exercises the host against a LIVE engine — the one thing the unit suite
+# (which mocks the sockets) deliberately cannot do, and that no competitor's CI
+# is known to do either.
+#
+#   * cli-plane    — headless, deterministic, expected to pass. This is the gate.
+#   * editor-plane — boots the editor GUI under Xvfb and hits the built-in LSP.
+#                    EXPERIMENTAL: runs under continue-on-error while the GUI-boot
+#                    timing is tuned on real runners, so it never blocks a merge.
+#
+# Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
+# deterministic build/test/contract checks.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Standard (non-mono) Godot build — enough for the GDScript planes. Bump as needed.
+  GODOT_VERSION: "4.3-stable"
+
+jobs:
+  cli-plane:
+    name: CLI plane vs real Godot (headless)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install Godot (standard linux build)
+        run: |
+          set -eux
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          GODOT_BIN="$PWD/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --version
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Build host
+        working-directory: host
+        run: npm ci && npm run build
+      - name: CLI-plane integration smoke
+        working-directory: host
+        env:
+          GODOT_PROJECT: ${{ github.workspace }}/example
+        run: node test-integration/cli.integration.mjs
+
+  editor-plane:
+    name: editor / LSP plane vs real editor (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # GUI-boot timing still being tuned; must never block a merge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install Godot + Xvfb
+        run: |
+          set -eux
+          sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglu1-mesa
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          GODOT_BIN="$PWD/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Build host
+        working-directory: host
+        run: npm ci && npm run build
+      - name: Import the example project (headless)
+        run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example" --import || true'
+      - name: Boot the editor under Xvfb and run the LSP smoke
+        working-directory: host
+        env:
+          GODOT_PROJECT: ${{ github.workspace }}/example
+          # A CI runner has no GPU, so Godot's default Vulkan backend segfaults on
+          # init before the LSP can start. Force software OpenGL (Mesa llvmpipe).
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          set -eux
+          xvfb-run -a -s "-screen 0 1280x720x24" \
+            "$GODOT_BIN" --editor --path "$GODOT_PROJECT" \
+            --rendering-driver opengl3 --audio-driver Dummy \
+            >/tmp/godot-editor.log 2>&1 &
+          GODOT_PID=$!
+          # Software-rendered editor boot is slow — wait up to ~120s for the LSP port.
+          for i in $(seq 1 60); do
+            if node -e "require('net').connect(6005,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "LSP port open"; break
+            fi
+            sleep 2
+          done
+          node test-integration/editor-lsp.integration.mjs
+          kill "$GODOT_PID" 2>/dev/null || true
+      - name: Editor log tail (on failure)
+        if: always()
+        run: tail -n 50 /tmp/godot-editor.log || true

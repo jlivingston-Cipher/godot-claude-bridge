@@ -75,13 +75,15 @@ export function registerDapTools(server: McpServer, dap: DapClient, cfg: Config)
       inputSchema: {
         path: z.string().describe("Script path (res://..., absolute, or project-relative)"),
         lines: z.array(z.number().int().positive()).describe("1-based line numbers"),
-        conditions: z.array(z.string()).optional().describe("Optional per-line condition expressions (aligned to lines)"),
+        conditions: z.array(z.string().nullable()).optional().describe("Optional per-line condition expressions (aligned to lines, use null to skip a line); break only when the expression is true"),
+        hit_conditions: z.array(z.string().nullable()).optional().describe("Optional per-line hit expressions aligned to lines, e.g. '>3' or '%5' — break based on hit count (null to skip)"),
+        log_messages: z.array(z.string().nullable()).optional().describe("Optional per-line log messages aligned to lines; a message turns that breakpoint into a LOGPOINT (logs and continues, never halts). {expr} interpolates (null to skip)."),
       },
     },
-    async ({ path, lines, conditions }) => {
+    async ({ path, lines, conditions, hit_conditions, log_messages }) => {
       try {
         const fsPath = toFsPath(path, cfg.projectPath);
-        const body = await dap.setBreakpoints(fsPath, lines, conditions);
+        const body = await dap.setBreakpoints(fsPath, lines, conditions, hit_conditions, log_messages);
         const verified = Array.isArray(body["breakpoints"])
           ? (body["breakpoints"] as Array<{ line?: number; verified?: boolean }>).map((b) => ({ line: b.line ?? 0, verified: Boolean(b.verified) }))
           : [];
@@ -201,6 +203,34 @@ export function registerDapTools(server: McpServer, dap: DapClient, cfg: Config)
         if (blocked) return blocked;
         const body = await dap.request("evaluate", { expression, frameId: frame_id, context: "repl" });
         return ok({ result: String(body["result"] ?? ""), type: String(body["type"] ?? ""), variables_ref: (body["variablesReference"] as number) ?? 0 });
+      } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "dbg_watch",
+    {
+      title: "Watch expressions",
+      description:
+        "Manage a persistent set of watch expressions and evaluate them in the current stopped frame. " +
+        "Pass `add`/`remove`/`clear` to mutate the set (all optional), then every current watch is re-evaluated " +
+        "and returned. Call with no mutation args to just re-read the watches after a step/continue. Expressions " +
+        "are evaluated in DAP `watch` context (intended to be side-effect-free), so this is not gated; the results " +
+        "are only meaningful while the program is stopped at a breakpoint.",
+      inputSchema: {
+        add: z.array(z.string()).optional().describe("Expressions to add to the watch set"),
+        remove: z.array(z.string()).optional().describe("Expressions to remove from the watch set"),
+        clear: z.boolean().optional().describe("Clear all watches before applying add (default false)"),
+        frame_id: z.number().int().optional().describe("Frame id from dbg_stack_trace; omit for the top frame"),
+      },
+    },
+    async ({ add, remove, clear, frame_id }) => {
+      try {
+        if (clear) dap.clearWatches();
+        if (remove && remove.length) dap.removeWatches(remove);
+        if (add && add.length) dap.addWatches(add);
+        const watches = await dap.evaluateWatches(frame_id);
+        return ok({ watches });
       } catch (err) { return fail(err); }
     },
   );

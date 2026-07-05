@@ -141,6 +141,9 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   dbg_scopes: { scopes: z.array(z.object({ name: z.string(), variables_ref: z.number() })) },
   dbg_variables: { variables: z.array(z.object({ name: z.string(), value: z.string(), type: z.string(), variables_ref: z.number() })) },
   dbg_evaluate: { result: z.string(), type: z.string(), variables_ref: z.number() },
+  dbg_watch: {
+    watches: z.array(z.object({ expression: z.string(), value: z.string(), type: z.string(), error: z.string().nullable() })),
+  },
 
   // ---- Plane C: runtime bridge (tools/runtime.ts -> runtime_bridge.gd) ----
   runtime_get_tree: {

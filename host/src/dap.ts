@@ -24,6 +24,18 @@ interface BufferedBreakpoints {
   path: string;
   lines: number[];
   conditions?: (string | null)[];
+  /** Per-line hit expressions (DAP `hitCondition`, e.g. ">3", "%5"), aligned to `lines`. */
+  hitConditions?: (string | null)[];
+  /** Per-line log messages (DAP `logMessage` → logpoint; no actual break), aligned to `lines`. */
+  logMessages?: (string | null)[];
+}
+
+export interface WatchResult {
+  expression: string;
+  value: string;
+  type: string;
+  /** Non-null when evaluating this expression failed (e.g. not in scope). */
+  error: string | null;
 }
 
 /**
@@ -37,6 +49,8 @@ export class DapClient extends EventEmitter {
   private pending = new Map<number, Pending>();
   private breakpoints = new Map<string, BufferedBreakpoints>();
   private configured = false;
+  /** Persistent watch expressions, re-evaluated at each stop (see evaluateWatches). */
+  private watches: string[] = [];
 
   capabilities: Record<string, unknown> | null = null;
   state: DapState = "disconnected";
@@ -157,8 +171,14 @@ export class DapClient extends EventEmitter {
   }
 
   /** Store breakpoints; apply immediately if the session is already configured. */
-  async setBreakpoints(path: string, lines: number[], conditions?: (string | null)[]): Promise<Record<string, unknown>> {
-    this.breakpoints.set(path, { path, lines, conditions });
+  async setBreakpoints(
+    path: string,
+    lines: number[],
+    conditions?: (string | null)[],
+    hitConditions?: (string | null)[],
+    logMessages?: (string | null)[],
+  ): Promise<Record<string, unknown>> {
+    this.breakpoints.set(path, { path, lines, conditions, hitConditions, logMessages });
     if (this.configured) {
       return this.applyBreakpoints(path);
     }
@@ -170,11 +190,67 @@ export class DapClient extends EventEmitter {
     if (!bp) return Promise.resolve({});
     return this.request("setBreakpoints", {
       source: { path },
+      // DAP SourceBreakpoint: line + optional condition / hitCondition / logMessage.
+      // A logMessage turns the breakpoint into a logpoint (adapter logs, doesn't halt).
       breakpoints: bp.lines.map((line, i) => {
+        const b: { line: number; condition?: string; hitCondition?: string; logMessage?: string } = { line };
         const condition = bp.conditions?.[i];
-        return condition ? { line, condition } : { line };
+        const hit = bp.hitConditions?.[i];
+        const log = bp.logMessages?.[i];
+        if (condition) b.condition = condition;
+        if (hit) b.hitCondition = hit;
+        if (log) b.logMessage = log;
+        return b;
       }),
     });
+  }
+
+  // ---- Watch expressions ---------------------------------------------------
+
+  /** Add expressions to the persistent watch set (deduped, order-preserving). */
+  addWatches(expressions: string[]): void {
+    for (const e of expressions) if (e && !this.watches.includes(e)) this.watches.push(e);
+  }
+
+  /** Remove specific expressions from the watch set. */
+  removeWatches(expressions: string[]): void {
+    const drop = new Set(expressions);
+    this.watches = this.watches.filter((e) => !drop.has(e));
+  }
+
+  /** Clear all watch expressions. */
+  clearWatches(): void {
+    this.watches = [];
+  }
+
+  /** The current watch set (a copy). */
+  listWatches(): string[] {
+    return [...this.watches];
+  }
+
+  /**
+   * Evaluate every watch expression in the context of a stopped frame and return
+   * the results. Each expression is evaluated with DAP `context: "watch"` (the
+   * side-effect-free evaluation context IDEs use for watch panels). A single bad
+   * expression yields an `error` on that entry instead of failing the whole call.
+   */
+  async evaluateWatches(frameId?: number): Promise<WatchResult[]> {
+    const results: WatchResult[] = [];
+    for (const expression of this.watches) {
+      try {
+        const body = await this.request("evaluate", { expression, frameId, context: "watch" });
+        results.push({
+          expression,
+          value: String(body["result"] ?? ""),
+          type: String(body["type"] ?? ""),
+          error: null,
+        });
+      } catch (err) {
+        const e = err as { message?: string };
+        results.push({ expression, value: "", type: "", error: e.message ?? String(err) });
+      }
+    }
+    return results;
   }
 
   private async applyAllBreakpoints(): Promise<void> {
