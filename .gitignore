@@ -1,0 +1,17 @@
+# Node / TypeScript
+host/node_modules/
+host/dist/
+host/*.log
+npm-debug.log*
+
+# Godot
+.godot/
+*.import
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# transient / undeletable-via-bridge scratch (delete manually)
+_to_delete/

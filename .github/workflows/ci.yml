@@ -1,0 +1,56 @@
+name: ci
+
+# Gate 0 of the Go/No-Go checklist, automated.
+#
+# This runs the ONE check no authoring or cloud environment could: the real
+# `npm install` + `npm run build` against the published @modelcontextprotocol/sdk.
+# It is what surfaced the ToolResult type defect — had this existed, that
+# regression could never have merged silently. Fully headless (no Godot GUI),
+# so it runs on stock runners.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  contract-check:
+    name: contract check (host↔addon↔catalog parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Static parity check (no Godot / no registry needed)
+        run: python3 scripts/contract_check.py
+
+  build:
+    name: real SDK build (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [ '18', '20', '22' ]
+    defaults:
+      run:
+        working-directory: host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install against the real registry (reproducible)
+        run: npm ci
+      - name: Build — tsc against the real SDK types, 0 errors required
+        run: npm run build
+      - name: Assert dist/index.js was emitted
+        run: test -f dist/index.js
+      - name: Assert the resolved SDK is still 1.x
+        # A v2 major changes the registerTool / import surface and needs the
+        # migration in README before the package.json range is bumped.
+        run: |
+          node -e "const v=require('@modelcontextprotocol/sdk/package.json').version; console.log('resolved @modelcontextprotocol/sdk', v); if(!v.startsWith('1.')){console.error('::error::@modelcontextprotocol/sdk resolved to '+v+' (not 1.x). Apply the SDK v2 migration in README before bumping the range.'); process.exit(1);}"

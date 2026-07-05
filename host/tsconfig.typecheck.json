@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "typeRoots": ["/opt/node-tools/node_modules/@types"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", ".typecheck/shims.d.ts"]
+}

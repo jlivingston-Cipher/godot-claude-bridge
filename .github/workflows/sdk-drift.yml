@@ -1,0 +1,33 @@
+name: sdk-drift
+
+# Early-warning companion to ci.yml. Rebuilds against the LATEST
+# @modelcontextprotocol/sdk in range (ignoring the lockfile), so an upstream
+# release that tightens types — exactly the class of failure that hit
+# ToolResult — is caught here on a schedule instead of by a contributor's PR.
+#
+# Informational: keep it OUT of required status checks. When it goes red, the
+# next SDK bump will need a code change; reproduce locally with the same steps.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  latest-sdk-build:
+    name: build against newest @modelcontextprotocol/sdk in range
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fresh install — newest version satisfying package.json (no lockfile)
+        run: rm -f package-lock.json && npm install --no-audit --no-fund
+      - name: Show what resolved
+        run: npm ls @modelcontextprotocol/sdk || true
+      - name: Build against it
+        run: npm run build
