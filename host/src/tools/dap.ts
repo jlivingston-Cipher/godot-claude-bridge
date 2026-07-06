@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
-import { DapClient } from "../dap.js";
+import { DapClient, DapError } from "../dap.js";
 import { toFsPath } from "../paths.js";
 import { gate } from "../confirm.js";
 
@@ -22,6 +22,15 @@ function fail(err: unknown) {
     isError: true as const,
     content: [{ type: "text" as const, text: `DAP error [${e.command ?? "error"}]: ${e.message ?? String(err)}` }],
   };
+}
+
+/**
+ * True when `err` is a DAP request that hit its own request deadline (as opposed to an
+ * adapter-reported failure or a dropped connection). Used to turn the setVariable /
+ * evaluate hangs on advertised-but-unimplemented Godot builds into a clear message.
+ */
+function isDapTimeout(err: unknown): err is DapError {
+  return err instanceof DapError && /timed out after/.test(err.message);
 }
 
 // Per-line breakpoint modifier fields, each gated by an adapter capability. Godot 4.3
@@ -263,7 +272,21 @@ export function registerDapTools(server: McpServer, dap: DapClient, cfg: Config)
       try {
         const blocked = await gate(server, confirm, `Evaluate expression in the running game: ${expression}`);
         if (blocked) return blocked;
-        const body = await dap.request("evaluate", { expression, frameId: frame_id, context: "repl" });
+        // Bound the evaluate request to a short deadline instead of the full dapTimeoutMs:
+        // a compliant adapter answers a repl evaluate near-instantly, so a non-response means
+        // the adapter is not going to answer — fail fast rather than hang.
+        let body: Record<string, unknown>;
+        try {
+          body = await dap.request("evaluate", { expression, frameId: frame_id, context: "repl" }, cfg.dapEvaluateTimeoutMs);
+        } catch (err) {
+          if (isDapTimeout(err)) {
+            return {
+              isError: true as const,
+              content: [{ type: "text" as const, text: `The debug adapter did not answer the evaluate request within ${cfg.dapEvaluateTimeoutMs}ms — no result was returned. The debug session is still alive; use dbg_variables / dbg_watch to inspect state.` }],
+            };
+          }
+          throw err;
+        }
         return ok({ result: String(body["result"] ?? ""), type: String(body["type"] ?? ""), variables_ref: (body["variablesReference"] as number) ?? 0 });
       } catch (err) { return fail(err); }
     },
@@ -366,7 +389,22 @@ export function registerDapTools(server: McpServer, dap: DapClient, cfg: Config)
         }
         const blocked = await gate(server, confirm, `Set variable ${name} = ${value} in the running game`);
         if (blocked) return blocked;
-        const body = await dap.request("setVariable", { variablesReference: variables_ref, name, value });
+        // Godot 4.3 advertises supportsSetVariable=true (so the caps short-circuit above does
+        // not fire) but never answers the setVariable request. Caps can't detect that — 4.3
+        // lies — so bound the request to a short deadline and, on timeout, say plainly that the
+        // build does not implement setVariable rather than emitting the generic 20 s DAP timeout.
+        let body: Record<string, unknown>;
+        try {
+          body = await dap.request("setVariable", { variablesReference: variables_ref, name, value }, cfg.dapSetVarTimeoutMs);
+        } catch (err) {
+          if (isDapTimeout(err)) {
+            return {
+              isError: true as const,
+              content: [{ type: "text" as const, text: `The debug adapter advertises supportsSetVariable but did not answer the setVariable request within ${cfg.dapSetVarTimeoutMs}ms — this Godot build (e.g. 4.3) does not implement setVariable. No change was made; the variable is unchanged. Read-only inspection (dbg_variables) still works.` }],
+            };
+          }
+          throw err;
+        }
         return ok({ name, value: String(body["value"] ?? value), type: String(body["type"] ?? ""), variables_ref: (body["variablesReference"] as number) ?? 0 });
       } catch (err) { return fail(err); }
     },

@@ -442,6 +442,45 @@ test("dbg_set_variable returns 'unsupported' WITHOUT prompting when the adapter 
   await srv.close();
 });
 
+// Godot 4.3 advertises supportsSetVariable=true (so the caps short-circuit does NOT fire)
+// but then never answers the setVariable request. Without a bounded deadline the tool would
+// hang the full dapTimeoutMs; these assert the fast, clear failure via GODOT_DAP_*_TIMEOUT_MS.
+test("dbg_set_variable fails fast with a clear message when the adapter advertises supportsSetVariable but never answers", async () => {
+  const { srv, received } = await startDap((m, s) => {
+    if (m.command === "initialize") { dapResponse(s, m, { supportsConfigurationDoneRequest: true, supportsSetVariable: true }); dapEvent(s, "initialized", {}); return; }
+    if (m.command === "launch" || m.command === "configurationDone") { dapResponse(s, m, {}); return; }
+    // setVariable: deliberately never respond (mirrors Godot 4.3's advertised-but-unimplemented gap)
+  });
+  process.env.GODOT_DAP_SETVAR_TIMEOUT_MS = "200";
+  const { dap, rec } = dapHarness(srv.port, async () => ({ action: "accept", content: { proceed: true } }));
+  delete process.env.GODOT_DAP_SETVAR_TIMEOUT_MS;
+  await rec.handler("dbg_launch")({ scene: "main" });
+  const res = (await rec.handler("dbg_set_variable")({ variables_ref: 1, name: "hp", value: "5", confirm: true })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /did not answer the setVariable request within 200ms/i);
+  assert.match(res.content![0].text!, /no change was made/i);
+  assert.ok(received.some((m) => m.command === "setVariable"), "the tool must actually send setVariable (caps advertise it) before the bounded deadline fires");
+  dap.close();
+  await srv.close();
+});
+
+test("dbg_evaluate fails fast with a clear message when the adapter never answers evaluate", async () => {
+  const { srv, received } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    // evaluate: deliberately never respond
+  });
+  process.env.GODOT_DAP_EVALUATE_TIMEOUT_MS = "200";
+  const { dap, rec } = dapHarness(srv.port, async () => ({ action: "accept", content: { proceed: true } }));
+  delete process.env.GODOT_DAP_EVALUATE_TIMEOUT_MS;
+  await rec.handler("dbg_launch")({ scene: "main" });
+  const res = (await rec.handler("dbg_evaluate")({ expression: "1 + 1", confirm: true })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /did not answer the evaluate request within 200ms/i);
+  assert.ok(received.some((m) => m.command === "evaluate"), "the tool must send evaluate before the bounded deadline fires");
+  dap.close();
+  await srv.close();
+});
+
 // ---- dbg_restart -----------------------------------------------------------
 
 test("dbg_restart uses the DAP restart request when the adapter advertises supportsRestartRequest", async () => {

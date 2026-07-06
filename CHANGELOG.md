@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — `dbg_set_variable` / `dbg_evaluate` fail fast on a non-answering adapter
+- `dbg_set_variable` and `dbg_evaluate` now send their `setVariable` / `evaluate` request with a
+  **short bounded deadline** (default 8 s, `GODOT_DAP_SETVAR_TIMEOUT_MS` /
+  `GODOT_DAP_EVALUATE_TIMEOUT_MS`) instead of the full 20 s `dapTimeoutMs`. On timeout the tool
+  returns a **clear message** — for `dbg_set_variable`, that the build advertises
+  `supportsSetVariable` but does not implement it and **no change was made** — rather than a
+  generic DAP timeout. This directly addresses the Godot 4.3 finding below: 4.3 advertises
+  `supportsSetVariable=true` (so the capability short-circuit can't catch it) yet never answers
+  the request. No tool/schema/addon change (still **70 tools**); host suite **106 → 108 tests**.
+
 ### Confirmed live — the mutating/gated DAP tools on Godot 4.3 (dap-plane probe)
 - Extended `host/test-integration/editor-dap.integration.mjs` to drive the three
   gated/mutating DAP tools end-to-end against a live, **stopped** Godot 4.3 game
