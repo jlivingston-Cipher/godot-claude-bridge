@@ -4,7 +4,7 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.13] — 2026-07-06
 
 ### Added — DAP-plane CI smoke (infra, no tool change)
 - New **experimental `dap-plane` integration job** (`.github/workflows/integration.yml`)
