@@ -25,3 +25,13 @@ ClaudeRuntimeBridge="*uid://dkyjj7tbsecr0"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/claude_bridge/plugin.cfg")
+
+[rendering]
+
+; Use the OpenGL (Compatibility) renderer so the project — and, crucially, the game the
+; DAP plane launches — runs on GPU-less CI runners under Mesa llvmpipe software GL. The
+; default Forward+/Vulkan renderer segfaults on init without a GPU, so a game launched via
+; the debug adapter never reached its breakpoint. gl_compatibility is what the editor
+; already forces via --rendering-driver opengl3 in the integration workflow.
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
