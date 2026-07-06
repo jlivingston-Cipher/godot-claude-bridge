@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.15] — 2026-07-06
+
 ### Changed — `dbg_set_variable` / `dbg_evaluate` fail fast on a non-answering adapter
 - `dbg_set_variable` and `dbg_evaluate` now send their `setVariable` / `evaluate` request with a
   **short bounded deadline** (default 8 s, `GODOT_DAP_SETVAR_TIMEOUT_MS` /
