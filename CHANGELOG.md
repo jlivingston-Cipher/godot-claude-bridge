@@ -4,6 +4,25 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Confirmed live — the mutating/gated DAP tools on Godot 4.3 (dap-plane probe)
+- Extended `host/test-integration/editor-dap.integration.mjs` to drive the three
+  gated/mutating DAP tools end-to-end against a live, **stopped** Godot 4.3 game
+  (`confirm:true` bypasses the probe's auto-decline elicit stub). Test-infra only — no
+  tool/schema/addon change (still **70 tools / 106 tests**). Ground truth from the CI log:
+  - **`dbg_restart` works** via the native DAP restart path (`method="restart"`): it re-runs
+    the scene and re-hits a buffered breakpoint (`D_DAP_RESTART` / `D_DAP_RESTART_REHIT`).
+  - **`dbg_evaluate` resolves bare variable names** (`counter` → `100`, with or without a
+    frame) **but returns empty for a compound expression** (`counter + 1`) — 4.3's
+    repl-context evaluate does name lookup, not expression evaluation
+    (`D_DAP_EVAL[name|name+frame|expr]`).
+  - **`dbg_set_variable` is advertised but unimplemented on 4.3**: it advertises
+    `supportsSetVariable=true` yet never answers the `setVariable` request (20 s timeout) and
+    the value is unchanged (`D_DAP_SETVAR` / `D_DAP_SETVAR_READBACK counter=100`) — another
+    advertised-but-unimplemented gap, like the 4.3 breakpoint modifiers. Corrects the earlier
+    note that 4.3 offered a working live set-variable.
+
 ## [0.4.14] — 2026-07-06
 
 ### Changed — `dbg_set_breakpoints` feature-detects per-line modifiers
