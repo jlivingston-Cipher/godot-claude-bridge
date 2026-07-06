@@ -489,6 +489,66 @@ List the code actions (quick fixes / refactors) the language server offers for a
 { "type": "object", "required": ["actions"], "properties": { "actions": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, "kind": { "type": "string" }, "has_edit": { "type": "boolean" }, "command": { "type": ["string", "null"] } } } } } }
 ```
 
+### `gd_document_highlight` ✅ · engine-dependent (handled)
+Highlight every occurrence of the symbol at a position **within the same file**, tagged read / write / text (the shading an editor shows for a variable's uses when the caret is on it). Read-only. Godot 4.3's GDScript LSP advertises `documentHighlightProvider`; the tool feature-detects the capability and keeps a `-32601` belt-and-suspenders, returning a clear "unsupported" message on a build that advertises but doesn't honour it (the D7 lesson).
+- **Input** same `{ path, line, character }` as `gd_completion`.
+- **Output**
+```json
+{ "type": "object", "required": ["highlights"], "properties": { "highlights": { "type": "array", "items": {
+  "type": "object", "properties": {
+    "line": { "type": "integer" }, "character": { "type": "integer" },
+    "end_line": { "type": "integer" }, "end_character": { "type": "integer" },
+    "kind": { "enum": ["text", "read", "write"] } } } } } }
+```
+
+### `gd_type_definition` ✅ · engine-dependent (handled)
+Resolve the location of the **type** of the symbol at a position (jump to the class of a typed variable), as opposed to the symbol's own definition. Advertises `typeDefinitionProvider`; feature-detected with a `-32601` fallback.
+- **Input** same `{ path, line, character }` as `gd_completion`.
+- **Output** same `locations` array shape as `gd_definition`.
+
+### `gd_implementation` ✅ · engine-dependent (handled)
+Resolve the implementation location(s) of the symbol at a position (e.g. the concrete override of a method). Advertises `implementationProvider`; feature-detected with a `-32601` fallback.
+- **Input** same `{ path, line, character }`.
+- **Output** same `locations` array shape as `gd_definition`.
+
+### `gd_declaration` ✅ · engine-dependent (handled)
+Resolve the declaration location(s) of the symbol at a position (coincides with the definition for most symbols; differs for forward-declared / re-exported names). Advertises `declarationProvider`; feature-detected with a `-32601` fallback.
+- **Input** same `{ path, line, character }`.
+- **Output** same `locations` array shape as `gd_definition`.
+
+### `gd_folding_ranges` ✅ · engine-dependent (handled)
+List the foldable regions of a script (functions, blocks, comment/region markers) — the ranges an editor's fold gutter offers. Read-only. Advertises `foldingRangeProvider`; feature-detected with a `-32601` fallback.
+- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["ranges"], "properties": { "ranges": { "type": "array", "items": {
+  "type": "object", "properties": {
+    "start_line": { "type": "integer" }, "end_line": { "type": "integer" }, "kind": { "type": "string" } } } } } }
+```
+
+### `gd_document_link` ✅ · engine-dependent (handled)
+List the links embedded in a script (res:// paths or URLs the language server recognizes) with their source ranges and targets. Read-only. Advertises `documentLinkProvider`; feature-detected with a `-32601` fallback.
+- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["links"], "properties": { "links": { "type": "array", "items": {
+  "type": "object", "properties": {
+    "line": { "type": "integer" }, "character": { "type": "integer" },
+    "end_line": { "type": "integer" }, "end_character": { "type": "integer" },
+    "target": { "type": "string" } } } } } }
+```
+
+### `gd_formatting` ✅ · engine-dependent (handled)
+Compute how the language server would reformat a whole script and return the formatted **text** — **without writing anything to disk** (read-only preview; apply it yourself with a file write). Advertises `documentFormattingProvider`; feature-detected with a `-32601` fallback.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": {
+  "path": { "type": "string" },
+  "tab_size": { "type": "integer", "minimum": 1, "default": 4 },
+  "insert_spaces": { "type": "boolean", "default": false, "description": "Indent with spaces instead of tabs (Godot uses tabs)" } } }
+```
+- **Output** `{ "type": "object", "required": ["edit_count", "formatted"], "properties": { "edit_count": { "type": "integer" }, "formatted": { "type": "string" } } }`
+
 ---
 
 # Plane D — Debugging (DAP)  (✅ implemented — Phase 2; raw TCP + DAP `Content-Length` framing to Godot's debug adapter, default `127.0.0.1:6006`)
@@ -723,6 +783,13 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 | `gd_diagnostics` | D / LSP | ✅ | – |
 | `gd_signature_help` | D / LSP | ✅ | – |
 | `gd_code_action` | D / LSP | ⚠️ engine-dependent (handled) | – |
+| `gd_document_highlight` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_type_definition` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_implementation` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_declaration` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_folding_ranges` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_document_link` | D / LSP | ✅ engine-dependent (handled) | – |
+| `gd_formatting` | D / LSP | ✅ engine-dependent (handled) | – |
 | `dbg_launch` | D / DAP | ✅ | runs code |
 | `dbg_attach` | D / DAP | ✅ | – |
 | `dbg_set_breakpoints` | D / DAP | ✅ | – |
@@ -749,4 +816,4 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 | `godot_output` | B / Process | ✅ | – |
 | `godot_stop` | B / Process | ✅ | – |
 
-**59 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 10 LSP, 12 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**
+**66 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 17 LSP, 12 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**
