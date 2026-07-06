@@ -257,10 +257,15 @@ test("dbg_watch remove and clear mutate the persistent set", async () => {
   await srv.close();
 });
 
-test("dbg_set_breakpoints forwards conditions, hit conditions, and log messages to the adapter (aligned by line)", async () => {
+test("dbg_set_breakpoints forwards conditions, hit conditions, and log messages when the adapter advertises support for them", async () => {
   let bpReq: DapMsg | undefined;
   const { srv } = await startDap((m, s) => {
-    if (handshake(m, s)) return;
+    if (m.command === "initialize") {
+      dapResponse(s, m, { supportsConfigurationDoneRequest: true, supportsConditionalBreakpoints: true, supportsHitConditionalBreakpoints: true, supportsLogPoints: true });
+      dapEvent(s, "initialized", {});
+      return;
+    }
+    if (m.command === "launch" || m.command === "configurationDone") { dapResponse(s, m, {}); return; }
     if (m.command === "setBreakpoints") { bpReq = m; dapResponse(s, m, { breakpoints: [{ line: 10, verified: true }, { line: 20, verified: true }] }); }
   });
   const { dap, rec } = dapHarness(srv.port);
@@ -281,6 +286,37 @@ test("dbg_set_breakpoints forwards conditions, hit conditions, and log messages 
   assert.equal(bps[1].condition, undefined);
   assert.equal(bps[1].hitCondition, ">3");
   assert.equal(bps[1].logMessage, "hit {hp}");
+  dap.close();
+  await srv.close();
+});
+
+test("dbg_set_breakpoints drops condition/hitCondition/logMessage and warns when the adapter advertises them unsupported", async () => {
+  // The default handshake advertises NONE of the modifier caps — like Godot 4.3, which
+  // also IGNORES the fields (verified live), so a "conditional" breakpoint would halt every
+  // time. The tool must drop the modifiers, send only plain line breakpoints, and warn.
+  let bpReq: DapMsg | undefined;
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "setBreakpoints") { bpReq = m; dapResponse(s, m, { breakpoints: [{ line: 10, verified: true }, { line: 20, verified: true }] }); }
+  });
+  const { dap, rec } = dapHarness(srv.port);
+  await rec.handler("dbg_launch")({ scene: "main" });
+  const res = (await rec.handler("dbg_set_breakpoints")({
+    path: "player.gd",
+    lines: [10, 20],
+    conditions: ["hp < 0"],
+    hit_conditions: [null, ">3"],
+    log_messages: [null, "hit {hp}"],
+  })) as ToolResultLike;
+  const sc = res.structuredContent as { unsupported_modifiers?: string[]; warning?: string; breakpoints: unknown[] };
+  assert.deepEqual(sc.unsupported_modifiers, ["condition", "hitCondition", "logMessage"]);
+  assert.match(sc.warning ?? "", /unsupported|halt unconditionally/i);
+  // The dropped modifiers must NOT reach the adapter — only plain line breakpoints do.
+  const bps = (bpReq!.arguments as { breakpoints: Array<Record<string, unknown>> }).breakpoints;
+  assert.deepEqual(bps.map((b) => b.line), [10, 20]);
+  assert.equal(bps[0].condition, undefined);
+  assert.equal(bps[1].hitCondition, undefined);
+  assert.equal(bps[1].logMessage, undefined);
   dap.close();
   await srv.close();
 });

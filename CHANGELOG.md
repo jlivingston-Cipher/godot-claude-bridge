@@ -4,6 +4,34 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed — `dbg_set_breakpoints` feature-detects per-line modifiers
+- `dbg_set_breakpoints` now **feature-detects** the `condition` / `hitCondition` /
+  `logMessage` per-line modifiers: they are sent only when the connected adapter advertises
+  `supportsConditionalBreakpoints` / `supportsHitConditionalBreakpoints` / `supportsLogPoints`.
+  On an adapter that advertises them unsupported the modifier is **dropped** and the result
+  carries `unsupported_modifiers` + a `warning`, so a "conditional" breakpoint can no longer
+  silently halt unconditionally. Mirrors the `dbg_set_exception_breakpoints` / `dbg_goto` /
+  `dbg_data_breakpoints` advertised-vs-implemented discipline. No surface change (still
+  **70 tools**); host suite **105 → 106 tests**.
+
+### Confirmed live — Godot 4.3 ignores breakpoint modifiers (new dap-plane probe)
+- Added `host/test-integration/editor-dap-breakpoints.integration.mjs`, a second `dap-plane`
+  probe that empirically settled the open question from the capability dump: Godot 4.3's
+  adapter advertises the three modifier caps **false** AND **ignores** the fields —
+  `D_DAP_MODIFIERS: condition=IGNORED hitCondition=IGNORED logMessage=IGNORED` (a breakpoint
+  carrying any of them halts every time). This motivated the feature-detect above.
+
+### Added — the dap-plane now lands a REAL debugger stop
+- Reworked `host/test-integration/editor-dap.integration.mjs` and forced the example project
+  onto the OpenGL (`gl_compatibility`) renderer so the game the debug adapter launches runs on
+  GPU-less CI runners (the default Forward+/Vulkan renderer segfaulted on init). The `dap-plane`
+  now lands a genuine breakpoint stop and exercises the full live surface — `dbg_stack_trace` /
+  `dbg_scopes` / `dbg_variables` (`counter=100`) / `dbg_watch` / `dbg_step` / `dbg_continue` —
+  the first time the DAP inspection tools have run against a live, stopped Godot game.
+  `continue-on-error` / not a required check; no tool/schema change.
+
 ## [0.4.13] — 2026-07-06
 
 ### Added — DAP-plane CI smoke (infra, no tool change)
