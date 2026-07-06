@@ -4,7 +4,7 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.14] — 2026-07-06
 
 ### Changed — `dbg_set_breakpoints` feature-detects per-line modifiers
 - `dbg_set_breakpoints` now **feature-detects** the `condition` / `hitCondition` /
