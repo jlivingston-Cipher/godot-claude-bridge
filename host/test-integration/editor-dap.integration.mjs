@@ -147,17 +147,29 @@ if (reached) {
         // These handlers are gated (they prompt for confirmation); the recording server's
         // elicit stub auto-declines, so we pass confirm:true to drive them end-to-end. All
         // log-only — an unsupported / oddly-behaving adapter surfaces isError, never a throw.
-        // dbg_evaluate: an ARBITRARY expression (not just a var read) proves live REPL eval —
-        // `counter + 1` should be 101 while counter is 100.
-        try {
-          const ev = await call("dbg_evaluate", { expression: "counter + 1", frame_id: top.id, confirm: true });
-          const detail = ev.isError
-            ? `err: ${JSON.stringify(ev.content?.[0]?.text ?? "").slice(0, 120)}`
-            : JSON.stringify(ev.structuredContent ?? {});
-          console.log(`D_DAP_EVAL: isError=${!!ev.isError} ${detail}`);
-        } catch (e) { console.log("D_DAP_EVAL threw:", e?.message ?? String(e)); }
-        // dbg_set_variable: MUTATE counter in its own scope (4.3 advertises supportsSetVariable),
-        // then read it back from the same container to prove the write actually stuck.
+        // dbg_evaluate (repl context) is uneven on Godot 4.3: it answers without error but
+        // returned an EMPTY result for `counter + 1` even though dbg_watch (watch context)
+        // returns counter=100. Characterize it precisely — a bare name and a compound
+        // expression, with and without an explicit frame — so the log pins down exactly what
+        // the adapter evaluates vs. leaves empty. All log-only.
+        for (const [label, a] of [
+          ["name+frame", { expression: "counter", frame_id: top.id, confirm: true }],
+          ["name", { expression: "counter", confirm: true }],
+          ["expr+frame", { expression: "counter + 1", frame_id: top.id, confirm: true }],
+        ]) {
+          try {
+            const ev = await call("dbg_evaluate", a);
+            const detail = ev.isError
+              ? `err: ${JSON.stringify(ev.content?.[0]?.text ?? "").slice(0, 100)}`
+              : JSON.stringify(ev.structuredContent ?? {});
+            console.log(`D_DAP_EVAL[${label}]: isError=${!!ev.isError} ${detail}`);
+          } catch (e) { console.log(`D_DAP_EVAL[${label}] threw:`, e?.message ?? String(e)); }
+        }
+        // dbg_set_variable: MUTATE counter in its own scope, then read it back. Godot 4.3
+        // ADVERTISES supportsSetVariable=true but does NOT answer the setVariable request — it
+        // times out (~20s) and counter stays 100: another advertised-but-unimplemented gap, like
+        // the breakpoint modifiers. A build that implements it would show isError=false +
+        // D_DAP_SETVAR_READBACK counter=4242.
         if (counterRef) {
           try {
             const sv = await call("dbg_set_variable", { variables_ref: counterRef, name: "counter", value: "4242", confirm: true });
