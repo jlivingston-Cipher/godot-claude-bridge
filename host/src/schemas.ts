@@ -163,7 +163,13 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   // ---- Plane D: debugging / DAP (tools/dap.ts) ----
   dbg_launch: { session_id: z.string(), state: z.string(), scene: z.string() },
   dbg_attach: { session_id: z.string(), state: z.string() },
-  dbg_set_breakpoints: { path: z.string(), buffered: z.boolean(), breakpoints: z.array(z.object({ line: z.number(), verified: z.boolean() })) },
+  dbg_set_breakpoints: {
+    path: z.string(), buffered: z.boolean(),
+    breakpoints: z.array(z.object({ line: z.number(), verified: z.boolean() })),
+    // Present only when the adapter advertised a requested modifier unsupported (see tools/dap.ts).
+    unsupported_modifiers: z.array(z.string()).optional(),
+    warning: z.string().optional(),
+  },
   dbg_continue: { state: z.string(), stopped_reason: z.string().nullable() },
   dbg_step: { state: z.string(), stopped_reason: z.string().nullable() },
   dbg_stack_trace: { frames: z.array(z.object({ id: z.number(), name: z.string(), source: z.string(), line: z.number() })) },
