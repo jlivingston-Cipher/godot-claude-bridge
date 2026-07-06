@@ -157,6 +157,10 @@ jobs:
             sleep 2
           done
           node test-integration/editor-dap.integration.mjs
+          # Second probe against the same editor: does 4.3 honor condition/hitCondition/
+          # logMessage breakpoint modifiers it advertises as unsupported? (log-only)
+          sleep 3
+          node test-integration/editor-dap-breakpoints.integration.mjs
           kill "$GODOT_PID" 2>/dev/null || true
       - name: Editor log tail (on failure)
         if: always()
