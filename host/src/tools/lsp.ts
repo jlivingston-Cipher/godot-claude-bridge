@@ -94,6 +94,35 @@ function unsupportedCodeAction() {
   };
 }
 
+/**
+ * Generic graceful-degradation message for an optional LSP method the connected
+ * Godot build doesn't implement. The newer read-only providers below
+ * (documentHighlight, foldingRange, typeDefinition, implementation, declaration,
+ * documentLink, formatting) are all *advertised* by Godot 4.3's language server —
+ * but, as the D7 probe proved for workspace/symbol, advertised is not the same as
+ * implemented. Each tool feature-detects its capability AND catches a -32601 from
+ * a build that advertises the capability yet still answers "method not found",
+ * returning this clear message instead of leaking a raw JSON-RPC error.
+ */
+function unsupportedLsp(tool: string, method: string, capability: string, alt: string) {
+  return {
+    isError: true as const,
+    content: [{
+      type: "text" as const,
+      text:
+        `${tool} is unsupported by the connected Godot build: its GDScript language server ` +
+        `does not implement LSP '${method}' (advertises no ${capability}, or replies -32601 ` +
+        `Method not found). This is an engine limitation, not a host error. ${alt}`,
+    }],
+  };
+}
+
+/** True for a JSON-RPC "method not found" (-32601) or an equivalent message. */
+function isMethodNotFound(err: unknown): boolean {
+  const e = err as { code?: number | string; message?: string };
+  return e.code === -32601 || /method not found/i.test(e.message ?? "");
+}
+
 function normalizeLocations(result: unknown): Array<{ uri: string; line: number; character: number }> {
   if (!result) return [];
   const arr = Array.isArray(result) ? result : [result];
@@ -102,6 +131,43 @@ function normalizeLocations(result: unknown): Array<{ uri: string; line: number;
     const uri = loc.uri ?? loc.targetUri ?? "";
     const range = loc.range ?? loc.targetSelectionRange ?? {};
     return { uri, line: range.start?.line ?? 0, character: range.start?.character ?? 0 };
+  });
+}
+
+// textDocument/documentHighlight DocumentHighlightKind -> readable name.
+const HIGHLIGHT_KIND: Record<number, string> = { 1: "text", 2: "read", 3: "write" };
+
+function normalizeHighlights(result: unknown): Array<{ line: number; character: number; end_line: number; end_character: number; kind: string }> {
+  const arr = Array.isArray(result) ? result : [];
+  return arr.map((h) => {
+    const hh = h as { range?: Range; kind?: number };
+    const r = hh.range ?? {};
+    return {
+      line: r.start?.line ?? 0, character: r.start?.character ?? 0,
+      end_line: r.end?.line ?? 0, end_character: r.end?.character ?? 0,
+      kind: hh.kind ? HIGHLIGHT_KIND[hh.kind] ?? String(hh.kind) : "text",
+    };
+  });
+}
+
+function normalizeFolding(result: unknown): Array<{ start_line: number; end_line: number; kind: string }> {
+  const arr = Array.isArray(result) ? result : [];
+  return arr.map((f) => {
+    const ff = f as { startLine?: number; endLine?: number; kind?: string };
+    return { start_line: ff.startLine ?? 0, end_line: ff.endLine ?? 0, kind: ff.kind ?? "" };
+  });
+}
+
+function normalizeLinks(result: unknown): Array<{ line: number; character: number; end_line: number; end_character: number; target: string }> {
+  const arr = Array.isArray(result) ? result : [];
+  return arr.map((l) => {
+    const ll = l as { range?: Range; target?: string };
+    const r = ll.range ?? {};
+    return {
+      line: r.start?.line ?? 0, character: r.start?.character ?? 0,
+      end_line: r.end?.line ?? 0, end_character: r.end?.character ?? 0,
+      target: ll.target ?? "",
+    };
   });
 }
 
@@ -410,6 +476,195 @@ export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config)
         // answers -32601 gets the same graceful "unsupported" treatment.
         const e = err as { code?: number | string; message?: string };
         if (e.code === -32601 || /method not found/i.test(e.message ?? "")) return unsupportedCodeAction();
+        return fail(err);
+      }
+    },
+  );
+
+  // ---- Phase 1 LSP-depth: read-only navigation/inspection providers --------
+  // Godot 4.3's GDScript language server advertises documentHighlight, folding,
+  // typeDefinition, implementation, declaration, documentLink and formatting in
+  // its initialize capabilities. Each tool below feature-detects the capability
+  // and keeps a -32601 belt-and-suspenders (the D7 lesson: advertised ≠ honoured),
+  // returning a clear "unsupported" message rather than a raw JSON-RPC error.
+
+  server.registerTool(
+    "gd_document_highlight",
+    {
+      title: "GDScript document highlights",
+      description:
+        "Highlight every occurrence of the symbol at a position WITHIN the same file, tagged read / write / text " +
+        "(the shading an editor shows for a variable's uses when the caret is on it). Read-only. " +
+        "Godot's GDScript language server advertises documentHighlightProvider; feature-detected.",
+      inputSchema: posSchema,
+    },
+    async ({ path, line, character }) => {
+      const alt = "Use gd_references for project-wide uses of the symbol.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.documentHighlightProvider) return unsupportedLsp("gd_document_highlight", "textDocument/documentHighlight", "documentHighlightProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/documentHighlight", { textDocument: { uri }, position: { line, character } });
+        return ok({ highlights: normalizeHighlights(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_document_highlight", "textDocument/documentHighlight", "documentHighlightProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_type_definition",
+    {
+      title: "GDScript go-to-type-definition",
+      description:
+        "Resolve the location of the TYPE of the symbol at a position (jump to the class of a typed variable), as opposed to the " +
+        "symbol's own definition. Godot's GDScript language server advertises typeDefinitionProvider; feature-detected.",
+      inputSchema: posSchema,
+    },
+    async ({ path, line, character }) => {
+      const alt = "Use gd_definition to jump to the symbol's own definition.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.typeDefinitionProvider) return unsupportedLsp("gd_type_definition", "textDocument/typeDefinition", "typeDefinitionProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/typeDefinition", { textDocument: { uri }, position: { line, character } });
+        return ok({ locations: normalizeLocations(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_type_definition", "textDocument/typeDefinition", "typeDefinitionProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_implementation",
+    {
+      title: "GDScript go-to-implementation",
+      description:
+        "Resolve the implementation location(s) of the symbol at a position (e.g. the concrete override of a method). " +
+        "Godot's GDScript language server advertises implementationProvider; feature-detected.",
+      inputSchema: posSchema,
+    },
+    async ({ path, line, character }) => {
+      const alt = "Use gd_definition / gd_references to navigate the symbol.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.implementationProvider) return unsupportedLsp("gd_implementation", "textDocument/implementation", "implementationProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/implementation", { textDocument: { uri }, position: { line, character } });
+        return ok({ locations: normalizeLocations(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_implementation", "textDocument/implementation", "implementationProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_declaration",
+    {
+      title: "GDScript go-to-declaration",
+      description:
+        "Resolve the declaration location(s) of the symbol at a position. (For many symbols this coincides with the definition; the " +
+        "two differ for forward-declared or re-exported names.) Godot's GDScript language server advertises declarationProvider; feature-detected.",
+      inputSchema: posSchema,
+    },
+    async ({ path, line, character }) => {
+      const alt = "Use gd_definition to resolve the symbol's definition.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.declarationProvider) return unsupportedLsp("gd_declaration", "textDocument/declaration", "declarationProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/declaration", { textDocument: { uri }, position: { line, character } });
+        return ok({ locations: normalizeLocations(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_declaration", "textDocument/declaration", "declarationProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_folding_ranges",
+    {
+      title: "GDScript folding ranges",
+      description:
+        "List the foldable regions of a script (functions, blocks, comment/region markers) — the ranges an editor's fold gutter offers. " +
+        "Read-only. Godot's GDScript language server advertises foldingRangeProvider; feature-detected.",
+      inputSchema: { path: z.string().describe("Script path (res://..., absolute, or project-relative)") },
+    },
+    async ({ path }) => {
+      const alt = "Use gd_document_symbols to outline the file's structure instead.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.foldingRangeProvider) return unsupportedLsp("gd_folding_ranges", "textDocument/foldingRange", "foldingRangeProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/foldingRange", { textDocument: { uri } });
+        return ok({ ranges: normalizeFolding(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_folding_ranges", "textDocument/foldingRange", "foldingRangeProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_document_link",
+    {
+      title: "GDScript document links",
+      description:
+        "List the links embedded in a script (res:// paths or URLs the language server recognizes) with their source ranges and targets. " +
+        "Read-only. Godot's GDScript language server advertises documentLinkProvider; feature-detected.",
+      inputSchema: { path: z.string().describe("Script path (res://..., absolute, or project-relative)") },
+    },
+    async ({ path }) => {
+      const alt = "Links are an editor-only convenience; there is no host-side alternative.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.documentLinkProvider) return unsupportedLsp("gd_document_link", "textDocument/documentLink", "documentLinkProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/documentLink", { textDocument: { uri } });
+        return ok({ links: normalizeLinks(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_document_link", "textDocument/documentLink", "documentLinkProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_formatting",
+    {
+      title: "GDScript format (preview)",
+      description:
+        "Compute how the language server would reformat a whole script and return the formatted TEXT — WITHOUT writing anything to disk " +
+        "(read-only preview; apply it yourself with a file write if you want it). " +
+        "Godot's GDScript language server advertises documentFormattingProvider; feature-detected.",
+      inputSchema: {
+        path: z.string().describe("Script path (res://..., absolute, or project-relative)"),
+        tab_size: z.number().int().positive().optional().describe("Indent width the server should assume (default 4)"),
+        insert_spaces: z.boolean().optional().describe("Indent with spaces instead of tabs (default false — Godot uses tabs)"),
+      },
+    },
+    async ({ path, tab_size, insert_spaces }) => {
+      const alt = "Formatting has no host-side fallback; the connected build must implement it.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.documentFormattingProvider) return unsupportedLsp("gd_formatting", "textDocument/formatting", "documentFormattingProvider", alt);
+        const fsPath = toFsPath(path, cfg.projectPath);
+        const before = readFileText(fsPath);
+        const uri = toFileUri(path, cfg.projectPath);
+        await lsp.ensureOpen(uri, before);
+        const result = (await lsp.request("textDocument/formatting", {
+          textDocument: { uri },
+          options: { tabSize: tab_size ?? 4, insertSpaces: insert_spaces ?? false },
+        })) as Array<{ range: Range; newText: string }> | null;
+        const edits = result ?? [];
+        const formatted = applyTextEdits(before, edits);
+        return ok({ edit_count: edits.length, formatted });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_formatting", "textDocument/formatting", "documentFormattingProvider", alt);
         return fail(err);
       }
     },

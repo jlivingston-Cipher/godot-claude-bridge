@@ -142,6 +142,17 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   gd_code_action: {
     actions: z.array(z.object({ title: z.string(), kind: z.string(), has_edit: z.boolean(), command: z.string().nullable() })),
   },
+  gd_document_highlight: {
+    highlights: z.array(z.object({ line: z.number(), character: z.number(), end_line: z.number(), end_character: z.number(), kind: z.string() })),
+  },
+  gd_type_definition: { locations: z.array(location) },
+  gd_implementation: { locations: z.array(location) },
+  gd_declaration: { locations: z.array(location) },
+  gd_folding_ranges: { ranges: z.array(z.object({ start_line: z.number(), end_line: z.number(), kind: z.string() })) },
+  gd_document_link: {
+    links: z.array(z.object({ line: z.number(), character: z.number(), end_line: z.number(), end_character: z.number(), target: z.string() })),
+  },
+  gd_formatting: { edit_count: z.number(), formatted: z.string() },
 
   // ---- Plane D: debugging / DAP (tools/dap.ts) ----
   dbg_launch: { session_id: z.string(), state: z.string(), scene: z.string() },

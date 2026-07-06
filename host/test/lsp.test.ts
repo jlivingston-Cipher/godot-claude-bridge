@@ -273,6 +273,205 @@ test("gd_code_action returns 'unsupported' WITHOUT sending textDocument/codeActi
   await srv.close();
 });
 
+// ---- Phase 1 LSP-depth: read-only navigation/inspection tools -------------
+
+test("gd_type_definition maps locations when typeDefinitionProvider is advertised", async () => {
+  const projectPath = tmpProject({ "player.gd": "extends Node\nvar hp := 3\n" });
+  const { srv } = await startLsp({
+    capabilities: { typeDefinitionProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/typeDefinition") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [{ uri: "res://health.gd", range: { start: { line: 2, character: 0 } } }] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_type_definition")({ path: "player.gd", line: 1, character: 4 })) as ToolResultLike;
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(res.structuredContent, { locations: [{ uri: "res://health.gd", line: 2, character: 0 }] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_type_definition returns 'unsupported' WITHOUT sending the request when the capability is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "extends Node\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_type_definition")({ path: "player.gd", line: 0, character: 0 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.method === "textDocument/typeDefinition"), "must NOT send typeDefinition when the capability is absent");
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_type_definition maps a -32601 (advertised-but-unimplemented) reply to 'unsupported' — the D7 belt-and-suspenders", async () => {
+  const projectPath = tmpProject({ "player.gd": "extends Node\n" });
+  const { srv } = await startLsp({
+    capabilities: { typeDefinitionProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/typeDefinition") writeFrame(s, { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_type_definition")({ path: "player.gd", line: 0, character: 0 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_implementation maps locations from the targetUri/targetSelectionRange form", async () => {
+  const projectPath = tmpProject({ "player.gd": "extends Node\n" });
+  const { srv } = await startLsp({
+    capabilities: { implementationProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/implementation") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [{ targetUri: "res://enemy.gd", targetSelectionRange: { start: { line: 9, character: 2 } } }] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_implementation")({ path: "player.gd", line: 0, character: 0 })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { locations: [{ uri: "res://enemy.gd", line: 9, character: 2 }] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_declaration maps a single-Location (non-array) result", async () => {
+  const projectPath = tmpProject({ "player.gd": "extends Node\n" });
+  const { srv } = await startLsp({
+    capabilities: { declarationProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/declaration") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { uri: "res://player.gd", range: { start: { line: 1, character: 4 } } } });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_declaration")({ path: "player.gd", line: 5, character: 8 })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { locations: [{ uri: "res://player.gd", line: 1, character: 4 }] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_document_highlight maps ranges and DocumentHighlightKind numbers to write/read/text", async () => {
+  const projectPath = tmpProject({ "player.gd": "var speed = 1\nspeed = 2\nprint(speed)\n" });
+  const { srv } = await startLsp({
+    capabilities: { documentHighlightProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/documentHighlight") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { range: { start: { line: 0, character: 4 }, end: { line: 0, character: 9 } }, kind: 3 },
+          { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } }, kind: 2 },
+          { range: { start: { line: 2, character: 6 }, end: { line: 2, character: 11 } } },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_highlight")({ path: "player.gd", line: 0, character: 4 })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { highlights: [
+    { line: 0, character: 4, end_line: 0, end_character: 9, kind: "write" },
+    { line: 1, character: 0, end_line: 1, end_character: 5, kind: "read" },
+    { line: 2, character: 6, end_line: 2, end_character: 11, kind: "text" },
+  ] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_document_highlight returns 'unsupported' without sending the request when the capability is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "var x = 1\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_highlight")({ path: "player.gd", line: 0, character: 4 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.ok(!received.some((m) => m.method === "textDocument/documentHighlight"));
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_folding_ranges maps startLine/endLine and a defaulted (missing) kind", async () => {
+  const projectPath = tmpProject({ "player.gd": "func a():\n\tpass\nfunc b():\n\tpass\n" });
+  const { srv } = await startLsp({
+    capabilities: { foldingRangeProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/foldingRange") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { startLine: 0, endLine: 1, kind: "region" },
+          { startLine: 2, endLine: 3 },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_folding_ranges")({ path: "player.gd" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { ranges: [
+    { start_line: 0, end_line: 1, kind: "region" },
+    { start_line: 2, end_line: 3, kind: "" },
+  ] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_document_link maps ranges and targets", async () => {
+  const projectPath = tmpProject({ "player.gd": "# see res://other.gd\n" });
+  const { srv } = await startLsp({
+    capabilities: { documentLinkProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/documentLink") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { range: { start: { line: 0, character: 6 }, end: { line: 0, character: 20 } }, target: "res://other.gd" },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_link")({ path: "player.gd" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { links: [
+    { line: 0, character: 6, end_line: 0, end_character: 20, target: "res://other.gd" },
+  ] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_formatting applies the server's text edits and returns the formatted text WITHOUT writing to disk", async () => {
+  const projectPath = tmpProject({ "player.gd": "var x=1\n" });
+  let sent: LspMsg | undefined;
+  const { srv } = await startLsp({
+    capabilities: { documentFormattingProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/formatting") {
+        sent = msg;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } }, newText: "var x = 1" },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_formatting")({ path: "player.gd" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { edit_count: 1, formatted: "var x = 1\n" });
+  // Read-only: the file on disk is untouched.
+  assert.equal(fs.readFileSync(path.join(projectPath, "player.gd"), "utf8"), "var x=1\n");
+  // Formatting options default to Godot's tabs (insertSpaces:false, tabSize:4).
+  const opts = (sent!.params as { options: { tabSize: number; insertSpaces: boolean } }).options;
+  assert.deepEqual(opts, { tabSize: 4, insertSpaces: false });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_formatting returns 'unsupported' without sending the request when documentFormattingProvider is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "var x=1\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_formatting")({ path: "player.gd" })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.ok(!received.some((m) => m.method === "textDocument/formatting"));
+  lsp.close();
+  await srv.close();
+});
+
 // ---- Direct LspClient protocol behavior -----------------------------------
 
 test("getServerCapabilities reflects the initialize handshake result", async () => {

@@ -73,6 +73,40 @@ if (reached) {
   } catch (err) {
     console.log("PROBE gd_code_action threw", err?.message ?? String(err));
   }
+
+  // Phase-1 LSP-depth: does this build actually RETURN results from the newer
+  // read-only providers, or only advertise them (the D7 workspace/symbol trap)?
+  // The tool wrappers are capability-gated, so an advertised-but-unimplemented
+  // provider shows up as isError:"unsupported" here rather than crashing the probe.
+  const navCaps = await lsp.getServerCapabilities();
+  console.log(
+    `D7_CAPS2: documentHighlight=${!!navCaps.documentHighlightProvider} foldingRange=${!!navCaps.foldingRangeProvider}` +
+    ` typeDefinition=${!!navCaps.typeDefinitionProvider} implementation=${!!navCaps.implementationProvider}` +
+    ` declaration=${!!navCaps.declarationProvider} documentLink=${!!navCaps.documentLinkProvider}` +
+    ` formatting=${!!navCaps.documentFormattingProvider}`,
+  );
+  const navProbes = [
+    ["gd_document_highlight", { path: "res://player.gd", line: 13, character: 8 }, "highlights"],
+    ["gd_type_definition",    { path: "res://player.gd", line: 13, character: 8 }, "locations"],
+    ["gd_implementation",     { path: "res://player.gd", line: 13, character: 8 }, "locations"],
+    ["gd_declaration",        { path: "res://player.gd", line: 13, character: 8 }, "locations"],
+    ["gd_folding_ranges",     { path: "res://player.gd" }, "ranges"],
+    ["gd_document_link",      { path: "res://player.gd" }, "links"],
+    ["gd_formatting",         { path: "res://player.gd" }, null],
+  ];
+  for (const [name, args, field] of navProbes) {
+    try {
+      const res = await call(name, args);
+      const detail = res.isError
+        ? JSON.stringify(res.content?.[0]?.text ?? "").slice(0, 90)
+        : field
+          ? `${field}=${res.structuredContent?.[field]?.length ?? "-"}`
+          : `edit_count=${res.structuredContent?.edit_count ?? "-"}`;
+      console.log(`PROBE ${name}: isError=${!!res.isError} ${detail}`);
+    } catch (err) {
+      console.log(`PROBE ${name} threw`, err?.message ?? String(err));
+    }
+  }
 }
 
 lsp.close();
