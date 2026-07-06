@@ -4,6 +4,35 @@ All notable changes to the Godot–Claude Bridge are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.11] — 2026-07-06
+
+### Added
+- **`gd_document_color`** — a read-only LSP tool wrapping `textDocument/documentColor`:
+  the color literals the GDScript language server recognizes in a script (the
+  `Color(...)` values an editor draws an inline swatch for), each with its source
+  range, RGBA components (floats 0..1) and a convenience `#RRGGBBAA` hex (Godot's
+  `Color.to_html()` ordering). Same feature-detect + `-32601` belt-and-suspenders
+  as the other Phase-1 LSP-depth tools, so an advertised-but-unimplemented build
+  degrades to a clear "unsupported" message rather than a raw JSON-RPC error.
+- Surface **66 → 67 tools** (LSP 17 → 18). Frozen output schema (B1), the
+  registration meta-test (→ 67), `docs/TOOL_CATALOG.md` (entry + index + summary)
+  and `README.md` updated in lockstep. **+3 loopback mock-server tests → 94 total.**
+  `contract_check.py` green (67 ↔ 67, 57 catalog JSON blocks).
+
+### Validated (live editor CI — the D7 probe, extended to gd_document_color)
+- Against real **Godot 4.3-stable**: `colorProvider` appears among the `initialize`
+  capability keys but with the value **`false`** (`D7_CAPS2 → color=false`), so
+  `gd_document_color` correctly returns "unsupported" — joining
+  `gd_document_highlight` / `gd_type_definition` / `gd_implementation` /
+  `gd_folding_ranges` / `gd_formatting` in the advertised-but-not-honoured group
+  (`gd_declaration` + `gd_document_link` remain the only read-only providers that
+  return live on 4.3). Validates the feature-detect + `-32601` design once more.
+
+### Note
+- No functional addon (GDScript) change since v0.4.8 — only the `ADDON_VERSION`
+  stamp bumps; any of v0.4.8–v0.4.11 is a coherent *addon* release. The npm publish
+  (needs 2FA) and the Asset Library submission remain maintainer actions.
+
 ## [0.4.10] — 2026-07-06
 
 ### Added
