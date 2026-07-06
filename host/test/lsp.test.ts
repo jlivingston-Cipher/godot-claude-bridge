@@ -472,6 +472,57 @@ test("gd_formatting returns 'unsupported' without sending the request when docum
   await srv.close();
 });
 
+test("gd_document_color maps ColorInformation ranges and 0..1 RGBA to components + #RRGGBBAA hex", async () => {
+  const projectPath = tmpProject({ "player.gd": "var c = Color(1, 0, 0, 1)\nvar d = Color(0, 0.5, 1, 0.5)\n" });
+  const { srv } = await startLsp({
+    capabilities: { colorProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/documentColor") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { range: { start: { line: 0, character: 8 }, end: { line: 0, character: 24 } }, color: { red: 1, green: 0, blue: 0, alpha: 1 } },
+          { range: { start: { line: 1, character: 8 }, end: { line: 1, character: 28 } }, color: { red: 0, green: 0.5, blue: 1, alpha: 0.5 } },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_color")({ path: "player.gd" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { colors: [
+    { line: 0, character: 8, end_line: 0, end_character: 24, red: 1, green: 0, blue: 0, alpha: 1, hex: "#ff0000ff" },
+    { line: 1, character: 8, end_line: 1, end_character: 28, red: 0, green: 0.5, blue: 1, alpha: 0.5, hex: "#0080ff80" },
+  ] });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_document_color returns 'unsupported' without sending the request when colorProvider is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "var x = 1\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_color")({ path: "player.gd" })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.method === "textDocument/documentColor"), "must NOT send documentColor when the capability is absent");
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_document_color maps a -32601 (advertised-but-unimplemented) reply to 'unsupported' — the D7 belt-and-suspenders", async () => {
+  const projectPath = tmpProject({ "player.gd": "var x = Color(1,1,1,1)\n" });
+  const { srv } = await startLsp({
+    capabilities: { colorProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/documentColor") writeFrame(s, { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_document_color")({ path: "player.gd" })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  lsp.close();
+  await srv.close();
+});
+
 // ---- Direct LspClient protocol behavior -----------------------------------
 
 test("getServerCapabilities reflects the initialize handshake result", async () => {

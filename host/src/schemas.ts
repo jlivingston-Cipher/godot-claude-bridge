@@ -153,6 +153,12 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     links: z.array(z.object({ line: z.number(), character: z.number(), end_line: z.number(), end_character: z.number(), target: z.string() })),
   },
   gd_formatting: { edit_count: z.number(), formatted: z.string() },
+  gd_document_color: {
+    colors: z.array(z.object({
+      line: z.number(), character: z.number(), end_line: z.number(), end_character: z.number(),
+      red: z.number(), green: z.number(), blue: z.number(), alpha: z.number(), hex: z.string(),
+    })),
+  },
 
   // ---- Plane D: debugging / DAP (tools/dap.ts) ----
   dbg_launch: { session_id: z.string(), state: z.string(), scene: z.string() },

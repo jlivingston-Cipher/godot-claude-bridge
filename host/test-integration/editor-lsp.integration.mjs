@@ -83,7 +83,7 @@ if (reached) {
     `D7_CAPS2: documentHighlight=${!!navCaps.documentHighlightProvider} foldingRange=${!!navCaps.foldingRangeProvider}` +
     ` typeDefinition=${!!navCaps.typeDefinitionProvider} implementation=${!!navCaps.implementationProvider}` +
     ` declaration=${!!navCaps.declarationProvider} documentLink=${!!navCaps.documentLinkProvider}` +
-    ` formatting=${!!navCaps.documentFormattingProvider}`,
+    ` formatting=${!!navCaps.documentFormattingProvider} color=${!!navCaps.colorProvider}`,
   );
   const navProbes = [
     ["gd_document_highlight", { path: "res://player.gd", line: 13, character: 8 }, "highlights"],
@@ -93,6 +93,7 @@ if (reached) {
     ["gd_folding_ranges",     { path: "res://player.gd" }, "ranges"],
     ["gd_document_link",      { path: "res://player.gd" }, "links"],
     ["gd_formatting",         { path: "res://player.gd" }, null],
+    ["gd_document_color",     { path: "res://player.gd" }, "colors"],
   ];
   for (const [name, args, field] of navProbes) {
     try {

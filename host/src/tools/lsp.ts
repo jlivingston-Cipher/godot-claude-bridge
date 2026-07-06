@@ -171,6 +171,27 @@ function normalizeLinks(result: unknown): Array<{ line: number; character: numbe
   });
 }
 
+// textDocument/documentColor -> ColorInformation[]: each { range, color:{red,green,blue,alpha} }
+// with every channel a float in 0..1. We surface the raw 0..1 components AND a
+// convenience #RRGGBBAA hex (Godot's Color.to_html() ordering) so a caller can
+// eyeball the swatch without re-deriving it.
+function normalizeColors(result: unknown): Array<{ line: number; character: number; end_line: number; end_character: number; red: number; green: number; blue: number; alpha: number; hex: string }> {
+  const arr = Array.isArray(result) ? result : [];
+  const hex2 = (v: number) => Math.max(0, Math.min(255, Math.round((v ?? 0) * 255))).toString(16).padStart(2, "0");
+  return arr.map((c) => {
+    const cc = c as { range?: Range; color?: { red?: number; green?: number; blue?: number; alpha?: number } };
+    const r = cc.range ?? {};
+    const col = cc.color ?? {};
+    const red = col.red ?? 0, green = col.green ?? 0, blue = col.blue ?? 0, alpha = col.alpha ?? 0;
+    return {
+      line: r.start?.line ?? 0, character: r.start?.character ?? 0,
+      end_line: r.end?.line ?? 0, end_character: r.end?.character ?? 0,
+      red, green, blue, alpha,
+      hex: `#${hex2(red)}${hex2(green)}${hex2(blue)}${hex2(alpha)}`,
+    };
+  });
+}
+
 function offsetOf(text: string, line: number, character: number): number {
   const lines = text.split("\n");
   let offset = 0;
@@ -665,6 +686,30 @@ export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config)
         return ok({ edit_count: edits.length, formatted });
       } catch (err) {
         if (isMethodNotFound(err)) return unsupportedLsp("gd_formatting", "textDocument/formatting", "documentFormattingProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_document_color",
+    {
+      title: "GDScript document colors",
+      description:
+        "List the color literals the language server recognizes in a script — the Color(...) values an editor draws an inline swatch for — with each one's source range, its RGBA components (floats 0..1) and a convenience #RRGGBBAA hex. Read-only. " +
+        "Godot's GDScript language server advertises colorProvider; feature-detected with a -32601 belt-and-suspenders (advertised ≠ implemented — the D7 lesson).",
+      inputSchema: { path: z.string().describe("Script path (res://..., absolute, or project-relative)") },
+    },
+    async ({ path }) => {
+      const alt = "Color inlays are an editor-only convenience; there is no host-side alternative.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.colorProvider) return unsupportedLsp("gd_document_color", "textDocument/documentColor", "colorProvider", alt);
+        const uri = await openAndPos(path);
+        const result = await lsp.request("textDocument/documentColor", { textDocument: { uri } });
+        return ok({ colors: normalizeColors(result) });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_document_color", "textDocument/documentColor", "colorProvider", alt);
         return fail(err);
       }
     },
