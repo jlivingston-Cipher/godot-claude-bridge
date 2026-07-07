@@ -30,12 +30,16 @@ name: integration
 #                    stable (4.7) so the D_DAP_* markers reveal which advertised-but-dead-
 #                    on-4.3 capabilities light up on a modern build. Also EXPERIMENTAL /
 #                    continue-on-error (never blocks).
-#   * csharp-plane  — D4 C1 + C2. Downloads a Mono/.NET Godot build + the .NET SDK and boots the C#
-#                     fixture (example-csharp/) headless: dotnet-builds the project, imports +
+#   * csharp-plane  — D4 C1 + C2 + C3. Downloads a Mono/.NET Godot build + the .NET SDK and boots the
+#                     C# fixture (example-csharp/) headless: dotnet-builds the project, imports +
 #                     --build-solutions, then asserts the C# scene's _Ready() ran (C#_PLANE_BOOT_OK).
 #                     C2: also installs OmniSharp and runs a live cs_* LSP probe against it over the
-#                     fixture (markers C#_LSP_*: reached, capabilities, per-tool probes). EXPERIMENTAL /
-#                     continue-on-error until the toolchain is proven on real runners. See docs/D4_CSHARP_PLAN.md.
+#                     fixture (markers C#_LSP_*: reached, capabilities, per-tool probes). C3: installs
+#                     netcoredbg and runs a live cs_dbg_* DAP probe (markers C#_DAP_*: initialize gate
+#                     reached + capabilities, then a best-effort launch-to-breakpoint flow — log-only,
+#                     as the netcoredbg + Godot native-host attach story is being established).
+#                     EXPERIMENTAL / continue-on-error until the toolchain is proven on real runners.
+#                     See docs/D4_CSHARP_PLAN.md.
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -344,6 +348,19 @@ jobs:
           # (which spawns OmniSharp over stdio and drives an initialize handshake) is the real check.
           echo "resolved OmniSharp: $OMNISHARP_BIN"
           echo "OMNISHARP_BIN=$OMNISHARP_BIN" >> "$GITHUB_ENV"
+      - name: Install netcoredbg (linux amd64, C3)
+        run: |
+          set -eux
+          # netcoredbg (Samsung, MIT) is the .NET debug adapter the cs_dbg_* tools drive (spawned over
+          # stdio by the host). Resolve the binary with find so a naming change surfaces as an empty-var
+          # failure; continue-on-error keeps an install hiccup from ever blocking a merge.
+          curl -fL -o netcoredbg.tar.gz "https://github.com/Samsung/netcoredbg/releases/latest/download/netcoredbg-linux-amd64.tar.gz"
+          mkdir -p "$PWD/netcoredbg-dist" && tar -xzf netcoredbg.tar.gz -C "$PWD/netcoredbg-dist"
+          NETCOREDBG_BIN="$(find "$PWD/netcoredbg-dist" -maxdepth 2 -type f -name 'netcoredbg' | head -1)"
+          test -n "$NETCOREDBG_BIN"
+          chmod +x "$NETCOREDBG_BIN"
+          echo "resolved netcoredbg: $NETCOREDBG_BIN"
+          echo "NETCOREDBG_BIN=$NETCOREDBG_BIN" >> "$GITHUB_ENV"
       - name: C2 — live cs_* LSP probe vs real OmniSharp (markers C#_LSP_*)
         working-directory: host
         env:
@@ -358,6 +375,20 @@ jobs:
           timeout 300 node test-integration/csharp-lsp.integration.mjs
       - name: Import + build C# solution (headless)
         run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example-csharp" --import --build-solutions --quit-after 200 || true'
+      - name: C3 — live cs_dbg_* DAP probe vs real netcoredbg (markers C#_DAP_*)
+        working-directory: host
+        env:
+          GODOT_CSHARP_PROJECT: ${{ github.workspace }}/example-csharp
+          GODOT_CSDAP_CMD: ${{ env.NETCOREDBG_BIN }}
+          GODOT_CSHARP_BIN: ${{ env.GODOT_BIN }}
+        run: |
+          set -eux
+          # The C# solution was just built, so the game can run under the debugger. The probe reaches
+          # netcoredbg (the gate: C#_DAP_REACHED) then best-effort launches the game to a breakpoint;
+          # markers C#_DAP_*. Bounded by an outer timeout so a misbehaving adapter can never hang the
+          # runner. LOG-ONLY beyond the gate — the netcoredbg + Godot native-host attach story is the
+          # least-certain piece of D4 (see docs/D4_CSHARP_PLAN.md), proven by the mock unit suite.
+          timeout 180 node test-integration/csharp-dap.integration.mjs
       - name: Boot the C# game headless (C1 smoke — the .NET assembly loads and the scene runs)
         run: |
           set -eux

@@ -44,6 +44,23 @@ export interface Config {
    */
   dapSetVarTimeoutMs: number;
   dapEvaluateTimeoutMs: number;
+  /**
+   * C#/.NET debugging plane (D4 C3). The .NET debug adapter (netcoredbg, MIT) is
+   * SPAWNED by the host over stdio — like OmniSharp, and unlike Godot's TCP DAP —
+   * so it's a command + args + a working directory rather than a host/port. It is
+   * launched lazily on the first cs_dbg_* call, so a host without netcoredbg
+   * installed pays nothing. `csDapProgram` is the program cs_dbg_launch launches
+   * by default (the Mono/.NET Godot binary). The setVariable / evaluate deadlines
+   * mirror the DAP F1 discipline: a short bound so a non-answering adapter fails
+   * fast instead of hanging the full timeout. All env-overridable.
+   */
+  csDapCmd: string;
+  csDapArgs: string[];
+  csDapProgram: string;
+  csDapProjectPath: string;
+  csDapTimeoutMs: number;
+  csDapSetVarTimeoutMs: number;
+  csDapEvaluateTimeoutMs: number;
   /** Runtime bridge (in-game autoload) host/port + timeout. */
   runtimeHost: string;
   runtimePort: number;
@@ -75,6 +92,16 @@ export function loadConfig(): Config {
     dapTimeoutMs: Number.parseInt(process.env.GODOT_DAP_TIMEOUT_MS ?? "20000", 10),
     dapSetVarTimeoutMs: Number.parseInt(process.env.GODOT_DAP_SETVAR_TIMEOUT_MS ?? "8000", 10),
     dapEvaluateTimeoutMs: Number.parseInt(process.env.GODOT_DAP_EVALUATE_TIMEOUT_MS ?? "8000", 10),
+    csDapCmd: process.env.GODOT_CSDAP_CMD ?? "netcoredbg",
+    csDapArgs: (process.env.GODOT_CSDAP_ARGS ?? "--interpreter=vscode").split(/\s+/).filter(Boolean),
+    // The default program cs_dbg_launch launches is the Mono/.NET Godot binary. GODOT_CSHARP_BIN
+    // overrides it; it otherwise falls back to GODOT_BIN (the standard editor binary), which the
+    // caller can also override per-call via cs_dbg_launch's `program` arg.
+    csDapProgram: process.env.GODOT_CSHARP_BIN ?? process.env.GODOT_BIN ?? "godot",
+    csDapProjectPath: csLspProjectPath,
+    csDapTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_TIMEOUT_MS ?? "20000", 10),
+    csDapSetVarTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_SETVAR_TIMEOUT_MS ?? "8000", 10),
+    csDapEvaluateTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_EVALUATE_TIMEOUT_MS ?? "8000", 10),
     runtimeHost: process.env.CLAUDE_RUNTIME_HOST ?? "127.0.0.1",
     runtimePort: Number.parseInt(process.env.CLAUDE_RUNTIME_PORT ?? "9081", 10),
     runtimeTimeoutMs: Number.parseInt(process.env.CLAUDE_RUNTIME_TIMEOUT_MS ?? "15000", 10),

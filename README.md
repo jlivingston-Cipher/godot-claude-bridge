@@ -4,17 +4,20 @@
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 139-test host suite
-> and real-Godot integration smokes (CLI, LSP and DAP planes)** on Node 18/20/22 — the
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 160-test host suite
+> and real-Godot integration smokes (CLI, LSP, DAP and C# planes)** on Node 18/20/22 — the
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
 > evaluation — **fail fast** (bounded to ~8 s) on adapters that advertise a capability but never
-> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. **New in
-> 0.7.0:** an experimental **C# semantic plane** (`cs_*` tools via OmniSharp, D4 C2) — live-validated
-> in CI against a real OmniSharp over the `example-csharp` fixture. Full
-> history in `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
+> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. **The
+> experimental C#/.NET plane** now spans both halves of Plane D: a **C# semantic plane** (`cs_*` via
+> OmniSharp, D4 C2 — live-validated in CI against a real OmniSharp over the `example-csharp` fixture)
+> and, **new since 0.7.0**, a **C# debugging plane** (`cs_dbg_*` via netcoredbg, D4 C3 — the mock unit
+> suite proves the breakpoint→stack→variables→evaluate flow and the gated, fail-fast mutators, with a
+> live `continue-on-error` netcoredbg probe). Full history in `CHANGELOG.md`; publishing steps and the
+> remote caveat in `docs/DISTRIBUTION.md`.
 
-Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**78 tools + 5 MCP resources**):
+Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**88 tools + 5 MCP resources**):
 
 - **Plane B — Headless CLI** (`godot_*` tools): launch the editor, run the project, export, import, run headless scripts/tests. Works with no editor open.
 - **Plane A — Live Editor Bridge** (`editor_*`, `scene_*`, `node_*`, … tools): a Godot `EditorPlugin` opens a loopback TCP/JSON server that the MCP host drives — scene/node/resource CRUD **with full undo/redo**, project settings, `ClassDB` introspection, selection, and editor-viewport screenshots.
@@ -70,10 +73,11 @@ addons/claude_bridge/         # drop into your Godot project (or symlink)
 host/                         # the MCP server Claude connects to
   src/index.ts  config.ts  logger.ts  paths.ts
   src/bridge.ts              # Plane A & C: TCP/JSON client (editor + runtime)
-  src/framing.ts             # shared Content-Length framing (LSP + DAP)
-  src/lsp.ts  src/dap.ts     # Plane D: LSP + DAP protocol clients
+  src/framing.ts  src/stdio.ts  # shared Content-Length framing (TCP + spawned-stdio transports)
+  src/lsp.ts  src/dap.ts     # Plane D: GDScript LSP + DAP protocol clients
+  src/cslsp.ts  src/csdap.ts # Plane D: C# LSP (OmniSharp) + DAP (netcoredbg) clients, over stdio
   src/confirm.ts             # Phase 4: elicitation gate for destructive tools
-  src/tools/{cli,editor,lsp,dap,runtime,processes,resources}.ts
+  src/tools/{cli,editor,lsp,cslsp,dap,csdap,runtime,processes,resources}.ts
 docs/TOOL_CATALOG.md          # every tool, input + output JSON Schemas
 docs/RUNBOOK.md               # step-by-step live validation checklist
 docs/VALIDATION_REPORT.md     # what's statically verified vs. needs a live run
@@ -185,6 +189,6 @@ If you install the newer **SDK v2** (`@modelcontextprotocol/server`, `import * a
 ## Status & what's next
 All four capability planes plus the safety/UX polish are implemented and live-validated: elicitation gating, the formal MCP **task model** for long jobs (D2 — create/poll/await/cancel), host-side console capture (`godot_run_managed`/`godot_output`, which sidesteps the GDScript "can't hook `print()`" limit — `ClaudeRuntimeBridge.push_log` remains available for in-game structured logging), enforced output schemas, MCP resources, and live resource **subscriptions** (D3 — `resources/subscribe` + `notifications/resources/updated`).
 
-Backlog (see `BACKLOG.md`): C#/.NET debugging via the OmniSharp path (D4); and an optional GDExtension logger for zero-config in-process capture without a managed parent process (D6). **D2 — the formal MCP task execution model for long jobs — is now implemented** (`godot_export`/`godot_import`/`godot_run_headless_script`), and **D3 — resource subscriptions — is now implemented** (`resources/subscribe`/`resources/unsubscribe` + `notifications/resources/updated` pushed on editor selection / edited-scene change); the end-to-end push is validated live by the non-blocking `editor-plane` CI probe.
+Backlog (see `BACKLOG.md`): the C#/.NET plane (D4) now ships both halves — a **C# semantic plane** (`cs_*` via OmniSharp, C2) and a **C# debugging plane** (`cs_dbg_*` via netcoredbg, C3); remaining D4 follow-ons are the `cs_*` / `cs_dbg_*` mutators and promoting the experimental `csharp-plane` CI to a required gate. Also outstanding: an optional GDExtension logger for zero-config in-process capture without a managed parent process (D6). **D2 — the formal MCP task execution model for long jobs — is now implemented** (`godot_export`/`godot_import`/`godot_run_headless_script`), and **D3 — resource subscriptions — is now implemented** (`resources/subscribe`/`resources/unsubscribe` + `notifications/resources/updated` pushed on editor selection / edited-scene change); the end-to-end push is validated live by the non-blocking `editor-plane` CI probe.
 
 MIT licensed.

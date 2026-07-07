@@ -217,6 +217,24 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     unresolved: z.array(z.object({ name: z.string(), reason: z.string() })),
   },
 
+  // ---- Plane D: C# debugging / netcoredbg DAP (tools/csdap.ts) ----
+  cs_dbg_launch: { session_id: z.string(), state: z.string() },
+  cs_dbg_attach: { session_id: z.string(), state: z.string() },
+  cs_dbg_set_breakpoints: {
+    path: z.string(), buffered: z.boolean(),
+    breakpoints: z.array(z.object({ line: z.number(), verified: z.boolean() })),
+    // Present only when the adapter advertised the requested condition modifier unsupported (see tools/csdap.ts).
+    unsupported_modifiers: z.array(z.string()).optional(),
+    warning: z.string().optional(),
+  },
+  cs_dbg_continue: { state: z.string(), stopped_reason: z.string().nullable() },
+  cs_dbg_step: { state: z.string(), stopped_reason: z.string().nullable() },
+  cs_dbg_stack_trace: { frames: z.array(z.object({ id: z.number(), name: z.string(), source: z.string(), line: z.number() })) },
+  cs_dbg_scopes: { scopes: z.array(z.object({ name: z.string(), variables_ref: z.number() })) },
+  cs_dbg_variables: { variables: z.array(z.object({ name: z.string(), value: z.string(), type: z.string(), variables_ref: z.number() })) },
+  cs_dbg_evaluate: { result: z.string(), type: z.string(), variables_ref: z.number() },
+  cs_dbg_set_variable: { name: z.string(), value: z.string(), type: z.string(), variables_ref: z.number() },
+
   // ---- Plane C: runtime bridge (tools/runtime.ts -> runtime_bridge.gd) ----
   runtime_get_tree: {
     name: z.string(),

@@ -5,6 +5,7 @@ import { registerEditorTools } from "../src/tools/editor.js";
 import { registerLspTools } from "../src/tools/lsp.js";
 import { registerCsLspTools } from "../src/tools/cslsp.js";
 import { registerDapTools } from "../src/tools/dap.js";
+import { registerCsDapTools } from "../src/tools/csdap.js";
 import { registerRuntimeTools } from "../src/tools/runtime.js";
 import { registerProcessTools } from "../src/tools/processes.js";
 import { registerResources } from "../src/tools/resources.js";
@@ -13,7 +14,7 @@ import { loadConfig } from "../src/config.js";
 
 /** Tools that return image content with no structuredContent — deliberately schema-exempt. */
 const IMAGE_TOOLS = ["screenshot_editor", "runtime_screenshot"];
-const EXPECTED_TOOL_COUNT = 78;
+const EXPECTED_TOOL_COUNT = 88;
 const EXPECTED_RESOURCES = ["scene-tree", "editor-state", "runtime-tree", "runtime-log", "class-doc"];
 
 /**
@@ -47,6 +48,7 @@ function registerAll() {
   registerLspTools(mcp, stub, cfg);
   registerCsLspTools(mcp, stub, cfg);
   registerDapTools(mcp, stub, cfg);
+  registerCsDapTools(mcp, stub, cfg);
   registerRuntimeTools(mcp, stub);
   registerProcessTools(mcp, cfg);
   registerResources(mcp, stub, stub);

@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { BridgeClient } from "./bridge.js";
 import { LspClient } from "./lsp.js";
 import { CsLspClient } from "./cslsp.js";
+import { CsDapClient } from "./csdap.js";
 import { StdioChannel } from "./stdio.js";
 import { DapClient } from "./dap.js";
 import { registerCliTools } from "./tools/cli.js";
@@ -12,6 +13,7 @@ import { registerEditorTools } from "./tools/editor.js";
 import { registerLspTools } from "./tools/lsp.js";
 import { registerCsLspTools } from "./tools/cslsp.js";
 import { registerDapTools } from "./tools/dap.js";
+import { registerCsDapTools } from "./tools/csdap.js";
 import { registerRuntimeTools } from "./tools/runtime.js";
 import { registerProcessTools } from "./tools/processes.js";
 import { registerResources } from "./tools/resources.js";
@@ -47,6 +49,19 @@ async function main(): Promise<void> {
     config.csLspTimeoutMs,
   );
   const dap = new DapClient(config.dapHost, config.dapPort, config.dapTimeoutMs);
+  // D4 C3: the C# debugging plane. netcoredbg is spawned over stdio (lazily, on
+  // the first cs_dbg_* call) — so a host without netcoredbg installed starts and
+  // runs every other plane unaffected.
+  const csDap = new CsDapClient(
+    new StdioChannel(
+      config.csDapCmd,
+      config.csDapArgs,
+      config.csDapProjectPath,
+      "C# DAP (netcoredbg)",
+      "Is netcoredbg installed and on PATH (or set GODOT_CSDAP_CMD to its binary), and GODOT_CSHARP_PROJECT pointed at a C# project?",
+    ),
+    config.csDapTimeoutMs,
+  );
 
   // D2: advertise the MCP task-execution model and hand the SDK a task store,
   // so long jobs (export/import/headless script) support poll/await/cancel.
@@ -71,6 +86,8 @@ async function main(): Promise<void> {
   registerCsLspTools(server, csLsp, config);
   // Plane D (debugging): connects to Godot's Debug Adapter (DAP, 6006).
   registerDapTools(server, dap, config);
+  // Plane D (C# debugging, D4 C3): drives netcoredbg over stdio for the cs_dbg_* tools.
+  registerCsDapTools(server, csDap, config);
   // Plane C (runtime): connects to the in-game runtime autoload (9081).
   registerRuntimeTools(server, runtime);
   // Phase 4: managed run + captured console output (transparent print() logs).
@@ -101,6 +118,7 @@ async function main(): Promise<void> {
     lsp.close();
     csLsp.close();
     dap.close();
+    csDap.close();
     processes.killAll();
     process.exit(0);
   };

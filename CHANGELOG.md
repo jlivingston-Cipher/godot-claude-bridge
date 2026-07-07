@@ -6,6 +6,49 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — D4 C3: the C# debugging plane (`cs_dbg_*` via netcoredbg)
+- The C#/.NET debugging plane — the debugger analogue of the C2 semantic plane, and the mirror of the
+  GDScript `dbg_*` DAP plane. **Ten read/inspect `cs_dbg_*` tools** driven by **netcoredbg** (Samsung,
+  MIT — DAP-compatible, redistributable; **not** Microsoft `vsdbg`, whose licence forbids third-party
+  hosts): `cs_dbg_launch` / `cs_dbg_attach`, `cs_dbg_set_breakpoints`, `cs_dbg_continue` /
+  `cs_dbg_step`, `cs_dbg_stack_trace`, `cs_dbg_scopes`, `cs_dbg_variables`, and the gated
+  `cs_dbg_evaluate` / `cs_dbg_set_variable`. The richer GDScript extras (watch / restart / goto /
+  exception & data breakpoints) are deferred to a later cut, exactly as the C2 LSP mutators were.
+- **`host/src/csdap.ts`** — `CsDapClient`, a **transport-agnostic sibling** of `DapClient` (injected
+  `JsonRpcChannel`, `coreclr` adapterID). netcoredbg is a **spawned stdio** debug adapter (like
+  OmniSharp, unlike Godot's TCP DAP), so it reuses the C2 `StdioChannel` / framing; its protocol logic
+  is unit-tested over the *same* loopback-TCP mock the `dbg_*` tests use, while running over stdio in
+  production. Matches the one-client-per-protocol precedent (dap.ts / lsp.ts / cslsp.ts) and reuses
+  `DapError` / `DapState`.
+- **Lazy spawn.** netcoredbg is launched on the **first `cs_dbg_*` call**, so a host without it
+  installed starts and runs every other plane unaffected. New config, all env-overridable:
+  `GODOT_CSDAP_CMD` (default `netcoredbg`), `GODOT_CSDAP_ARGS` (default `--interpreter=vscode`),
+  `GODOT_CSHARP_BIN` (the program `cs_dbg_launch` launches by default — the Mono/.NET Godot binary),
+  and the `GODOT_CSDAP_*_TIMEOUT_MS` bounds.
+- **Same disciplines as the GDScript plane.** `cs_dbg_evaluate` / `cs_dbg_set_variable` are
+  elicitation-gated (with a `confirm: true` override and a safe block on clients that can't prompt);
+  both carry the F1 short bounded deadline so a non-answering adapter fails fast with a clear message
+  instead of hanging the full DAP timeout, and `cs_dbg_set_variable` feature-detects
+  `supportsSetVariable: false` (clear "unsupported", no prompt). `cs_dbg_set_breakpoints`
+  feature-detects `supportsConditionalBreakpoints` — dropping the `conditions` modifier with a
+  `warning` on an adapter that lacks it. Adapter absent → the lazy stdio spawn fails with an
+  actionable hint, never a hang.
+- **Contract kept in lockstep.** Tool count **78 → 88**; `schemas.ts` (frozen `outputSchema` per
+  tool), `host/test/registration.test.ts` (`EXPECTED_TOOL_COUNT` 78→88), and `docs/TOOL_CATALOG.md`
+  (new "Plane D — C# Debugging (netcoredbg DAP)" section + 10 index rows) all updated in the same
+  change; `scripts/contract_check.py` green at 88↔88. Host tests **139 → 160** (`host/test/csdap.test.ts`:
+  the ten tools + client protocol behaviors over a TCP mock — breakpoint/stack/scopes/variables/evaluate,
+  the gated + fail-fast mutators, condition feature-detect — **plus** an end-to-end pass through a real
+  spawned `StdioChannel` and a spawn-failure path).
+- **CI.** The experimental `csharp-plane` job (still `continue-on-error`, non-required) installs
+  **netcoredbg** and runs a live `cs_dbg_*` probe (`host/test-integration/csharp-dap.integration.mjs`,
+  markers **`C#_DAP_*`**): an `initialize` handshake against real netcoredbg is the gate, then a
+  best-effort, **log-only** launch-to-breakpoint flow over the `example-csharp` fixture. The
+  netcoredbg + Godot native-host attach story under headless CI is the least-certain piece of D4
+  (see `docs/D4_CSHARP_PLAN.md`), so only the gate is fatal — proven end-to-end by the mock unit suite.
+- **No release cut** — per the D4 plan, a version is cut when a chunk lands new surface; that will fold
+  the C3 tools into the next minor. Versions stay unified at **0.7.0**; npm still 0.4.8 (unpublished).
+
 ## [0.7.0] — 2026-07-07
 
 Releases the D4 C#/.NET work and unifies the version stamps, which had drifted (host at 0.6.0, addon

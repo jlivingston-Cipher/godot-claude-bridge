@@ -713,6 +713,53 @@ Set (replace) data breakpoints — 'watchpoints' that halt when a variable's val
 
 ---
 
+# Plane D — C# Debugging (netcoredbg DAP)  (✅ implemented — D4 C3; the C#/.NET mirror of the GDScript debugging plane. **netcoredbg** (Samsung, MIT) is spawned by the host over **stdio** (lazily, on the first `cs_dbg_*` call) and driven against a C# Godot game — launching it (`cs_dbg_launch`) or attaching to a running .NET process (`cs_dbg_attach`) — instead of Godot's built-in TCP debug adapter. Configured via `GODOT_CSDAP_CMD` (default `netcoredbg`), `GODOT_CSDAP_ARGS` (default `--interpreter=vscode`), `GODOT_CSHARP_BIN` (the program `cs_dbg_launch` launches by default) and `GODOT_CSHARP_PROJECT`. First cut = read/inspect + a gated `cs_dbg_set_variable`; the richer GDScript extras (watch / restart / goto / exception & data breakpoints) are deferred to a later cut, exactly as the C2 LSP mutators were. Adapter absent → the lazy stdio spawn fails with an actionable hint, never a hang.)
+
+### `cs_dbg_launch` ✅ · runs code
+Launch a C# Godot game under netcoredbg. `program` defaults to the configured Mono/.NET Godot binary and `args` to `['--path', <C# project>]`; override either to debug a different .NET program. Buffered breakpoints are applied during the handshake.
+- **Input** `{ "type": "object", "properties": { "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } }, "stop_on_entry": { "type": "boolean", "default": false }, "just_my_code": { "type": "boolean", "default": true } } }`
+- **Output** `{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }`
+
+### `cs_dbg_attach` ✅
+Attach netcoredbg to an already-running .NET process (e.g. a C# Godot game launched separately) by its OS process id.
+- **Input** `{ "type": "object", "required": ["process_id"], "properties": { "process_id": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }`
+
+### `cs_dbg_set_breakpoints` ✅
+Set (replace) the breakpoints for a C# source file. Applied immediately if a session is running, else buffered until launch/attach. Feature-detected: the per-line `conditions` modifier is only sent when the connected adapter advertises `supportsConditionalBreakpoints` (netcoredbg does); on an adapter that advertises it unsupported the modifier is dropped and the result carries `unsupported_modifiers` + a `warning`.
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "lines"], "properties": { "path": { "type": "string" }, "lines": { "type": "array", "items": { "type": "integer", "minimum": 1 } }, "conditions": { "type": "array", "items": { "type": ["string", "null"] } } } }`
+- **Output** `{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } }, "unsupported_modifiers": { "type": "array", "items": { "type": "string" } }, "warning": { "type": "string" } } }`
+
+### `cs_dbg_continue` / `cs_dbg_step` ✅
+Resume execution and wait for the program to settle again (next breakpoint or termination). `cs_dbg_step` takes a `kind`; `cs_dbg_continue` takes no input.
+- **Input (`cs_dbg_step`)** `{ "type": "object", "required": ["kind"], "properties": { "kind": { "enum": ["in", "over", "out"] } } }`
+- **Input (`cs_dbg_continue`)** `{ "type": "object", "properties": {} }`
+- **Output** `{ "type": "object", "required": ["state"], "properties": { "state": { "enum": ["running", "stopped", "terminated"] }, "stopped_reason": { "type": ["string", "null"] } } }`
+
+### `cs_dbg_stack_trace` ✅
+- **Input** `{ "type": "object", "properties": { "levels": { "type": "integer", "minimum": 1, "default": 20 } } }`
+- **Output** `{ "type": "object", "required": ["frames"], "properties": { "frames": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "source": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+
+### `cs_dbg_scopes` ✅
+- **Input** `{ "type": "object", "required": ["frame_id"], "properties": { "frame_id": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["scopes"], "properties": { "scopes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+
+### `cs_dbg_variables` ✅
+- **Input** `{ "type": "object", "required": ["variables_ref"], "properties": { "variables_ref": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+
+### `cs_dbg_evaluate` ✅ · destructive (arbitrary code execution — gate hard)
+Evaluate a C# expression in the current stopped frame (DAP `evaluate`, repl context). Bounded by `GODOT_CSDAP_EVALUATE_TIMEOUT_MS` (~8 s) so a non-answering adapter fails fast rather than hanging the full DAP timeout.
+- **Input** `{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" }, "confirm": { "type": "boolean", "description": "Auto-approve this arbitrary-code evaluation (skip the elicitation prompt)" } } }`
+- **Output** `{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+
+### `cs_dbg_set_variable` ✅ · destructive (mutates live program state — gate hard)
+Change a variable's value in a stopped C# frame (DAP `setVariable`). `variables_ref` is the container's `variablesReference` (from `cs_dbg_scopes`, or a complex `cs_dbg_variables` entry), `name` is the variable within it, `value` is a C# literal/expression. Feature-detected: on an adapter that advertises `supportsSetVariable: false` it returns a clear "unsupported" message **without prompting**; otherwise a bounded deadline (`GODOT_CSDAP_SETVAR_TIMEOUT_MS`) turns a non-answering adapter into a clear message rather than a hang.
+- **Input** `{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+
+---
+
 # Plane C — Runtime Bridge  (✅ implemented — Phase 3; in-game autoload `ClaudeRuntimeBridge` over loopback TCP :9081, same JSON protocol as the editor bridge)
 
 ### `runtime_get_tree` ✅
@@ -924,6 +971,16 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `dbg_restart` | D / DAP | ✅ | – |
 | `dbg_goto` | D / DAP | ✅ | ✔ moves execution |
 | `dbg_data_breakpoints` | D / DAP | ✅ | – |
+| `cs_dbg_launch` | D / C# DAP | ✅ | runs code |
+| `cs_dbg_attach` | D / C# DAP | ✅ | – |
+| `cs_dbg_set_breakpoints` | D / C# DAP | ✅ | – |
+| `cs_dbg_continue` | D / C# DAP | ✅ | – |
+| `cs_dbg_step` | D / C# DAP | ✅ | – |
+| `cs_dbg_stack_trace` | D / C# DAP | ✅ | – |
+| `cs_dbg_scopes` | D / C# DAP | ✅ | – |
+| `cs_dbg_variables` | D / C# DAP | ✅ | – |
+| `cs_dbg_evaluate` | D / C# DAP | ✅ | ✔ arbitrary code |
+| `cs_dbg_set_variable` | D / C# DAP | ✅ | ✔ mutates state |
 | `runtime_get_tree` | C / Runtime | ✅ | – |
 | `runtime_get_property` | C / Runtime | ✅ | – |
 | `runtime_set_property` | C / Runtime | ✅ | ✔ |
