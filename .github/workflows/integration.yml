@@ -6,7 +6,10 @@ name: integration
 # is known to do either.
 #
 #   * cli-plane    — headless, deterministic, expected to pass. This is the gate.
-#   * editor-plane — boots the editor GUI under Xvfb and hits the built-in LSP.
+#   * editor-plane — boots the editor GUI under Xvfb and hits the built-in LSP. Runs as a
+#                    MATRIX across the 4.3 baseline and the newest stable (4.7): the D7_CAPS /
+#                    D7_WS_RAW markers answer whether workspace/symbol and the other
+#                    advertised-but-dead-on-4.3 LSP providers return results on a modern build.
 #                    EXPERIMENTAL: runs under continue-on-error while the GUI-boot
 #                    timing is tuned on real runners, so it never blocks a merge.
 #   * dap-plane    — boots the same editor GUI under Xvfb and connects to its built-in
@@ -64,6 +67,16 @@ jobs:
     name: editor / LSP plane vs real editor (experimental)
     runs-on: ubuntu-latest
     continue-on-error: true   # GUI-boot timing still being tuned; must never block a merge
+    strategy:
+      fail-fast: false        # one Godot version's probe must not cancel the other
+      matrix:
+        godot: [ "4.3-stable", "4.7-stable" ]
+    env:
+      # Probe BOTH the 4.3 baseline and the newest stable (4.7): the D7_CAPS / D7_WS_RAW
+      # markers then answer whether workspace/symbol and the other advertised-but-dead-on-4.3
+      # LSP providers actually return results on a modern build. Overrides the workflow-level
+      # GODOT_VERSION for this job only; the run steps use it verbatim.
+      GODOT_VERSION: ${{ matrix.godot }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
