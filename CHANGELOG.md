@@ -6,6 +6,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-07
+
+Releases the D4 C#/.NET work and unifies the version stamps, which had drifted (host at 0.6.0, addon
+at 0.6.1). **C2 — the C# semantic plane (`cs_*` via OmniSharp)** adds new tool surface (70 → 78
+tools), so this is a minor bump per the D4 plan; it also promotes the D4 C1 fixture/CI scaffold and
+the Godot 4.3/4.4 runtime-bridge fix + runtime-plane CI probe below. Every version stamp
+(`host/package.json` + lockfile, `index.ts` serverInfo, both `plugin.cfg`, both `operations.gd`
+`ADDON_VERSION`) is now **0.7.0**.
+
 ### Fixed — runtime bridge failed to load on Godot 4.3/4.4 (D6 regression)
 - `runtime_bridge.gd` called the 4.5+ `OS.add_logger()` / `OS.remove_logger()` **directly**. GDScript
   resolves those at parse time, so on Godot 4.3/4.4 (where the methods don't exist) the whole script

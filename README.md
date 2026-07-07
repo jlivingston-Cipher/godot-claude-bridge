@@ -1,18 +1,20 @@
 # Godot–Claude Bridge
 
-> **Status: v0.6.0 — live-validated and hardened.** All four capability planes were
+> **Status: v0.7.0 — live-validated and hardened.** All four capability planes were
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 124-test host suite
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 139-test host suite
 > and real-Godot integration smokes (CLI, LSP and DAP planes)** on Node 18/20/22 — the
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
 > evaluation — **fail fast** (bounded to ~8 s) on adapters that advertise a capability but never
-> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. Full
+> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. **New in
+> 0.7.0:** an experimental **C# semantic plane** (`cs_*` tools via OmniSharp, D4 C2) — live-validated
+> in CI against a real OmniSharp over the `example-csharp` fixture. Full
 > history in `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
 
-Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**70 tools + 5 MCP resources**):
+Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**78 tools + 5 MCP resources**):
 
 - **Plane B — Headless CLI** (`godot_*` tools): launch the editor, run the project, export, import, run headless scripts/tests. Works with no editor open.
 - **Plane A — Live Editor Bridge** (`editor_*`, `scene_*`, `node_*`, … tools): a Godot `EditorPlugin` opens a loopback TCP/JSON server that the MCP host drives — scene/node/resource CRUD **with full undo/redo**, project settings, `ClassDB` introspection, selection, and editor-viewport screenshots.
