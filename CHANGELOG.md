@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-06
+
 ### Added — resource subscriptions with live `notifications/resources/updated` (D3)
 - Clients can now `resources/subscribe` / `resources/unsubscribe` to any `godot://…` resource and
   receive a `notifications/resources/updated` push when it changes. The change signal originates in
