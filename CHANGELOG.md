@@ -6,6 +6,29 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — D4 C# LSP mutators (`cs_rename`, `cs_code_action`)
+- The last deferred C#-plane surface from the D4 C2 plan: the two OmniSharp LSP **mutators**, mirroring
+  the GDScript `gd_rename` / `gd_code_action`. Tool count **88 → 90**.
+- **`cs_rename`** — rename a C# symbol project-wide via OmniSharp `textDocument/rename`. Returns the
+  planned edit by default (dry run); `apply: true` writes the edits to disk and is **elicitation-gated**
+  (with a `confirm: true` override and a safe block on clients that can't prompt), exactly like
+  `gd_rename`. Handles both WorkspaceEdit encodings — the legacy `changes` map **and** OmniSharp's
+  `documentChanges` (versioned `TextDocumentEdit[]`) — via a shared `normalizeWorkspaceEdit` helper.
+- **`cs_code_action`** — list the code actions (quick fixes / refactors) OmniSharp offers for a range,
+  read-only (returns `title` / `kind` / `has_edit` / `command` without applying). Unlike Godot's
+  GDScript server (which advertises `codeActionProvider: false`), OmniSharp implements code actions, so
+  this returns real results; still feature-detected with a `-32601` belt-and-suspenders.
+- **Shared edit-application helpers.** `offsetOf` / `applyTextEdits` moved from `tools/lsp.ts` to
+  `tools/lsp-common.ts` (its stated home for protocol-generic LSP helpers), joined by the new
+  `normalizeWorkspaceEdit` (a `changes` + `documentChanges` → `uri → edits` normalizer) that `cs_rename`
+  uses. `gd_rename` / `gd_formatting` now import them; no behavior change.
+- **Contract kept in lockstep.** `schemas.ts` (frozen `outputSchema` for both tools),
+  `host/test/registration.test.ts` (`EXPECTED_TOOL_COUNT` 88 → 90) and `docs/TOOL_CATALOG.md` (two
+  detail entries + two index rows + gate-list update) all updated in the same change;
+  `scripts/contract_check.py` green at **90↔90**. Host tests **160 → 166** (`host/test/cslsp.test.ts`:
+  `cs_rename` dry-run / apply / `documentChanges` / declined-gate-blocks-write, `cs_code_action`
+  list + unsupported feature-detect).
+
 ## [0.8.0] — 2026-07-07
 
 Releases the D4 C3 **C# debugging plane** (`cs_dbg_*` via netcoredbg), completing the C#/.NET half of

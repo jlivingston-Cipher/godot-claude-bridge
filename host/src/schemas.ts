@@ -165,6 +165,7 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   cs_hover: { contents: z.string() },
   cs_definition: { locations: z.array(location) },
   cs_references: { locations: z.array(location) },
+  cs_rename: { changed_files: z.array(z.string()), edit_count: z.number(), applied: z.boolean(), written: z.array(z.string()) },
   cs_document_symbols: { symbols: z.array(z.object({ name: z.string(), kind: z.string(), line: z.number() })) },
   cs_workspace_symbols: { symbols: z.array(z.object({ name: z.string(), kind: z.string(), uri: z.string(), line: z.number() })) },
   cs_signature_help: {
@@ -179,6 +180,9 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   cs_diagnostics: {
     uri: z.string(),
     diagnostics: z.array(z.object({ severity: z.string(), message: z.string(), line: z.number(), character: z.number() })),
+  },
+  cs_code_action: {
+    actions: z.array(z.object({ title: z.string(), kind: z.string(), has_edit: z.boolean(), command: z.string().nullable() })),
   },
 
   // ---- Plane D: debugging / DAP (tools/dap.ts) ----

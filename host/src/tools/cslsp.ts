@@ -1,10 +1,13 @@
+import fs from "node:fs";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { CsLspClient } from "../cslsp.js";
 import { toFileUri, toFsPath, readFileText } from "../paths.js";
+import { gate } from "../confirm.js";
 import {
   COMPLETION_KIND, SYMBOL_KIND, ok, fail, markupToString, isMethodNotFound, normalizeLocations,
+  applyTextEdits, normalizeWorkspaceEdit,
   type Range, type Location,
 } from "./lsp-common.js";
 
@@ -16,8 +19,9 @@ import {
  * The tools are feature-detected the same way the `gd_*` tools are: a capability
  * the server never advertised, or a `-32601 Method not found` from a server that
  * lied about advertising it, yields a clear "unsupported" message rather than a
- * raw JSON-RPC error or a hang. Mutators (cs_rename / cs_code_action) are
- * deliberately deferred to a later cut, exactly as the GDScript mutators were.
+ * raw JSON-RPC error or a hang. The two mutators — `cs_rename` (elicitation-gated
+ * on `apply=true`) and the read-only `cs_code_action` listing — mirror the GDScript
+ * `gd_rename` / `gd_code_action`.
  */
 
 /**
@@ -110,6 +114,48 @@ export function registerCsLspTools(server: McpServer, cslsp: CsLspClient, cfg: C
           context: { includeDeclaration: include_declaration ?? true },
         });
         return ok({ locations: normalizeLocations(result) });
+      } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "cs_rename",
+    {
+      title: "C# rename symbol",
+      description:
+        "Rename a C# symbol project-wide via OmniSharp. Returns the planned edit; pass apply=true to WRITE the changes to disk (DESTRUCTIVE — confirm with the user).",
+      inputSchema: {
+        ...posSchema,
+        new_name: z.string().describe("New symbol name"),
+        apply: z.boolean().optional().describe("Write edits to disk (default false = dry run)"),
+        confirm: z.boolean().optional().describe("Auto-approve writing edits (skip the confirmation prompt); only relevant with apply=true"),
+      },
+    },
+    async ({ path, line, character, new_name, apply, confirm }) => {
+      try {
+        const uri = await openAndPos(path);
+        const edit = await cslsp.request("textDocument/rename", {
+          textDocument: { uri }, position: { line, character }, newName: new_name,
+        });
+        // OmniSharp returns a WorkspaceEdit as `documentChanges` (versioned
+        // TextDocumentEdit[]); normalizeWorkspaceEdit also accepts the legacy
+        // `changes` map, so cs_rename handles either encoding.
+        const changes = normalizeWorkspaceEdit(edit);
+        const files = Object.keys(changes);
+        let editCount = 0;
+        for (const f of files) editCount += changes[f].length;
+        let written: string[] = [];
+        if (apply) {
+          const blocked = await gate(server, confirm, `Rename to "${new_name}" — write ${editCount} edit(s) across ${files.length} file(s)`);
+          if (blocked) return blocked;
+          for (const fileUri of files) {
+            const fsPath = decodeURIComponent(fileUri.replace(/^file:\/\//, ""));
+            const before = fs.readFileSync(fsPath, "utf8");
+            fs.writeFileSync(fsPath, applyTextEdits(before, changes[fileUri]), "utf8");
+            written.push(fsPath);
+          }
+        }
+        return ok({ changed_files: files, edit_count: editCount, applied: Boolean(apply), written });
       } catch (err) { return fail(err); }
     },
   );
@@ -220,6 +266,53 @@ export function registerCsLspTools(server: McpServer, cslsp: CsLspClient, cfg: C
         }));
         return ok({ uri, diagnostics: named });
       } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "cs_code_action",
+    {
+      title: "C# code actions",
+      description:
+        "List the code actions (quick fixes / refactors) OmniSharp offers for a range — the lightbulb menu. " +
+        "Read-only: returns the available actions (title, kind, whether each carries a WorkspaceEdit or a Command) without applying any. " +
+        "Unlike Godot's GDScript server, OmniSharp implements code actions, so this returns real results; it stays " +
+        "feature-detected (with a -32601 belt-and-suspenders) so a server that lacks it degrades gracefully. " +
+        "end_line/end_character default to the start position (a caret, not a selection).",
+      inputSchema: {
+        path: z.string().describe("C# script path (res://..., absolute, or relative to the C# project root)"),
+        start_line: z.number().int().describe("0-based start line"),
+        start_character: z.number().int().describe("0-based start character"),
+        end_line: z.number().int().optional().describe("0-based end line (default = start_line)"),
+        end_character: z.number().int().optional().describe("0-based end character (default = start_character)"),
+        only: z.array(z.string()).optional().describe("Restrict to these CodeActionKind prefixes, e.g. 'quickfix', 'refactor'"),
+      },
+    },
+    async ({ path, start_line, start_character, end_line, end_character, only }) => {
+      const alt = "Use cs_diagnostics to surface issues and cs_completion / cs_rename to make edits.";
+      try {
+        const caps = await cslsp.getServerCapabilities();
+        if (!caps.codeActionProvider) return unsupportedCsLsp("cs_code_action", "textDocument/codeAction", "codeActionProvider", alt);
+
+        const uri = await openAndPos(path);
+        const range = {
+          start: { line: start_line, character: start_character },
+          end: { line: end_line ?? start_line, character: end_character ?? start_character },
+        };
+        const context: Record<string, unknown> = { diagnostics: [] };
+        if (only && only.length) context.only = only;
+        const result = (await cslsp.request("textDocument/codeAction", { textDocument: { uri }, range, context })) as unknown[] | null;
+        const actions = (result ?? []).map((a) => {
+          const act = a as { title?: string; kind?: string; edit?: unknown; command?: unknown };
+          // A bare Command has `command` as a string; a CodeAction nests a Command object under `command`.
+          const command = typeof act.command === "string" ? act.command : (act.command as { command?: string } | undefined)?.command ?? null;
+          return { title: act.title ?? "", kind: act.kind ?? "", has_edit: act.edit !== undefined, command };
+        });
+        return ok({ actions });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedCsLsp("cs_code_action", "textDocument/codeAction", "codeActionProvider", alt);
+        return fail(err);
+      }
     },
   );
 }

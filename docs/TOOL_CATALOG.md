@@ -564,7 +564,7 @@ List the color literals the language server recognizes in a script — the `Colo
 
 ---
 
-# Plane D — C# Semantic (OmniSharp LSP)  (✅ implemented — D4 C2; the C#/.NET mirror of the GDScript LSP plane. OmniSharp is spawned by the host over **stdio** (lazily, on the first `cs_*` call) and driven against a C# Godot project — e.g. the `example-csharp/` fixture — set via `GODOT_CSHARP_PROJECT`. The read-only `cs_*` tools mirror the read-only `gd_*` surface; mutators (`cs_rename` / `cs_code_action`) are deferred to a later cut, exactly as the GDScript mutators were. Feature-detected the same way: a method the server never advertised, or a `-32601` from one that lied about it, degrades to a clear "unsupported" message rather than a hang.)
+# Plane D — C# Semantic (OmniSharp LSP)  (✅ implemented — D4 C2; the C#/.NET mirror of the GDScript LSP plane. OmniSharp is spawned by the host over **stdio** (lazily, on the first `cs_*` call) and driven against a C# Godot project — e.g. the `example-csharp/` fixture — set via `GODOT_CSHARP_PROJECT`. The read-only `cs_*` tools mirror the read-only `gd_*` surface; the two mutators — `cs_rename` (elicitation-gated on `apply=true`) and the read-only `cs_code_action` listing — mirror the GDScript `gd_rename` / `gd_code_action`. Feature-detected the same way: a method the server never advertised, or a `-32601` from one that lied about it, degrades to a clear "unsupported" message rather than a hang.)
 
 ### `cs_completion` ✅
 - **Input** `{ path, line, character }` (path resolves against the C# project root; 0-based line/character).
@@ -587,6 +587,19 @@ List the color literals the language server recognizes in a script — the `Colo
 ### `cs_references` ✅
 - **Input** `{ path, line, character, include_declaration?: boolean }`.
 - **Output** same `locations` array shape as `cs_definition`.
+
+### `cs_rename` ✅ · destructive (edits multiple files)
+Rename a C# symbol project-wide via OmniSharp `textDocument/rename`. Returns the planned edit by default (dry run); `apply=true` writes the edits to disk and is **elicitation-gated** (with a `confirm: true` override and a safe block on clients that can't prompt), exactly like `gd_rename`. OmniSharp returns the WorkspaceEdit as `documentChanges` (versioned `TextDocumentEdit[]`); the host normalizes that and the legacy `changes` map identically before applying.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "line", "character", "new_name"],
+  "properties": {
+    "path": { "type": "string" }, "line": { "type": "integer" },
+    "character": { "type": "integer" }, "new_name": { "type": "string" },
+    "apply": { "type": "boolean", "default": false, "description": "Write edits to disk (default false = dry run returning the planned edit)" },
+    "confirm": { "type": "boolean", "description": "Auto-approve writing edits (skip the elicitation prompt); only relevant with apply=true" } } }
+```
+- **Output** same shape as `gd_rename`: `{ "changed_files": [string], "edit_count": integer, "applied": boolean, "written": [string] }` (`written` = absolute paths actually written, empty on a dry run).
 
 ### `cs_document_symbols` ✅
 - **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
@@ -621,6 +634,11 @@ Unlike Godot's GDScript server, OmniSharp implements LSP `workspace/symbol`, so 
       "severity": { "type": "string" }, "message": { "type": "string" },
       "line": { "type": "integer" }, "character": { "type": "integer" } } } } } }
 ```
+
+### `cs_code_action` ✅ · OmniSharp implements it
+List the code actions (quick fixes / refactors) OmniSharp offers for a range — the lightbulb menu. Read-only: returns the available actions without applying any (`has_edit` flags those carrying a `WorkspaceEdit`; `command` names any attached command; both a CodeAction and a bare Command are normalized). Unlike Godot's GDScript server (which advertises `codeActionProvider: false`), OmniSharp implements code actions, so this returns real results; still feature-detected with a `-32601` belt-and-suspenders. `end_line`/`end_character` default to the start position (a caret, not a selection).
+- **Input** same shape as `gd_code_action`: `{ path, start_line, start_character, end_line?, end_character?, only?: string[] }`.
+- **Output** same `actions` shape as `gd_code_action`: `{ "actions": [{ "title", "kind", "has_edit", "command": string|null }] }`.
 
 ---
 
@@ -820,7 +838,7 @@ Change a variable's value in a stopped C# frame (DAP `setVariable`). `variables_
 
 ## Destructive-action gating (elicitation) — Phase 4
 
-Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
+Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `cs_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
 
 The long-running tools (`godot_export`, `godot_import`, `godot_run_headless_script`) run under the formal MCP **task-execution model** (D2), registered with `taskSupport: 'optional'`. A task-aware client calls the tool with a `task` augmentation to get a task handle back immediately, then drives it with `tasks/get` (poll status), `tasks/result` (await the final result), and `tasks/cancel` (stop the run — which aborts the underlying headless Godot process). A plain client that omits the `task` augmentation is unaffected: the host auto-creates a task, polls it to completion, and returns the result synchronously, exactly as before.
 
@@ -952,10 +970,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `cs_hover` | D / C# LSP | ✅ | – |
 | `cs_definition` | D / C# LSP | ✅ | – |
 | `cs_references` | D / C# LSP | ✅ | – |
+| `cs_rename` | D / C# LSP | ✅ | ✔ |
 | `cs_document_symbols` | D / C# LSP | ✅ | – |
 | `cs_workspace_symbols` | D / C# LSP | ✅ (OmniSharp implements it) | – |
 | `cs_signature_help` | D / C# LSP | ✅ | – |
 | `cs_diagnostics` | D / C# LSP | ✅ | – |
+| `cs_code_action` | D / C# LSP | ✅ (OmniSharp implements it) | – |
 | `dbg_launch` | D / DAP | ✅ | runs code |
 | `dbg_attach` | D / DAP | ✅ | – |
 | `dbg_set_breakpoints` | D / DAP | ✅ | – |

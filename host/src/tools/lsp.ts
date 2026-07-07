@@ -8,6 +8,7 @@ import { gate } from "../confirm.js";
 import {
   type Range, type Location,
   COMPLETION_KIND, SYMBOL_KIND, ok, fail, markupToString, isMethodNotFound, normalizeLocations,
+  applyTextEdits,
 } from "./lsp-common.js";
 
 /**
@@ -135,27 +136,8 @@ function normalizeColors(result: unknown): Array<{ line: number; character: numb
   });
 }
 
-function offsetOf(text: string, line: number, character: number): number {
-  const lines = text.split("\n");
-  let offset = 0;
-  for (let i = 0; i < line && i < lines.length; i++) offset += lines[i].length + 1;
-  return offset + character;
-}
-
-function applyTextEdits(text: string, edits: Array<{ range: Range; newText: string }>): string {
-  const sorted = [...edits].sort((a, b) => {
-    const la = a.range.start?.line ?? 0, lb = b.range.start?.line ?? 0;
-    if (la !== lb) return lb - la;
-    return (b.range.start?.character ?? 0) - (a.range.start?.character ?? 0);
-  });
-  let out = text;
-  for (const e of sorted) {
-    const start = offsetOf(out, e.range.start?.line ?? 0, e.range.start?.character ?? 0);
-    const end = offsetOf(out, e.range.end?.line ?? 0, e.range.end?.character ?? 0);
-    out = out.slice(0, start) + e.newText + out.slice(end);
-  }
-  return out;
-}
+// offsetOf / applyTextEdits now live in ./lsp-common.js (shared with the C#
+// rename mutator, cs_rename). Imported above.
 
 export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config): void {
   const openAndPos = async (path: string) => {

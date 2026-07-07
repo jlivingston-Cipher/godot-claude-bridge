@@ -14,7 +14,7 @@ import { loadConfig } from "../src/config.js";
 
 /** Tools that return image content with no structuredContent — deliberately schema-exempt. */
 const IMAGE_TOOLS = ["screenshot_editor", "runtime_screenshot"];
-const EXPECTED_TOOL_COUNT = 88;
+const EXPECTED_TOOL_COUNT = 90;
 const EXPECTED_RESOURCES = ["scene-tree", "editor-state", "runtime-tree", "runtime-log", "class-doc"];
 
 /**

@@ -4,7 +4,7 @@
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 160-test host suite
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 166-test host suite
 > and real-Godot integration smokes (CLI, LSP, DAP and C# planes)** on Node 18/20/22 — the
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
@@ -17,7 +17,7 @@
 > live `continue-on-error` netcoredbg probe). Full history in `CHANGELOG.md`; publishing steps and the
 > remote caveat in `docs/DISTRIBUTION.md`.
 
-Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**88 tools + 5 MCP resources**):
+Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**90 tools + 5 MCP resources**):
 
 - **Plane B — Headless CLI** (`godot_*` tools): launch the editor, run the project, export, import, run headless scripts/tests. Works with no editor open.
 - **Plane A — Live Editor Bridge** (`editor_*`, `scene_*`, `node_*`, … tools): a Godot `EditorPlugin` opens a loopback TCP/JSON server that the MCP host drives — scene/node/resource CRUD **with full undo/redo**, project settings, `ClassDB` introspection, selection, and editor-viewport screenshots.

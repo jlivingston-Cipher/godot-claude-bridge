@@ -69,3 +69,59 @@ export function normalizeLocations(result: unknown): Array<{ uri: string; line: 
     return { uri, line: range.start?.line ?? 0, character: range.start?.character ?? 0 };
   });
 }
+
+// ---- WorkspaceEdit application (shared by the gd_* and cs_* rename mutators) --
+// Applying an LSP edit to a file needs a (line, character) -> absolute offset map
+// and then splicing edits back-to-front so earlier edits don't shift later ones.
+// These live here (rather than in one plane's tool file) because the GDScript and
+// C#/OmniSharp rename tools apply identical edit math.
+
+/** Absolute character offset of a (0-based line, 0-based character) in `text`. */
+export function offsetOf(text: string, line: number, character: number): number {
+  const lines = text.split("\n");
+  let offset = 0;
+  for (let i = 0; i < line && i < lines.length; i++) offset += lines[i].length + 1;
+  return offset + character;
+}
+
+/** Apply LSP TextEdits to a string, splicing back-to-front so ranges stay valid. */
+export function applyTextEdits(text: string, edits: Array<{ range: Range; newText: string }>): string {
+  const sorted = [...edits].sort((a, b) => {
+    const la = a.range.start?.line ?? 0, lb = b.range.start?.line ?? 0;
+    if (la !== lb) return lb - la;
+    return (b.range.start?.character ?? 0) - (a.range.start?.character ?? 0);
+  });
+  let out = text;
+  for (const e of sorted) {
+    const start = offsetOf(out, e.range.start?.line ?? 0, e.range.start?.character ?? 0);
+    const end = offsetOf(out, e.range.end?.line ?? 0, e.range.end?.character ?? 0);
+    out = out.slice(0, start) + e.newText + out.slice(end);
+  }
+  return out;
+}
+
+/**
+ * Normalize an LSP WorkspaceEdit into a plain `uri -> TextEdit[]` map. Handles
+ * BOTH encodings a server may return: the legacy `changes` object AND the
+ * versioned `documentChanges` array of `TextDocumentEdit`s (what OmniSharp emits
+ * for a rename). File resource operations (create/rename/delete) inside
+ * `documentChanges` carry no `edits` and are skipped.
+ */
+export function normalizeWorkspaceEdit(edit: unknown): Record<string, Array<{ range: Range; newText: string }>> {
+  const out: Record<string, Array<{ range: Range; newText: string }>> = {};
+  const e = edit as {
+    changes?: Record<string, Array<{ range: Range; newText: string }>>;
+    documentChanges?: Array<{ textDocument?: { uri?: string }; edits?: Array<{ range: Range; newText: string }> }>;
+  } | null;
+  if (!e) return out;
+  if (e.changes) {
+    for (const [uri, edits] of Object.entries(e.changes)) out[uri] = [...(out[uri] ?? []), ...(edits ?? [])];
+  }
+  if (Array.isArray(e.documentChanges)) {
+    for (const dc of e.documentChanges) {
+      const uri = dc?.textDocument?.uri;
+      if (uri && Array.isArray(dc.edits)) out[uri] = [...(out[uri] ?? []), ...dc.edits];
+    }
+  }
+  return out;
+}

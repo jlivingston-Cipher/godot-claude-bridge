@@ -57,11 +57,11 @@ function tmpProject(files: Record<string, string> = {}): string {
 }
 
 /** Wire a CsLspClient (over a loopback TCP channel) to the cs_* tools on a recording server. */
-function csToolHarness(srvPort: number, projectPath: string) {
+function csToolHarness(srvPort: number, projectPath: string, elicit?: Parameters<typeof makeRecordingServer>[0]) {
   const cfg = makeConfig(projectPath);
   const channel = new FramedConnection("127.0.0.1", srvPort, "CS-LSP", "test channel");
   const cslsp = new CsLspClient(channel, cfg.csLspProjectUri, 3000);
-  const rec = makeRecordingServer();
+  const rec = makeRecordingServer(elicit);
   registerCsLspTools(rec.server as unknown as Parameters<typeof registerCsLspTools>[0], cslsp, cfg);
   return { cslsp, rec, cfg };
 }
@@ -272,6 +272,135 @@ test("cs_diagnostics matches a publishDiagnostics URI via diagKey and maps sever
   // The C# plane must open documents as C#, not GDScript.
   const didOpen = received.find((m) => m.method === "textDocument/didOpen");
   assert.equal((didOpen!.params as { textDocument: { languageId: string } }).textDocument.languageId, "csharp");
+  cslsp.close();
+  await srv.close();
+});
+
+// ---- cs_rename / cs_code_action (the deferred C# LSP mutators) -------------
+
+test("cs_rename dry-run (apply=false) returns the plan and writes nothing, without prompting", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int Speed = 10;\n" });
+  let elicited = 0;
+  const { srv } = await startCs({
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/rename") {
+        const uri = (msg.params as { textDocument: { uri: string } }).textDocument.uri;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { changes: { [uri]: [{ range: { start: { line: 0, character: 4 }, end: { line: 0, character: 9 } }, newText: "Velocity" }] } } });
+      }
+    },
+  });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath, async () => { elicited++; return { action: "accept", content: { proceed: true } }; });
+  const res = (await rec.handler("cs_rename")({ path: "Player.cs", line: 0, character: 4, new_name: "Velocity", apply: false })) as ToolResultLike;
+  const sc = res.structuredContent as { edit_count: number; applied: boolean; written: string[] };
+  assert.equal(sc.edit_count, 1);
+  assert.equal(sc.applied, false);
+  assert.deepEqual(sc.written, []);
+  assert.equal(elicited, 0, "dry run must not prompt");
+  assert.equal(fs.readFileSync(path.join(projectPath, "Player.cs"), "utf8"), "int Speed = 10;\n");
+  cslsp.close();
+  await srv.close();
+});
+
+test("cs_rename apply=true writes the edited text to disk (changes shape)", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int Speed = 10;\n" });
+  const { srv } = await startCs({
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/rename") {
+        const uri = (msg.params as { textDocument: { uri: string } }).textDocument.uri;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { changes: { [uri]: [{ range: { start: { line: 0, character: 4 }, end: { line: 0, character: 9 } }, newText: "Velocity" }] } } });
+      }
+    },
+  });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath, async () => ({ action: "accept", content: { proceed: true } }));
+  const res = (await rec.handler("cs_rename")({ path: "Player.cs", line: 0, character: 4, new_name: "Velocity", apply: true, confirm: true })) as ToolResultLike;
+  const sc = res.structuredContent as { applied: boolean; written: string[]; edit_count: number };
+  assert.equal(sc.applied, true);
+  assert.equal(sc.edit_count, 1);
+  assert.equal(sc.written.length, 1);
+  assert.equal(fs.readFileSync(path.join(projectPath, "Player.cs"), "utf8"), "int Velocity = 10;\n");
+  cslsp.close();
+  await srv.close();
+});
+
+test("cs_rename handles OmniSharp's documentChanges WorkspaceEdit encoding (not just changes)", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int Speed = 10;\n" });
+  const { srv } = await startCs({
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/rename") {
+        const uri = (msg.params as { textDocument: { uri: string } }).textDocument.uri;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { documentChanges: [
+          { textDocument: { uri, version: 1 }, edits: [{ range: { start: { line: 0, character: 4 }, end: { line: 0, character: 9 } }, newText: "Velocity" }] },
+        ] } });
+      }
+    },
+  });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath, async () => ({ action: "accept", content: { proceed: true } }));
+  const res = (await rec.handler("cs_rename")({ path: "Player.cs", line: 0, character: 4, new_name: "Velocity", apply: true, confirm: true })) as ToolResultLike;
+  const sc = res.structuredContent as { edit_count: number; written: string[] };
+  assert.equal(sc.edit_count, 1);
+  assert.equal(sc.written.length, 1);
+  assert.equal(fs.readFileSync(path.join(projectPath, "Player.cs"), "utf8"), "int Velocity = 10;\n");
+  cslsp.close();
+  await srv.close();
+});
+
+test("cs_rename apply=true blocks when the client declines the elicitation (writes nothing)", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int Speed = 10;\n" });
+  const { srv } = await startCs({
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/rename") {
+        const uri = (msg.params as { textDocument: { uri: string } }).textDocument.uri;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { changes: { [uri]: [{ range: { start: { line: 0, character: 4 }, end: { line: 0, character: 9 } }, newText: "Velocity" }] } } });
+      }
+    },
+  });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath, async () => ({ action: "decline" }));
+  const res = (await rec.handler("cs_rename")({ path: "Player.cs", line: 0, character: 4, new_name: "Velocity", apply: true })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.equal(fs.readFileSync(path.join(projectPath, "Player.cs"), "utf8"), "int Speed = 10;\n", "a declined rename must not touch the file");
+  cslsp.close();
+  await srv.close();
+});
+
+test("cs_code_action lists actions, flags which carry an edit, normalizes CodeAction+Command, and forwards range/only", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int x = 1;\n" });
+  let sent: LspMsg | undefined;
+  const { srv } = await startCs({
+    capabilities: { codeActionProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/codeAction") {
+        sent = msg;
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { title: "Generate constructor", kind: "quickfix", edit: { changes: {} } },
+          { title: "Remove unnecessary usings", kind: "source.removeUnnecessaryImports", command: { title: "Fix", command: "omnisharp.fixUsings" } },
+          { title: "Run", command: "omnisharp.run" },
+        ] });
+      }
+    },
+  });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("cs_code_action")({ path: "Player.cs", start_line: 0, start_character: 0, only: ["quickfix"] })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { actions: [
+    { title: "Generate constructor", kind: "quickfix", has_edit: true, command: null },
+    { title: "Remove unnecessary usings", kind: "source.removeUnnecessaryImports", has_edit: false, command: "omnisharp.fixUsings" },
+    { title: "Run", kind: "", has_edit: false, command: "omnisharp.run" },
+  ] });
+  const params = sent!.params as { range: { start: unknown; end: unknown }; context: { only?: string[] } };
+  assert.deepEqual(params.range.start, { line: 0, character: 0 });
+  assert.deepEqual(params.range.end, { line: 0, character: 0 });
+  assert.deepEqual(params.context.only, ["quickfix"]);
+  cslsp.close();
+  await srv.close();
+});
+
+test("cs_code_action returns 'unsupported' WITHOUT sending the request when codeActionProvider is absent", async () => {
+  const projectPath = tmpProject({ "Player.cs": "int x = 1;\n" });
+  const { srv, received } = await startCs({ capabilities: {} });
+  const { cslsp, rec } = csToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("cs_code_action")({ path: "Player.cs", start_line: 0, start_character: 0 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.method === "textDocument/codeAction"), "must NOT send codeAction when the capability is absent");
   cslsp.close();
   await srv.close();
 });
