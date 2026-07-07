@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — `dbg_watch` bounds its watch evaluate so a stalling watch fails fast
+- `dbg_watch` re-evaluates its whole watch set at every stop via `DapClient.evaluateWatches`,
+  which previously sent each `evaluate` with the full 20 s `dapTimeoutMs`. A single watch
+  expression the adapter never answers (the advertised-but-unimplemented gap the `[0.4.15]` fix
+  addressed for `dbg_evaluate` / `dbg_set_variable`) would therefore hang the full 20 s at
+  **every stop**. The watch `evaluate` is now bounded by `dapEvaluateTimeoutMs` (default 8 s,
+  `GODOT_DAP_EVALUATE_TIMEOUT_MS`), so a non-answering watch **fails fast on that entry** — its
+  `error` carries the timeout — while the other watches still resolve. No tool/schema/addon
+  change (still **70 tools**); host suite **108 → 109 tests**.
+
 ## [0.4.15] — 2026-07-06
 
 ### Changed — `dbg_set_variable` / `dbg_evaluate` fail fast on a non-answering adapter
