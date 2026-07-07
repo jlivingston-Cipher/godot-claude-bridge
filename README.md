@@ -1,6 +1,6 @@
 # Godot–Claude Bridge
 
-> **Status: v0.8.0 — live-validated and hardened.** All four capability planes were
+> **Status: v0.9.0 — live-validated and hardened.** All four capability planes were
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
@@ -9,13 +9,16 @@
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
 > evaluation — **fail fast** (bounded to ~8 s) on adapters that advertise a capability but never
-> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. **The
-> experimental C#/.NET plane** now spans both halves of Plane D: a **C# semantic plane** (`cs_*` via
-> OmniSharp, D4 C2 — live-validated in CI against a real OmniSharp over the `example-csharp` fixture)
-> and, **new in 0.8.0**, a **C# debugging plane** (`cs_dbg_*` via netcoredbg, D4 C3 — the mock unit
-> suite proves the breakpoint→stack→variables→evaluate flow and the gated, fail-fast mutators, with a
-> live `continue-on-error` netcoredbg probe). Full history in `CHANGELOG.md`; publishing steps and the
-> remote caveat in `docs/DISTRIBUTION.md`.
+> answer it (Godot 4.3's `setVariable`), instead of hanging the full 20 s DAP timeout. **The C#/.NET
+> plane** now spans both halves of Plane D, and its `csharp-plane` integration job is a **required
+> gate**: a **C# semantic plane** (`cs_*` via OmniSharp, D4 C2 — live-validated in CI against a real
+> OmniSharp over the `example-csharp` fixture) and a **C# debugging plane** (`cs_dbg_*` via netcoredbg,
+> D4 C3 — the mock unit suite proves the breakpoint→stack→variables→evaluate flow and the gated,
+> fail-fast mutators, backed by a live netcoredbg probe). **New in 0.9.0:** the C# LSP mutators
+> `cs_rename` / `cs_code_action`, the debugging extras `cs_dbg_watch` / `cs_dbg_set_exception_breakpoints`
+> / `cs_dbg_restart` (the `dbg_*` extras netcoredbg backs — `goto` / data breakpoints are skipped, as
+> netcoredbg advertises neither), and the promotion of `csharp-plane` from experimental to a required
+> gate. Full history in `CHANGELOG.md`; publishing steps and the remote caveat in `docs/DISTRIBUTION.md`.
 
 Brings Godot into the Claude development ecosystem via MCP. It ships **all four** capability planes from the design evaluation plus the Phase 4 safety/UX polish (**93 tools + 5 MCP resources**):
 

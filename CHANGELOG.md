@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-07
+
+Folds the two C#/.NET-plane surfaces cut since 0.8.0 into a release: the **C# LSP mutators** (`cs_rename`
+/ `cs_code_action`, #27) and the **C# debugging extras** (`cs_dbg_watch` / `cs_dbg_set_exception_breakpoints`
+/ `cs_dbg_restart`, #29). Tool count **88 → 93**; host tests **160 → 173**; `scripts/contract_check.py`
+green at **93**. This cycle also **promoted the `csharp-plane` integration job to a required gate** (#28),
+so a live C#/.NET regression now blocks a merge. Every version stamp (`host/package.json` + lockfile,
+`index.ts` serverInfo, both `plugin.cfg`, both `operations.gd` `ADDON_VERSION`) is now **0.9.0** — a minor
+bump per `docs/D4_CSHARP_PLAN.md` (new tool surface, no breaking changes).
+
 ### Added — D4 C# debugging extras (`cs_dbg_watch`, `cs_dbg_set_exception_breakpoints`, `cs_dbg_restart`)
 - The `cs_dbg_*` plane gains the three GDScript `dbg_*` extras that **netcoredbg actually backs**,
   mirroring the read/inspect surface it already had. Tool count **90 → 93**.
