@@ -6,11 +6,14 @@ heaviest new environment, most isolated, so it lands after all shared host infra
 stable. Chunked exactly the way Plane D was originally built: **fixture → semantic (LSP) → debugging
 (DAP)**.
 
-> **Status:** C1 is **scaffolded and locally validated** on branch `feat/d4-csharp-scaffold`: the
-> `example-csharp/` fixture builds and boots C# live on a real Mono Godot build (see
-> §"C1 local validation"). The experimental, non-blocking `csharp-plane` CI job exists; running it
-> green on a real **Linux CI runner** (via a PR) is the one remaining C1 acceptance item. C2 and C3
-> are design-only here. Nothing on `main` changes until a chunk is merged.
+> **Status:** C1 is **merged** (PR #24) — the `example-csharp/` fixture builds and boots C# live on a
+> real Mono Godot build, green on macOS and a real Linux CI runner. **C2 is implemented here**: the
+> eight read-only `cs_*` tools are wired to an OmniSharp LSP client (spawned over stdio) and fully
+> unit-tested over the same mock harness the `gd_*` tools use (tool count 70 → 78, host tests 124 →
+> 139, contract check green); the experimental `csharp-plane` job now runs a live `cs_*` probe against
+> a real OmniSharp (markers `C#_LSP_*`), and a green run of that probe on a real **Linux CI runner**
+> (this PR) is the remaining C2 acceptance item — the same way C1 was accepted. C3 is design-only
+> here. Nothing on `main` changes until a chunk is merged.
 
 ## Why last, and why it shares nothing
 D4 mirrors Plane D for a *different language runtime*. It needs a **Mono/.NET Godot** build (not the

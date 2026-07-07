@@ -30,11 +30,12 @@ name: integration
 #                    stable (4.7) so the D_DAP_* markers reveal which advertised-but-dead-
 #                    on-4.3 capabilities light up on a modern build. Also EXPERIMENTAL /
 #                    continue-on-error (never blocks).
-#   * csharp-plane  — D4 SCAFFOLD (C1). Downloads a Mono/.NET Godot build + the .NET 8 SDK and
-#                     boots the C# fixture (example-csharp/) headless: dotnet-builds the project
-#                     (OmniSharp-readiness for C2), imports + --build-solutions, then asserts the
-#                     C# scene's _Ready() ran (C#_PLANE_BOOT_OK). EXPERIMENTAL / continue-on-error
-#                     until the toolchain is proven on real runners. See docs/D4_CSHARP_PLAN.md.
+#   * csharp-plane  — D4 C1 + C2. Downloads a Mono/.NET Godot build + the .NET SDK and boots the C#
+#                     fixture (example-csharp/) headless: dotnet-builds the project, imports +
+#                     --build-solutions, then asserts the C# scene's _Ready() ran (C#_PLANE_BOOT_OK).
+#                     C2: also installs OmniSharp and runs a live cs_* LSP probe against it over the
+#                     fixture (markers C#_LSP_*: reached, capabilities, per-tool probes). EXPERIMENTAL /
+#                     continue-on-error until the toolchain is proven on real runners. See docs/D4_CSHARP_PLAN.md.
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -278,10 +279,11 @@ jobs:
   csharp-plane:
     name: C# / .NET plane vs real Mono build (experimental)
     runs-on: ubuntu-latest
-    # D4 SCAFFOLD (C1). New language plane; the Mono toolchain + headless C# boot path are being
-    # established, so this runs continue-on-error and must NEVER block a merge — exactly like the
-    # editor/dap planes. Promote to a required gate only once it is green on real runners (the way
-    # runtime-plane was promoted). See docs/D4_CSHARP_PLAN.md.
+    # D4 C1 (fixture/boot) + C2 (cs_* semantic tools via OmniSharp). New language plane; the Mono
+    # toolchain, headless C# boot path, and the OmniSharp LSP probe are being established, so this
+    # runs continue-on-error and must NEVER block a merge — exactly like the editor/dap planes.
+    # Promote to a required gate only once it is green on real runners (the way runtime-plane was
+    # promoted). See docs/D4_CSHARP_PLAN.md.
     continue-on-error: true
     env:
       # The .NET/Mono Godot build (NOT the standard build the other planes download). Its version
@@ -292,7 +294,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          # 8.0.x builds the fixture (net8.0); 6.0.x is the runtime the OmniSharp
+          # net6.0 build needs for the C2 cs_* LSP probe below.
+          dotnet-version: |
+            8.0.x
+            6.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: host/package-lock.json
       - name: Install Mono/.NET Godot (linux x86_64)
         run: |
           set -eux
@@ -314,6 +325,33 @@ jobs:
           # the same build OmniSharp will drive for the cs_* semantic tools in C2.
           dotnet restore
           dotnet build -c Debug --no-restore
+      - name: Build host
+        working-directory: host
+        run: npm ci && npm run build
+      - name: Install OmniSharp (linux x64, net6.0)
+        run: |
+          set -eux
+          # OmniSharp is the C# language server the cs_* tools drive (spawned over stdio by the host).
+          # The net6.0 build is a native executable; resolve it with find so a naming change surfaces
+          # as an empty-var failure. continue-on-error keeps an install hiccup from ever blocking.
+          curl -fL -o omnisharp.tar.gz "https://github.com/OmniSharp/omnisharp-roslyn/releases/latest/download/omnisharp-linux-x64-net6.0.tar.gz"
+          mkdir -p "$PWD/omnisharp" && tar -xzf omnisharp.tar.gz -C "$PWD/omnisharp"
+          OMNISHARP_BIN="$(find "$PWD/omnisharp" -maxdepth 2 -type f -name 'OmniSharp' | head -1)"
+          test -n "$OMNISHARP_BIN"
+          chmod +x "$OMNISHARP_BIN"
+          "$OMNISHARP_BIN" --version || true
+          echo "OMNISHARP_BIN=$OMNISHARP_BIN" >> "$GITHUB_ENV"
+      - name: C2 — live cs_* LSP probe vs real OmniSharp (markers C#_LSP_*)
+        working-directory: host
+        env:
+          GODOT_CSHARP_PROJECT: ${{ github.workspace }}/example-csharp
+          GODOT_CSLSP_CMD: ${{ env.OMNISHARP_BIN }}
+          GODOT_CSLSP_ARGS: '-lsp'
+        run: |
+          set -eux
+          # OmniSharp drives the design-time build warmed by the standalone step above. The probe
+          # reaches the server (the gate) then best-effort exercises the cs_* tools; markers C#_LSP_*.
+          node test-integration/csharp-lsp.integration.mjs
       - name: Import + build C# solution (headless)
         run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example-csharp" --import --build-solutions --quit-after 200 || true'
       - name: Boot the C# game headless (C1 smoke — the .NET assembly loads and the scene runs)

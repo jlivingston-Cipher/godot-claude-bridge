@@ -160,6 +160,27 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     })),
   },
 
+  // ---- Plane D: C# semantic / OmniSharp LSP (tools/cslsp.ts) ----
+  cs_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
+  cs_hover: { contents: z.string() },
+  cs_definition: { locations: z.array(location) },
+  cs_references: { locations: z.array(location) },
+  cs_document_symbols: { symbols: z.array(z.object({ name: z.string(), kind: z.string(), line: z.number() })) },
+  cs_workspace_symbols: { symbols: z.array(z.object({ name: z.string(), kind: z.string(), uri: z.string(), line: z.number() })) },
+  cs_signature_help: {
+    signatures: z.array(z.object({
+      label: z.string(),
+      documentation: z.string(),
+      parameters: z.array(z.object({ label: z.string(), documentation: z.string() })),
+    })),
+    active_signature: z.number(),
+    active_parameter: z.number(),
+  },
+  cs_diagnostics: {
+    uri: z.string(),
+    diagnostics: z.array(z.object({ severity: z.string(), message: z.string(), line: z.number(), character: z.number() })),
+  },
+
   // ---- Plane D: debugging / DAP (tools/dap.ts) ----
   dbg_launch: { session_id: z.string(), state: z.string(), scene: z.string() },
   dbg_attach: { session_id: z.string(), state: z.string() },

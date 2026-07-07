@@ -4,10 +4,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { BridgeClient } from "./bridge.js";
 import { LspClient } from "./lsp.js";
+import { CsLspClient } from "./cslsp.js";
+import { StdioChannel } from "./stdio.js";
 import { DapClient } from "./dap.js";
 import { registerCliTools } from "./tools/cli.js";
 import { registerEditorTools } from "./tools/editor.js";
 import { registerLspTools } from "./tools/lsp.js";
+import { registerCsLspTools } from "./tools/cslsp.js";
 import { registerDapTools } from "./tools/dap.js";
 import { registerRuntimeTools } from "./tools/runtime.js";
 import { registerProcessTools } from "./tools/processes.js";
@@ -29,6 +32,20 @@ async function main(): Promise<void> {
     "Is the project running? Launch it (godot_run_project or dbg_launch) with the Claude Bridge plugin enabled — it auto-registers the runtime autoload.",
   );
   const lsp = new LspClient(config.lspHost, config.lspPort, config.projectUri, config.lspTimeoutMs);
+  // D4 C2: the C# semantic plane. OmniSharp is spawned over stdio (lazily, on the
+  // first cs_* call) against the C# project root — so a host without OmniSharp
+  // installed starts and runs the other planes unaffected.
+  const csLsp = new CsLspClient(
+    new StdioChannel(
+      config.csLspCmd,
+      config.csLspArgs,
+      config.csLspProjectPath,
+      "C# LSP (OmniSharp)",
+      "Is OmniSharp installed and on PATH (or set GODOT_CSLSP_CMD to its binary), and GODOT_CSHARP_PROJECT pointed at a restored C# project?",
+    ),
+    config.csLspProjectUri,
+    config.csLspTimeoutMs,
+  );
   const dap = new DapClient(config.dapHost, config.dapPort, config.dapTimeoutMs);
 
   // D2: advertise the MCP task-execution model and hand the SDK a task store,
@@ -50,6 +67,8 @@ async function main(): Promise<void> {
   registerEditorTools(server, bridge);
   // Plane D (semantic): connects to Godot's GDScript language server (LSP, 6005).
   registerLspTools(server, lsp, config);
+  // Plane D (C# semantic, D4 C2): drives OmniSharp over stdio for the cs_* tools.
+  registerCsLspTools(server, csLsp, config);
   // Plane D (debugging): connects to Godot's Debug Adapter (DAP, 6006).
   registerDapTools(server, dap, config);
   // Plane C (runtime): connects to the in-game runtime autoload (9081).
@@ -80,6 +99,7 @@ async function main(): Promise<void> {
     bridge.close();
     runtime.close();
     lsp.close();
+    csLsp.close();
     dap.close();
     processes.killAll();
     process.exit(0);

@@ -19,6 +19,18 @@ export interface Config {
   lspHost: string;
   lspPort: number;
   lspTimeoutMs: number;
+  /**
+   * C#/.NET semantic plane (D4 C2). The C# language server (OmniSharp) is SPAWNED
+   * by the host over stdio — unlike Godot's TCP LSP — so it's a command + args +
+   * a working directory (the C# project root) rather than a host/port. All
+   * env-overridable; the server is launched lazily on the first cs_* tool call,
+   * so a host without OmniSharp installed pays nothing.
+   */
+  csLspCmd: string;
+  csLspArgs: string[];
+  csLspProjectPath: string;
+  csLspProjectUri: string;
+  csLspTimeoutMs: number;
   /** Debug Adapter (DAP) host/port + timeout. */
   dapHost: string;
   dapPort: number;
@@ -40,6 +52,9 @@ export interface Config {
 
 export function loadConfig(): Config {
   const projectPath = process.env.GODOT_PROJECT ?? process.cwd();
+  // The C# project defaults to the main project, but is usually pointed at a
+  // dedicated C# project (e.g. the example-csharp fixture) via GODOT_CSHARP_PROJECT.
+  const csLspProjectPath = process.env.GODOT_CSHARP_PROJECT ?? projectPath;
   return {
     godotBin: process.env.GODOT_BIN ?? "godot",
     projectPath,
@@ -50,6 +65,11 @@ export function loadConfig(): Config {
     lspHost: process.env.GODOT_LSP_HOST ?? "127.0.0.1",
     lspPort: Number.parseInt(process.env.GODOT_LSP_PORT ?? "6005", 10),
     lspTimeoutMs: Number.parseInt(process.env.GODOT_LSP_TIMEOUT_MS ?? "15000", 10),
+    csLspCmd: process.env.GODOT_CSLSP_CMD ?? "OmniSharp",
+    csLspArgs: (process.env.GODOT_CSLSP_ARGS ?? "-lsp").split(/\s+/).filter(Boolean),
+    csLspProjectPath,
+    csLspProjectUri: pathToFileURL(csLspProjectPath).href,
+    csLspTimeoutMs: Number.parseInt(process.env.GODOT_CSLSP_TIMEOUT_MS ?? "30000", 10),
     dapHost: process.env.GODOT_DAP_HOST ?? "127.0.0.1",
     dapPort: Number.parseInt(process.env.GODOT_DAP_PORT ?? "6006", 10),
     dapTimeoutMs: Number.parseInt(process.env.GODOT_DAP_TIMEOUT_MS ?? "20000", 10),

@@ -56,6 +56,36 @@ and the project uses [Semantic Versioning](https://semver.org/).
   (netcoredbg DAP), with version-alignment rules and a `gd_*`→`cs_*` mirror table. **Additive only —
   no host/tool/resource/version change** (still **70 tools**, **124 host tests**; contract check green).
 
+### Added — D4 C2: C# semantic plane (`cs_*` via OmniSharp)
+- Eight read-only **`cs_*`** tools mirroring the read-only `gd_*` LSP surface, driven by **OmniSharp**:
+  `cs_completion`, `cs_hover`, `cs_definition`, `cs_references`, `cs_document_symbols`,
+  `cs_workspace_symbols`, `cs_signature_help`, `cs_diagnostics`. Mutators (`cs_rename` /
+  `cs_code_action`) are deferred to a later cut, exactly as the GDScript mutators were. Each tool is
+  capability-gated with a `-32601` belt-and-suspenders, degrading to a clear "unsupported" message
+  rather than a hang — the same discipline as the GDScript plane. (Unlike Godot's GDScript server,
+  OmniSharp actually implements `workspace/symbol`, so `cs_workspace_symbols` returns real results.)
+- **New stdio transport.** OmniSharp is a spawned stdio language server (not a TCP one like Godot's),
+  so `host/src/stdio.ts` adds a `StdioChannel` that speaks LSP `Content-Length` framing over a child
+  process. The framing primitives (`encodeFrame` / `FrameDecoder`) and the `JsonRpcChannel` interface
+  are factored out of `framing.ts` and shared by both the TCP (`FramedConnection`) and stdio
+  transports; the LSP tool reshaping helpers are factored into `tools/lsp-common.ts` and shared by the
+  `gd_*` and `cs_*` planes. The C# client (`host/src/cslsp.ts`) is a transport-agnostic sibling of the
+  GDScript `LspClient` (injected channel), so its protocol logic is unit-tested over the same loopback
+  TCP mock harness while running over stdio in production. OmniSharp is spawned **lazily** on the first
+  `cs_*` call, so a host without it installed starts and runs every other plane unaffected. New config
+  (all env-overridable): `GODOT_CSLSP_CMD` (default `OmniSharp`), `GODOT_CSLSP_ARGS` (default `-lsp`),
+  `GODOT_CSHARP_PROJECT` (the C# project root), `GODOT_CSLSP_TIMEOUT_MS` (default 30000).
+- **Tool count 70 → 78**; `contract_check.py` + `registration.test.ts` updated in lockstep, and each
+  new tool has a frozen `outputSchema` (`schemas.ts`) and a `docs/TOOL_CATALOG.md` entry. Host tests
+  **124 → 139** (new `cslsp.test.ts`: the eight tools + client protocol behaviors over a TCP mock,
+  **plus** an end-to-end pass through a real spawned `StdioChannel`, which also asserts a spawn failure
+  surfaces a clear error instead of hanging).
+- **CI.** The experimental `csharp-plane` job (still `continue-on-error`) gains a live `cs_*` probe:
+  it installs OmniSharp, builds the host, and runs `csharp-lsp.integration.mjs` against a real
+  OmniSharp over the `example-csharp` fixture, logging grep-able **`C#_LSP_*`** markers
+  (`C#_LSP_REACHED`, `C#_LSP_CAPS`, per-tool `PROBE …`). No new required check — the plane stays
+  non-blocking until proven green across a few runs, the way `runtime-plane` was promoted.
+
 ## [0.6.0] — 2026-07-06
 
 ### Added — D6: zero-config console capture in the runtime bridge (Godot 4.5+)

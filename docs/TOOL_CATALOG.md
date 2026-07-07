@@ -564,6 +564,66 @@ List the color literals the language server recognizes in a script — the `Colo
 
 ---
 
+# Plane D — C# Semantic (OmniSharp LSP)  (✅ implemented — D4 C2; the C#/.NET mirror of the GDScript LSP plane. OmniSharp is spawned by the host over **stdio** (lazily, on the first `cs_*` call) and driven against a C# Godot project — e.g. the `example-csharp/` fixture — set via `GODOT_CSHARP_PROJECT`. The read-only `cs_*` tools mirror the read-only `gd_*` surface; mutators (`cs_rename` / `cs_code_action`) are deferred to a later cut, exactly as the GDScript mutators were. Feature-detected the same way: a method the server never advertised, or a `-32601` from one that lied about it, degrades to a clear "unsupported" message rather than a hang.)
+
+### `cs_completion` ✅
+- **Input** `{ path, line, character }` (path resolves against the C# project root; 0-based line/character).
+- **Output**
+```json
+{ "type": "object", "required": ["items"], "properties": { "items": { "type": "array", "items": {
+  "type": "object", "properties": {
+    "label": { "type": "string" }, "kind": { "type": "string" },
+    "detail": { "type": "string" }, "insertText": { "type": "string" } } } } } }
+```
+
+### `cs_hover` ✅
+- **Input** same `{ path, line, character }`.
+- **Output** `{ "type": "object", "required": ["contents"], "properties": { "contents": { "type": "string" } } }`
+
+### `cs_definition` ✅
+- **Input** same `{ path, line, character }`.
+- **Output** same `locations` array shape as `gd_definition` — `{ "locations": [{ "uri", "line", "character" }] }`.
+
+### `cs_references` ✅
+- **Input** `{ path, line, character, include_declaration?: boolean }`.
+- **Output** same `locations` array shape as `cs_definition`.
+
+### `cs_document_symbols` ✅
+- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+
+### `cs_workspace_symbols` ✅
+Unlike Godot's GDScript server, OmniSharp implements LSP `workspace/symbol`, so this returns real project-wide results; it stays feature-detected (advertised `workspaceSymbolProvider` capability plus a `-32601` belt-and-suspenders) so a server lacking it degrades to an explicit "unsupported" message rather than a raw JSON-RPC error.
+- **Input** `{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }`
+- **Output** same `symbols` shape as `cs_document_symbols`, each with an added `uri`.
+
+### `cs_signature_help` ✅
+- **Input** same `{ path, line, character }`.
+- **Output**
+```json
+{ "type": "object", "required": ["signatures", "active_signature", "active_parameter"],
+  "properties": {
+    "signatures": { "type": "array", "items": { "type": "object", "properties": {
+      "label": { "type": "string" }, "documentation": { "type": "string" },
+      "parameters": { "type": "array", "items": { "type": "object", "properties": {
+        "label": { "type": "string" }, "documentation": { "type": "string" } } } } } } },
+    "active_signature": { "type": "integer" }, "active_parameter": { "type": "integer" } } }
+```
+
+### `cs_diagnostics` ✅
+- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" }, "wait_ms": { "type": "integer", "description": "Max time to wait for the first publish (default 2000; OmniSharp's first analysis can be slow)" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["uri", "diagnostics"],
+  "properties": {
+    "uri": { "type": "string" },
+    "diagnostics": { "type": "array", "items": { "type": "object", "properties": {
+      "severity": { "type": "string" }, "message": { "type": "string" },
+      "line": { "type": "integer" }, "character": { "type": "integer" } } } } } }
+```
+
+---
+
 # Plane D — Debugging (DAP)  (✅ implemented — Phase 2; raw TCP + DAP `Content-Length` framing to Godot's debug adapter, default `127.0.0.1:6006`)
 
 ### `dbg_launch` ✅
@@ -841,6 +901,14 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `gd_document_link` | D / LSP | ✅ confirmed live (4.3) | – |
 | `gd_formatting` | D / LSP | ⚠️ 4.3 advertises false (handled) | – |
 | `gd_document_color` | D / LSP | ⚠️ 4.3 advertises false (handled) | – |
+| `cs_completion` | D / C# LSP | ✅ | – |
+| `cs_hover` | D / C# LSP | ✅ | – |
+| `cs_definition` | D / C# LSP | ✅ | – |
+| `cs_references` | D / C# LSP | ✅ | – |
+| `cs_document_symbols` | D / C# LSP | ✅ | – |
+| `cs_workspace_symbols` | D / C# LSP | ✅ (OmniSharp implements it) | – |
+| `cs_signature_help` | D / C# LSP | ✅ | – |
+| `cs_diagnostics` | D / C# LSP | ✅ | – |
 | `dbg_launch` | D / DAP | ✅ | runs code |
 | `dbg_attach` | D / DAP | ✅ | – |
 | `dbg_set_breakpoints` | D / DAP | ✅ | – |

@@ -5,50 +5,10 @@ import type { Config } from "../config.js";
 import { LspClient } from "../lsp.js";
 import { toFileUri, toFsPath, readFileText } from "../paths.js";
 import { gate } from "../confirm.js";
-
-// LSP CompletionItemKind / SymbolKind numeric -> readable name.
-const COMPLETION_KIND: Record<number, string> = {
-  1: "text", 2: "method", 3: "function", 4: "constructor", 5: "field", 6: "variable",
-  7: "class", 8: "interface", 9: "module", 10: "property", 11: "unit", 12: "value",
-  13: "enum", 14: "keyword", 15: "snippet", 16: "color", 17: "file", 18: "reference",
-  19: "folder", 20: "enumMember", 21: "constant", 22: "struct", 23: "event", 24: "operator", 25: "typeParameter",
-};
-const SYMBOL_KIND: Record<number, string> = {
-  1: "file", 2: "module", 3: "namespace", 4: "package", 5: "class", 6: "method", 7: "property",
-  8: "field", 9: "constructor", 10: "enum", 11: "interface", 12: "function", 13: "variable",
-  14: "constant", 15: "string", 16: "number", 17: "boolean", 18: "array", 19: "object",
-  20: "key", 21: "null", 22: "enumMember", 23: "struct", 24: "event", 25: "operator", 26: "typeParameter",
-};
-
-interface Position { line: number; character: number }
-interface Range { start?: Position; end?: Position }
-interface Location { uri?: string; targetUri?: string; range?: Range; targetSelectionRange?: Range }
-
-function ok(obj: unknown) {
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(obj, null, 2) }],
-    structuredContent: obj as Record<string, unknown>,
-  };
-}
-function fail(err: unknown) {
-  const e = err as { code?: number | string; message?: string };
-  return {
-    isError: true as const,
-    content: [{ type: "text" as const, text: `LSP error [${e.code ?? "error"}]: ${e.message ?? String(err)}` }],
-  };
-}
-
-/**
- * Normalize an LSP documentation / MarkupContent field (a plain string, a
- * `{ kind, value }` MarkupContent, or an array of either) down to a single
- * string. Used by hover-style and signature-help results.
- */
-function markupToString(c: unknown): string {
-  if (typeof c === "string") return c;
-  if (Array.isArray(c)) return c.map((x) => (typeof x === "string" ? x : (x as { value?: string })?.value ?? "")).join("\n");
-  if (c && typeof c === "object") return (c as { value?: string }).value ?? "";
-  return "";
-}
+import {
+  type Range, type Location,
+  COMPLETION_KIND, SYMBOL_KIND, ok, fail, markupToString, isMethodNotFound, normalizeLocations,
+} from "./lsp-common.js";
 
 /**
  * Returned by gd_workspace_symbols when the connected Godot build's GDScript
@@ -115,23 +75,6 @@ function unsupportedLsp(tool: string, method: string, capability: string, alt: s
         `Method not found). This is an engine limitation, not a host error. ${alt}`,
     }],
   };
-}
-
-/** True for a JSON-RPC "method not found" (-32601) or an equivalent message. */
-function isMethodNotFound(err: unknown): boolean {
-  const e = err as { code?: number | string; message?: string };
-  return e.code === -32601 || /method not found/i.test(e.message ?? "");
-}
-
-function normalizeLocations(result: unknown): Array<{ uri: string; line: number; character: number }> {
-  if (!result) return [];
-  const arr = Array.isArray(result) ? result : [result];
-  return arr.map((l) => {
-    const loc = l as Location;
-    const uri = loc.uri ?? loc.targetUri ?? "";
-    const range = loc.range ?? loc.targetSelectionRange ?? {};
-    return { uri, line: range.start?.line ?? 0, character: range.start?.character ?? 0 };
-  });
 }
 
 // textDocument/documentHighlight DocumentHighlightKind -> readable name.
