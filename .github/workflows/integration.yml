@@ -339,7 +339,10 @@ jobs:
           OMNISHARP_BIN="$(find "$PWD/omnisharp" -maxdepth 2 -type f -name 'OmniSharp' | head -1)"
           test -n "$OMNISHARP_BIN"
           chmod +x "$OMNISHARP_BIN"
-          "$OMNISHARP_BIN" --version || true
+          # Do NOT run `OmniSharp --version` as a smoke: some builds start the LSP server and wait on
+          # stdin instead of printing a version and exiting, which would hang the step. The probe below
+          # (which spawns OmniSharp over stdio and drives an initialize handshake) is the real check.
+          echo "resolved OmniSharp: $OMNISHARP_BIN"
           echo "OMNISHARP_BIN=$OMNISHARP_BIN" >> "$GITHUB_ENV"
       - name: C2 — live cs_* LSP probe vs real OmniSharp (markers C#_LSP_*)
         working-directory: host
@@ -351,7 +354,8 @@ jobs:
           set -eux
           # OmniSharp drives the design-time build warmed by the standalone step above. The probe
           # reaches the server (the gate) then best-effort exercises the cs_* tools; markers C#_LSP_*.
-          node test-integration/csharp-lsp.integration.mjs
+          # Bounded by an outer timeout so a misbehaving server can never hang the runner.
+          timeout 300 node test-integration/csharp-lsp.integration.mjs
       - name: Import + build C# solution (headless)
         run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example-csharp" --import --build-solutions --quit-after 200 || true'
       - name: Boot the C# game headless (C1 smoke — the .NET assembly loads and the scene runs)
