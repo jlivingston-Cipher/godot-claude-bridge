@@ -56,7 +56,12 @@ def host_bridge_calls(ts_files: list[Path]) -> set[str]:
 def registered_tools() -> list[str]:
     names: list[str] = []
     for f in sorted(TOOLS.glob("*.ts")):
-        for m in re.finditer(r'registerTool\(\s*"([a-z_]+)"', f.read_text()):
+        text = f.read_text()
+        # Plain tools: server.registerTool("name", ...)
+        for m in re.finditer(r'registerTool\(\s*"([a-z_]+)"', text):
+            names.append(m.group(1))
+        # Task-model tools (D2): registerTaskTool(server, "name", ...)
+        for m in re.finditer(r'registerTaskTool\(\s*\w+\s*,\s*"([a-z_]+)"', text):
             names.append(m.group(1))
     return names
 

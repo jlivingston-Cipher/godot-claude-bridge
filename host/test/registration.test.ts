@@ -26,6 +26,13 @@ function registerAll() {
   const server = {
     registerTool(name: string, config: Record<string, unknown>) { calls.push({ name, config }); return { name }; },
     registerResource(name: string) { resources.push(name); },
+    // D2 task-model tools register through server.experimental.tasks.registerToolTask;
+    // record them into the same list so the whole surface is asserted at once.
+    experimental: {
+      tasks: {
+        registerToolTask(name: string, config: Record<string, unknown>) { calls.push({ name, config }); return { name }; },
+      },
+    },
     server: { elicitInput: async () => ({ action: "decline" }) },
   };
 

@@ -6,6 +6,23 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — long jobs now use the formal MCP task-execution model (D2)
+- `godot_export`, `godot_import`, and `godot_run_headless_script` — the three run-to-completion
+  headless jobs — now register under the spec's **task model** (`server.experimental.tasks`,
+  `@modelcontextprotocol/sdk@1.29.0`) instead of emitting ad-hoc `notifications/progress`. A
+  task-aware client gets a handle immediately and drives the job with `tasks/get` (poll),
+  `tasks/result` (await), and `tasks/cancel` (stop — which actually **kills the headless Godot
+  process** via an `AbortController` wired into the store). Plain clients are unchanged: with
+  `taskSupport: 'optional'` the SDK auto-creates a task, polls it to completion, and returns the
+  result synchronously. The server now advertises the `tasks` capability and is constructed with a
+  `GodotTaskStore` (extends the SDK `InMemoryTaskStore`, adding the cancel→abort hook); a new
+  `host/src/tasks.ts` holds the store plus a `registerTaskTool` helper that re-applies the B1
+  frozen output-schema check the SDK skips for task results. The ad-hoc `startProgress` helper is
+  removed. No addon/schema change and the tool count is unchanged (**still 70 tools**); the host
+  suite goes **109 → 115 tests** — a full create→poll→await→cancel lifecycle over an in-memory
+  transport, the synchronous non-task path, a failed-worker path, plus cancel-abort and
+  schema-injection unit checks.
+
 ### Added — CI: the editor/LSP-plane probe now runs against the newest stable (4.7) too — D7 resolved
 - The experimental `editor-plane` job gained the same Godot-version matrix (`4.3-stable` +
   `4.7-stable`), so the D7 LSP probe (`D7_CAPS` / `D7_WS_RAW` / `D7_CAPS2`) characterizes both.

@@ -13,6 +13,7 @@ import { registerRuntimeTools } from "./tools/runtime.js";
 import { registerProcessTools } from "./tools/processes.js";
 import { registerResources } from "./tools/resources.js";
 import { applyOutputSchemas } from "./schemas.js";
+import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
 import { log } from "./logger.js";
 
 async function main(): Promise<void> {
@@ -29,7 +30,12 @@ async function main(): Promise<void> {
   const lsp = new LspClient(config.lspHost, config.lspPort, config.projectUri, config.lspTimeoutMs);
   const dap = new DapClient(config.dapHost, config.dapPort, config.dapTimeoutMs);
 
-  const server = new McpServer({ name: "godot-claude-bridge", version: "0.4.3" });
+  // D2: advertise the MCP task-execution model and hand the SDK a task store,
+  // so long jobs (export/import/headless script) support poll/await/cancel.
+  const server = new McpServer(
+    { name: "godot-claude-bridge", version: "0.4.3" },
+    { capabilities: TASK_CAPABILITIES, taskStore },
+  );
 
   // B1: enforce frozen output schemas on every structured tool. Must run before
   // the register*Tools calls below — it wraps server.registerTool.
