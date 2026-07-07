@@ -168,6 +168,16 @@ Its high-value planes require a process on `localhost`:
 | **D — LSP/DAP** (`gd_*`/`dbg_*`) | Godot's LSP/DAP on `127.0.0.1:6005/6006` | **No**, same reason. |
 | **C — runtime bridge** (`runtime_*`) | the running game's loopback server on `127.0.0.1:9081` | **No**, same reason. |
 
+> **D6 note (Godot 4.5+):** the runtime bridge now captures the game's console
+> (`print()` / warnings / errors) in-process via a scriptable `Logger`
+> (`OS.add_logger`), so `runtime_get_log` / `godot://runtime/log` return console
+> output **without** the host having to be the game's managed parent
+> (`godot_run_managed`). This relaxes a *local* constraint — launch the game any
+> way you like (e.g. the editor's Play button) and still read its console — but it
+> does **not** change the loopback-locality story above: a cloud MCP server still
+> can't reach the game's `127.0.0.1:9081`. On Godot < 4.5 the capture is absent and
+> console still needs `godot_run_managed` (host-side pipe).
+
 Two hard constraints make this unavoidable, not a config gap:
 
 1. **Loopback locality.** All four planes bridge over `127.0.0.1`. An MCP server

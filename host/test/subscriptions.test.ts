@@ -167,3 +167,13 @@ test("coalesceMs = 0 disables coalescing — every change pushes", async () => {
   assert.equal(h.updated.length, 4, "no coalescing: one update per change");
   await h.close();
 });
+
+test("a subscribed runtime log resource is pushed when the game logs (D6)", async () => {
+  const h = await makeHarness();
+  await h.client.subscribeResource({ uri: "godot://runtime/log" });
+  await waitFor(() => h.bridge.sockets.length > 0);
+  await pushChange(h.bridge, "godot://runtime/log");
+  await waitFor(() => h.updated.length >= 1);
+  assert.deepEqual(h.updated, ["godot://runtime/log"]);
+  await h.close();
+});
