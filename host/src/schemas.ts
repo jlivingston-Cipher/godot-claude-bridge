@@ -238,6 +238,16 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   cs_dbg_variables: { variables: z.array(z.object({ name: z.string(), value: z.string(), type: z.string(), variables_ref: z.number() })) },
   cs_dbg_evaluate: { result: z.string(), type: z.string(), variables_ref: z.number() },
   cs_dbg_set_variable: { name: z.string(), value: z.string(), type: z.string(), variables_ref: z.number() },
+  cs_dbg_watch: {
+    watches: z.array(z.object({ expression: z.string(), value: z.string(), type: z.string(), error: z.string().nullable() })),
+  },
+  cs_dbg_set_exception_breakpoints: {
+    filters: z.array(z.string()),
+    available_filters: z.array(z.object({ filter: z.string(), label: z.string() })),
+    breakpoints: z.array(z.object({ verified: z.boolean() })),
+  },
+  // C# sessions have no scene, so — unlike dbg_restart — no `scene` field here.
+  cs_dbg_restart: { session_id: z.string(), method: z.string(), state: z.string() },
 
   // ---- Plane C: runtime bridge (tools/runtime.ts -> runtime_bridge.gd) ----
   runtime_get_tree: {

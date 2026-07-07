@@ -6,6 +6,38 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — D4 C# debugging extras (`cs_dbg_watch`, `cs_dbg_set_exception_breakpoints`, `cs_dbg_restart`)
+- The `cs_dbg_*` plane gains the three GDScript `dbg_*` extras that **netcoredbg actually backs**,
+  mirroring the read/inspect surface it already had. Tool count **90 → 93**.
+- **`cs_dbg_watch`** — manage a persistent set of C# watch expressions and re-evaluate them in the
+  current stopped frame (DAP `watch` context, side-effect-free, so **not** gated). Each expression's
+  `evaluate` is bounded by `GODOT_CSDAP_EVALUATE_TIMEOUT_MS`, so a stalling watch fails fast on its own
+  entry instead of hanging the stop — the same discipline as `cs_dbg_evaluate` and the GDScript plane.
+- **`cs_dbg_set_exception_breakpoints`** — enable (replace) exception breakpoint filters so execution
+  halts on a thrown .NET exception (DAP `setExceptionBreakpoints`). netcoredbg advertises `all` and
+  `user-unhandled`; the result echoes the active `filters` and the `available_filters`. Not gated;
+  feature-detected — on an adapter advertising no `exceptionBreakpointFilters` it returns a clear
+  "unsupported" message without sending anything.
+- **`cs_dbg_restart`** — restart the session, using the DAP `restart` request when advertised and
+  otherwise `terminate` + a fresh handshake. netcoredbg advertises no `supportsRestartRequest`, so the
+  relaunch path runs; `method` reports which ran. Reuses the last launch/attach params (`stop_on_entry`
+  / `program` / `args` override). C# sessions have no scene, so — unlike `dbg_restart` — there is no
+  `scene` field.
+- **Deliberately not ported:** `dbg_goto` and `dbg_data_breakpoints`. netcoredbg advertises neither
+  `supportsGotoTargetsRequest` nor `supportsDataBreakpoints`, so `cs_dbg_goto` / `cs_dbg_data_breakpoints`
+  would only ever return "unsupported" — dead surface, so they are left out. Confirmed from the live
+  `C#_DAP_REACHED` capability dump in the `csharp-plane` CI probe.
+- **Client additions.** `CsDapClient` gains the watch-set methods (`addWatches` / `removeWatches` /
+  `clearWatches` / `evaluateWatches`, reusing the exported `WatchResult`) and a `restart()` (terminate +
+  relaunch fallback), mirroring the GDScript `DapClient`; exception breakpoints need no client method
+  (the tool drives `request` + capabilities directly).
+- **Contract kept in lockstep.** `schemas.ts` (frozen `outputSchema` for the three tools),
+  `host/test/registration.test.ts` (`EXPECTED_TOOL_COUNT` 90 → 93) and `docs/TOOL_CATALOG.md` (three
+  detail entries + three index rows + updated plane header) all updated in the same change;
+  `scripts/contract_check.py` green at **93↔93**. Host tests **166 → 173** (`host/test/csdap.test.ts`:
+  watch add/error/remove/clear, exception-breakpoints enable + unsupported-feature-detect, restart
+  relaunch-fallback / native-restart / no-session).
+
 ### Added — D4 C# LSP mutators (`cs_rename`, `cs_code_action`)
 - The last deferred C#-plane surface from the D4 C2 plan: the two OmniSharp LSP **mutators**, mirroring
   the GDScript `gd_rename` / `gd_code_action`. Tool count **88 → 90**.

@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { FramedMessage, JsonRpcChannel } from "./framing.js";
-import { DapError, type DapState } from "./dap.js";
+import { DapError, type DapState, type WatchResult } from "./dap.js";
 
 interface Pending {
   command: string;
@@ -30,15 +30,21 @@ interface BufferedBreakpoints {
  * primitives so the protocol plumbing isn't re-invented. The only C#-specific
  * behaviors are the `coreclr` adapterID and pointing launch/attach at a .NET
  * program/process; everything else is standard DAP the same way Godot's built-in
- * debug adapter is. The first cut is read/inspect + a gated `setVariable`; the
- * richer GDScript extras (watch / restart / goto / exception & data breakpoints)
- * are deferred to a later cut, exactly as the C2 LSP mutators were.
+ * debug adapter is. On top of read/inspect + a gated `setVariable`, it carries the
+ * GDScript extras netcoredbg actually backs — persistent watches and a `restart()`
+ * (terminate + relaunch, since netcoredbg advertises no `supportsRestartRequest`).
+ * The exception-breakpoint extra needs no client method (the tool drives `request`
+ * + capabilities directly). `goto` / data breakpoints are intentionally NOT ported:
+ * netcoredbg advertises neither `supportsGotoTargetsRequest` nor
+ * `supportsDataBreakpoints`, so those tools would be dead surface here.
  */
 export class CsDapClient extends EventEmitter {
   private seq = 1;
   private pending = new Map<number, Pending>();
   private breakpoints = new Map<string, BufferedBreakpoints>();
   private configured = false;
+  /** Persistent watch expressions, re-evaluated at each stop (see evaluateWatches). */
+  private watches: string[] = [];
   private lastStartMode: "launch" | "attach" | null = null;
   private lastStartArgs: Record<string, unknown> | null = null;
 
@@ -174,6 +180,52 @@ export class CsDapClient extends EventEmitter {
     });
   }
 
+  // ---- Watch expressions ---------------------------------------------------
+
+  /** Add expressions to the persistent watch set (deduped, order-preserving). */
+  addWatches(expressions: string[]): void {
+    for (const e of expressions) if (e && !this.watches.includes(e)) this.watches.push(e);
+  }
+
+  /** Remove specific expressions from the watch set. */
+  removeWatches(expressions: string[]): void {
+    const drop = new Set(expressions);
+    this.watches = this.watches.filter((e) => !drop.has(e));
+  }
+
+  /** Clear all watch expressions. */
+  clearWatches(): void {
+    this.watches = [];
+  }
+
+  /** The current watch set (a copy). */
+  listWatches(): string[] {
+    return [...this.watches];
+  }
+
+  /**
+   * Evaluate every watch expression in the context of a stopped frame and return
+   * the results. Each is evaluated with DAP `context: "watch"` (the side-effect-free
+   * context IDEs use for watch panels). A single bad expression yields an `error` on
+   * that entry instead of failing the whole call. `timeoutMs` bounds each individual
+   * `evaluate` (callers pass the shorter `csDapEvaluateTimeoutMs`) so a watch the
+   * adapter never answers fails fast on that entry rather than hanging the full DAP
+   * timeout at every stop — mirroring `cs_dbg_evaluate` and the GDScript `DapClient`.
+   */
+  async evaluateWatches(frameId?: number, timeoutMs = this.timeoutMs): Promise<WatchResult[]> {
+    const results: WatchResult[] = [];
+    for (const expression of this.watches) {
+      try {
+        const body = await this.request("evaluate", { expression, frameId, context: "watch" }, timeoutMs);
+        results.push({ expression, value: String(body["result"] ?? ""), type: String(body["type"] ?? ""), error: null });
+      } catch (err) {
+        const e = err as { message?: string };
+        results.push({ expression, value: "", type: "", error: e.message ?? String(err) });
+      }
+    }
+    return results;
+  }
+
   private async applyAllBreakpoints(): Promise<void> {
     for (const path of this.breakpoints.keys()) {
       await this.applyBreakpoints(path).catch(() => undefined);
@@ -247,6 +299,65 @@ export class CsDapClient extends EventEmitter {
     this.state = "running";
     await this.request(command, args);
     return settled;
+  }
+
+  /**
+   * Resolve when the program next settles (`stopped`/`terminated`) or `waitMs`
+   * elapses — the shared wait used after a restart. Listeners are armed by the
+   * caller BEFORE the triggering request is sent so a fast settle can't be missed.
+   */
+  private settle(waitMs: number): Promise<{ state: DapState; reason: string | null }> {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.removeListener("stopped", onStop);
+        this.removeListener("terminated", onTerm);
+        resolve({ state: this.state, reason: this.lastStoppedReason });
+      };
+      const onStop = () => finish();
+      const onTerm = () => finish();
+      const timer = setTimeout(() => {
+        this.removeListener("stopped", onStop);
+        this.removeListener("terminated", onTerm);
+        resolve({ state: this.state, reason: this.lastStoppedReason });
+      }, waitMs);
+      this.once("stopped", onStop);
+      this.once("terminated", onTerm);
+    });
+  }
+
+  /**
+   * Restart the debug session. If the adapter advertises `supportsRestartRequest`,
+   * issue a single DAP `restart` (carrying the launch/attach args); otherwise fall
+   * back to `terminate` + a fresh handshake, so restart works on every adapter.
+   * netcoredbg advertises no `supportsRestartRequest`, so in practice the relaunch
+   * path runs. Reuses the last cs_dbg_launch/cs_dbg_attach params; `overrideArgs`
+   * (e.g. a new `stopAtEntry`) are merged over them. `method` tells the caller which
+   * path ran. C# sessions have no scene, so — unlike the GDScript `DapClient` — this
+   * returns no `scene`.
+   */
+  async restart(
+    overrideArgs: Record<string, unknown> = {},
+    waitMs = 15000,
+  ): Promise<{ method: "restart" | "relaunch"; state: DapState; reason: string | null }> {
+    if (!this.lastStartMode || !this.lastStartArgs) {
+      throw new DapError("restart", "no C# debug session to restart — call cs_dbg_launch or cs_dbg_attach first");
+    }
+    const args = { ...this.lastStartArgs, ...overrideArgs };
+    if (this.capabilities?.["supportsRestartRequest"] === true) {
+      // Arm the settle listener before issuing restart so a fast stop isn't missed.
+      const settled = this.settle(waitMs);
+      this.state = "running";
+      await this.request("restart", { arguments: args });
+      this.lastStartArgs = args;
+      const r = await settled;
+      return { method: "restart", state: r.state, reason: r.reason };
+    }
+    // Fallback: ask the debuggee to terminate (best-effort), then re-run the full
+    // initialize → launch/attach → configurationDone handshake with the same args.
+    await this.request("terminate", {}).catch(() => undefined);
+    await this.start(this.lastStartMode, args);
+    return { method: "relaunch", state: this.state, reason: this.lastStoppedReason };
   }
 
   close(): void {

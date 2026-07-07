@@ -45,10 +45,14 @@ function isDapTimeout(err: unknown): err is DapError {
  * `cs_dbg_set_variable`) are elicitation-gated; those two also carry a short
  * bounded deadline so a non-answering adapter fails fast with a clear message
  * (the F1 fix) instead of hanging the full DAP timeout. Adapter absent → the
- * lazy stdio spawn fails with an actionable hint, never a hang. Mutators beyond
- * `set_variable`, plus the richer extras (watch / restart / goto / exception &
- * data breakpoints), are deferred to a later cut, exactly as the C2 LSP mutators
- * were.
+ * lazy stdio spawn fails with an actionable hint, never a hang. On top of the
+ * read/inspect surface this now carries the GDScript extras netcoredbg backs —
+ * `cs_dbg_watch`, `cs_dbg_set_exception_breakpoints` (netcoredbg advertises the
+ * `all` / `user-unhandled` filters) and `cs_dbg_restart` (terminate + relaunch,
+ * since netcoredbg advertises no `supportsRestartRequest`). `goto` and data
+ * breakpoints are deliberately NOT ported: netcoredbg advertises neither
+ * `supportsGotoTargetsRequest` nor `supportsDataBreakpoints`, so those tools
+ * would only ever return "unsupported" here.
  */
 export function registerCsDapTools(server: McpServer, dap: CsDapClient, cfg: Config): void {
   server.registerTool(
@@ -305,6 +309,104 @@ export function registerCsDapTools(server: McpServer, dap: CsDapClient, cfg: Con
           throw err;
         }
         return ok({ name, value: String(body["value"] ?? value), type: String(body["type"] ?? ""), variables_ref: (body["variablesReference"] as number) ?? 0 });
+      } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "cs_dbg_watch",
+    {
+      title: "Watch expressions (C#)",
+      description:
+        "Manage a persistent set of C# watch expressions and evaluate them in the current stopped frame. " +
+        "Pass `add`/`remove`/`clear` to mutate the set (all optional), then every current watch is re-evaluated " +
+        "and returned. Call with no mutation args to just re-read the watches after a step/continue. Expressions " +
+        "are evaluated in DAP `watch` context (intended to be side-effect-free), so this is not gated; the results " +
+        "are only meaningful while the program is stopped at a breakpoint.",
+      inputSchema: {
+        add: z.array(z.string()).optional().describe("Expressions to add to the watch set"),
+        remove: z.array(z.string()).optional().describe("Expressions to remove from the watch set"),
+        clear: z.boolean().optional().describe("Clear all watches before applying add (default false)"),
+        frame_id: z.number().int().optional().describe("Frame id from cs_dbg_stack_trace; omit for the top frame"),
+      },
+    },
+    async ({ add, remove, clear, frame_id }) => {
+      try {
+        if (clear) dap.clearWatches();
+        if (remove && remove.length) dap.removeWatches(remove);
+        if (add && add.length) dap.addWatches(add);
+        // Bound each watch's evaluate to the short deadline (mirrors cs_dbg_evaluate): a watch
+        // the adapter never answers fails fast on that entry instead of hanging the full DAP
+        // timeout at every stop, while other watches still resolve normally.
+        const watches = await dap.evaluateWatches(frame_id, cfg.csDapEvaluateTimeoutMs);
+        return ok({ watches });
+      } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "cs_dbg_set_exception_breakpoints",
+    {
+      title: "Set C# exception breakpoints",
+      description:
+        "Enable (replace) the debugger's exception breakpoint filters so execution halts when a matching .NET exception is thrown " +
+        "(DAP setExceptionBreakpoints). Pass the filter IDs to enable; call with no filters (or []) to clear them. The result echoes the " +
+        "active filters and lists `available_filters` — the exception filters the connected adapter advertises (netcoredbg exposes `all` " +
+        "for every thrown exception and `user-unhandled`). Requires a running debug session. Not gated (it only configures the debugger). " +
+        "Feature-detected: on an adapter that advertises no exceptionBreakpointFilters it returns a clear \"unsupported\" message WITHOUT sending anything.",
+      inputSchema: {
+        filters: z.array(z.string()).optional().describe("Exception filter IDs to enable (default none = clear). Choose from available_filters in the result (netcoredbg: 'all', 'user-unhandled')."),
+      },
+    },
+    async ({ filters }) => {
+      try {
+        // Per the DAP spec a client should only send setExceptionBreakpoints when the adapter
+        // advertised at least one exception filter. Short-circuit with a clear "unsupported"
+        // message otherwise, matching the GDScript dbg_set_exception_breakpoints discipline.
+        const advertised = dap.capabilities?.["exceptionBreakpointFilters"];
+        const available_filters = Array.isArray(advertised)
+          ? (advertised as Array<{ filter?: string; label?: string }>).map((f) => ({ filter: f.filter ?? "", label: f.label ?? "" }))
+          : [];
+        if (available_filters.length === 0) {
+          return {
+            isError: true as const,
+            content: [{ type: "text" as const, text: "cs_dbg_set_exception_breakpoints is unsupported by the connected C# debug adapter (it advertises no exceptionBreakpointFilters). There are no exception filters to enable." }],
+          };
+        }
+        const active = filters ?? [];
+        const body = await dap.request("setExceptionBreakpoints", { filters: active });
+        const breakpoints = Array.isArray(body["breakpoints"])
+          ? (body["breakpoints"] as Array<{ verified?: boolean }>).map((b) => ({ verified: Boolean(b.verified) }))
+          : [];
+        return ok({ filters: active, available_filters, breakpoints });
+      } catch (err) { return fail(err); }
+    },
+  );
+
+  server.registerTool(
+    "cs_dbg_restart",
+    {
+      title: "Restart C# debug session",
+      description:
+        "Restart the current C# debug session. Uses the DAP `restart` request when the adapter advertises `supportsRestartRequest`, " +
+        "otherwise falls back to terminate + relaunch — so it works on every adapter (netcoredbg advertises none, so the relaunch path runs). " +
+        "Reuses the last cs_dbg_launch/cs_dbg_attach parameters; pass `stop_on_entry` / `program` / `args` to override them for a launched " +
+        "session. `method` in the result reports which path ran ('restart' = native DAP restart, 'relaunch' = terminate + fresh handshake). " +
+        "Requires a session started with cs_dbg_launch/cs_dbg_attach.",
+      inputSchema: {
+        stop_on_entry: z.boolean().optional().describe("Override stop-at-entry for the restart (launched sessions)"),
+        program: z.string().optional().describe("Override the launched program (launched sessions)"),
+        args: z.array(z.string()).optional().describe("Override the program arguments (launched sessions)"),
+      },
+    },
+    async ({ stop_on_entry, program, args }) => {
+      try {
+        const override: Record<string, unknown> = {};
+        if (stop_on_entry !== undefined) override.stopAtEntry = stop_on_entry;
+        if (program !== undefined) override.program = program;
+        if (args !== undefined) override.args = args;
+        const r = await dap.restart(override);
+        return ok({ session_id: "csharp", method: r.method, state: r.state });
       } catch (err) { return fail(err); }
     },
   );
