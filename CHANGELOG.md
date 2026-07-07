@@ -6,6 +6,33 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — resource subscriptions with live `notifications/resources/updated` (D3)
+- Clients can now `resources/subscribe` / `resources/unsubscribe` to any `godot://…` resource and
+  receive a `notifications/resources/updated` push when it changes. The change signal originates in
+  the editor addon — `EditorSelection.selection_changed` and the `EditorPlugin` `scene_changed`
+  signal broadcast a compact `{"event":"resource.changed","uri":…}` line over the existing bridge
+  socket (no `id`, so it never collides with a request/response) — and the host fans it out with
+  `server.server.sendResourceUpdated`, but only for URIs a client actually subscribed to.
+  Non-subscribers keep the unchanged pull-only behavior. Selection / edited-scene changes map to
+  `godot://editor-state` (plus `godot://scene-tree` when the edited scene changes).
+- **Host** (`host/src/`): the server now also advertises the `resources.subscribe` capability; a new
+  `host/src/subscriptions.ts` holds a `ResourceSubscriptions` registry, installs the
+  subscribe/unsubscribe request handlers on the low-level server, keeps the relevant bridge
+  connected so pushes flow, and routes `resource.changed` events to `notifications/resources/updated`.
+  `BridgeClient` gained an `onResourceChanged` event path plus `ensureConnected()` with transparent
+  re-dial so the push channel survives an editor restart.
+- **Addon** (`bridge_server.gd` / `plugin.gd`, both copies): `broadcast_event(uri)` pushes the change
+  line to every connected client; `plugin.gd` connects the selection / scene-changed signals on
+  enable and disconnects them on disable. `ADDON_VERSION` (and both `plugin.cfg`) go
+  **0.4.16 → 0.4.17** (host `package.json` unchanged; the version cut lands with the Group-A
+  release). Tool count unchanged (**still 70 tools**); the host suite goes **115 → 121 tests** —
+  subscribe→push→exactly-one-`updated`, un-subscribed URI ignored, unsubscribe silences, the
+  runtime-bridge path, and a registry unit check.
+- **CI**: the experimental `editor-plane` job gained a live probe
+  (`test-integration/editor-subscriptions.integration.mjs`, `D3_SUB_*` markers) that subscribes,
+  drives a real selection change over the addon bridge, and asserts a `resources/updated` push; it
+  runs under `continue-on-error`, so live-engine timing never blocks a merge.
+
 ### Added — long jobs now use the formal MCP task-execution model (D2)
 - `godot_export`, `godot_import`, and `godot_run_headless_script` — the three run-to-completion
   headless jobs — now register under the spec's **task model** (`server.experimental.tasks`,

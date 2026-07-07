@@ -10,6 +10,8 @@ name: integration
 #                    MATRIX across the 4.3 baseline and the newest stable (4.7): the D7_CAPS /
 #                    D7_WS_RAW markers answer whether workspace/symbol and the other
 #                    advertised-but-dead-on-4.3 LSP providers return results on a modern build.
+#                    Also runs the D3 resource-subscription probe (D3_SUB_* markers): a live
+#                    selection change over the addon bridge must push notifications/resources/updated.
 #                    EXPERIMENTAL: runs under continue-on-error while the GUI-boot
 #                    timing is tuned on real runners, so it never blocks a merge.
 #   * dap-plane    — boots the same editor GUI under Xvfb and connects to its built-in
@@ -120,6 +122,16 @@ jobs:
             sleep 2
           done
           node test-integration/editor-lsp.integration.mjs
+          # D3: the Claude Bridge addon (:9080) comes up as the editor enables the
+          # plugin. Wait for it, then probe the live resource-subscription push path
+          # (subscribe -> live selection change -> resources/updated; D3_SUB_* markers).
+          for i in $(seq 1 30); do
+            if node -e "require('net').connect(9080,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "bridge port open"; break
+            fi
+            sleep 2
+          done
+          node test-integration/editor-subscriptions.integration.mjs
           kill "$GODOT_PID" 2>/dev/null || true
       - name: Editor log tail (on failure)
         if: always()
