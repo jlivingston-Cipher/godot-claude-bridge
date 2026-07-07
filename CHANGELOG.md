@@ -6,6 +6,20 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — CI: the editor/LSP-plane probe now runs against the newest stable (4.7) too — D7 resolved
+- The experimental `editor-plane` job gained the same Godot-version matrix (`4.3-stable` +
+  `4.7-stable`), so the D7 LSP probe (`D7_CAPS` / `D7_WS_RAW` / `D7_CAPS2`) characterizes both.
+  Findings: **`workspace/symbol` still replies `-32601` through 4.7** — 4.3 advertised
+  `workspaceSymbolProvider: true` yet failed every query; 4.7 honestly advertises it `false` and
+  likewise replies `-32601`, so `gd_workspace_symbols` stays gated (D7 resolved: the
+  "unsupported through 4.x" framing holds through 4.7). Bonus: **`gd_document_highlight` lights
+  up on 4.7** — `documentHighlightProvider` flips `false → true` and the tool returns results
+  live (3 highlights); it un-gates automatically via feature-detection, no code change.
+  `type-definition`, `implementation`, `folding-ranges`, `formatting`, `document-color`, and
+  `code-action` remain advertised-`false` / unsupported through 4.7; `signature-help`,
+  `declaration`, and `document-link` work on both. CI-only; no tool/schema/host change (still
+  **70 tools / 109 tests**).
+
 ### Added — CI: the DAP-plane probe now runs against the newest stable (4.7) too
 - The experimental `dap-plane` integration job gained a Godot-version matrix (`4.3-stable` +
   `4.7-stable`), so the live D_DAP_* capability probe characterizes both the baseline and the
