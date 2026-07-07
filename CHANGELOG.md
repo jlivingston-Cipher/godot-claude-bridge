@@ -6,6 +6,25 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — D6: zero-config console capture in the runtime bridge (Godot 4.5+)
+- The in-game runtime autoload (`runtime_bridge.gd`) now registers a scriptable `Logger`
+  (`OS.add_logger`, Godot 4.5+) that funnels every `print()`, `push_warning`, `push_error`, and
+  engine message into the same ring buffer `runtime_get_log` reads — so the host gets the game's full
+  console with **no managed parent process** (`godot_run_managed` is no longer required just to see
+  `print()` output; launch the game any way, incl. the editor's Play button, and read
+  `godot://runtime/log`). The `Logger` subclass is **compiled at runtime**, so its `extends Logger`
+  source is only ever parsed where the class exists — the addon stays parse-clean on Godot 4.3/4.4,
+  where capture is simply absent (only explicit `push_log` entries appear, unchanged behavior).
+- Captured log lines mark the log resource dirty; `godot://runtime/log` is pushed to subscribers
+  (coalesced to one per frame), tying D6 into the D3 subscription path. `runtime.get_log` now returns
+  a `capture` flag (host output schema updated, optional) so a client can feature-detect whether the
+  zero-config hook is active and fall back to `godot_run_managed` when it isn't.
+- Per the "GDScript now, native later" decision, the native GDExtension logger the plan originally
+  scoped (godot-cpp / scons) is **deferred** — the 4.5 `Logger` API is scriptable and delivers the
+  same capability with no native toolchain. See `BACKLOG.md` and the session-19 handoff.
+- `ADDON_VERSION` (and both `plugin.cfg`) go **0.5.1 → 0.5.2**. Tool count unchanged (**still 70
+  tools**); the host suite goes **123 → 124 tests** (the `godot://runtime/log` subscription push).
+
 ### Added — D3 follow-ups: runtime-side resource change events + host-side coalescing
 - **Runtime SceneTree subscriptions.** The in-game runtime autoload (`runtime_bridge.gd`) now emits a
   `resource.changed` for `godot://runtime/tree` when the running game's live SceneTree gains, loses, or

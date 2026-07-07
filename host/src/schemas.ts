@@ -214,6 +214,9 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   runtime_get_log: {
     entries: z.array(z.object({ seq: z.number(), level: z.string(), message: z.string() })),
     latest_seq: z.number(),
+    // D6: true when the Godot 4.5+ Logger capture is active (zero-config print()
+    // capture, no managed parent). Optional so older addons still validate.
+    capture: z.boolean().optional(),
   },
 };
 

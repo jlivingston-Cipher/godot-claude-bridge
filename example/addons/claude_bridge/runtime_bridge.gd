@@ -14,6 +14,20 @@ extends Node
 const Codec := preload("res://addons/claude_bridge/variant_json.gd")
 const DEFAULT_PORT := 9081
 const LOG_CAP := 1000
+# D6: source for the runtime-compiled Logger subclass (Godot 4.5+). Kept as a
+# string so `extends Logger` is only ever compiled where the class exists — the
+# addon stays parse-clean on Godot 4.3/4.4 (no Logger class).
+const _LOG_CAPTURE_SRC := """extends Logger
+var sink: Callable
+func _log_message(message: String, error: bool) -> void:
+	if sink.is_valid():
+		sink.call("error" if error else "info", message)
+func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array) -> void:
+	if sink.is_valid():
+		var lvl := "warning" if error_type == 1 else "error"
+		var detail := rationale if rationale != "" else code
+		sink.call(lvl, "%s (%s:%d)" % [detail, file, line])
+"""
 
 # Curated Performance monitors exposed by runtime.get_monitors.
 const MONITORS := {
@@ -37,6 +51,9 @@ var _port: int = DEFAULT_PORT
 var _log: Array = []     # ring buffer of {seq, level, message}
 var _log_seq: int = 0
 var _tree_dirty: bool = false
+var _log_dirty: bool = false
+var _log_capture = null  # registered Logger (Godot 4.5+) or null
+var _in_capture: bool = false
 
 
 func _ready() -> void:
@@ -59,6 +76,7 @@ func _ready() -> void:
 		tree.node_added.connect(_on_tree_structure_changed)
 		tree.node_removed.connect(_on_tree_structure_changed)
 		tree.node_renamed.connect(_on_tree_structure_changed)
+	_install_log_capture()
 
 
 ## Public API: game code can route its own logs here for runtime.get_log to read.
@@ -67,6 +85,7 @@ func push_log(level: String, message: String) -> void:
 	_log.append({"seq": _log_seq, "level": level, "message": message})
 	while _log.size() > LOG_CAP:
 		_log.pop_front()
+	_log_dirty = true
 
 
 func _exit_tree() -> void:
@@ -78,6 +97,9 @@ func _exit_tree() -> void:
 			tree.node_removed.disconnect(_on_tree_structure_changed)
 		if tree.node_renamed.is_connected(_on_tree_structure_changed):
 			tree.node_renamed.disconnect(_on_tree_structure_changed)
+	if _log_capture != null and ClassDB.class_has_method("OS", "remove_logger"):
+		OS.remove_logger(_log_capture)
+	_log_capture = null
 	for c in _clients:
 		var peer: StreamPeerTCP = c["peer"]
 		if peer:
@@ -114,6 +136,9 @@ func _process(_delta: float) -> void:
 	if _tree_dirty:
 		_tree_dirty = false
 		broadcast_event("godot://runtime/tree")
+	if _log_dirty:
+		_log_dirty = false
+		broadcast_event("godot://runtime/log")
 
 
 func _drain_lines(c: Dictionary) -> void:
@@ -166,12 +191,44 @@ func _on_tree_structure_changed(_node: Node) -> void:
 	_tree_dirty = true
 
 
+## D6: zero-config console capture. Godot 4.5+ exposes a scriptable Logger
+## (OS.add_logger); register one that funnels every print()/push_warning/
+## push_error and engine message into the same ring buffer runtime.get_log reads,
+## so the host gets the game's console with NO managed parent process. Compiled at
+## runtime, so `extends Logger` is only ever parsed where the class exists.
+func _install_log_capture() -> void:
+	if _log_capture != null:
+		return
+	if not ClassDB.class_exists("Logger") or not ClassDB.class_has_method("OS", "add_logger"):
+		return  # < 4.5: no scriptable logger; runtime.get_log still serves push_log entries.
+	var src := GDScript.new()
+	src.source_code = _LOG_CAPTURE_SRC
+	if src.reload() != OK:
+		return  # runtime script compilation unavailable — degrade quietly.
+	var inst = src.new()
+	inst.set("sink", Callable(self, "_on_captured_log"))
+	OS.add_logger(inst)
+	_log_capture = inst
+	push_log("info", "log capture active (Godot %s)" % Engine.get_version_info().get("string", ""))
+
+
+## Sink for the runtime-compiled Logger. Writes to the ring buffer only (never
+## prints/errors — that would recurse through the logger we registered); the
+## _in_capture guard is belt-and-braces in case a downstream call ever emits.
+func _on_captured_log(level: String, message: String) -> void:
+	if _in_capture:
+		return
+	_in_capture = true
+	push_log(level, message.strip_edges())
+	_in_capture = false
+
+
 # ----------------------------------------------------------- dispatch --------
 
 func _dispatch(method: String, params: Dictionary) -> Dictionary:
 	match method:
 		"ping":
-			return _ok({"pong": true, "runtime": true, "godot": Engine.get_version_info().get("string", "")})
+			return _ok({"pong": true, "runtime": true, "godot": Engine.get_version_info().get("string", ""), "log_capture": _log_capture != null})
 		"runtime.get_tree":
 			return _get_tree(params)
 		"runtime.get_property":
@@ -372,4 +429,4 @@ func _get_log(params: Dictionary) -> Dictionary:
 	for e in _log:
 		if int(e["seq"]) > since and (levels.is_empty() or levels.has(e["level"])):
 			entries.append(e)
-	return _ok({"entries": entries, "latest_seq": _log_seq})
+	return _ok({"entries": entries, "latest_seq": _log_seq, "capture": _log_capture != null})
