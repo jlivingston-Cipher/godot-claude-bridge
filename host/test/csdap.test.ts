@@ -352,6 +352,141 @@ test("cs_dbg_set_variable fails fast with a clear message when the adapter never
   await srv.close();
 });
 
+// ---- cs_dbg_watch / cs_dbg_set_exception_breakpoints / cs_dbg_restart (extras) ----
+
+test("cs_dbg_watch adds expressions and evaluates them in DAP 'watch' context", async () => {
+  const seen: DapMsg[] = [];
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "evaluate") {
+      seen.push(m);
+      const expr = (m.arguments as { expression: string }).expression;
+      dapResponse(s, m, { result: expr === "Counter" ? "95" : "3", type: "int" });
+    }
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({});
+  const res = (await rec.handler("cs_dbg_watch")({ add: ["Counter", "Lives"] })) as ToolResultLike;
+  const sc = res.structuredContent as { watches: Array<{ expression: string; value: string; type: string; error: string | null }> };
+  assert.deepEqual(sc.watches, [
+    { expression: "Counter", value: "95", type: "int", error: null },
+    { expression: "Lives", value: "3", type: "int", error: null },
+  ]);
+  // Watches must use the side-effect-free `watch` context, never `repl`.
+  assert.ok(seen.length > 0 && seen.every((m) => (m.arguments as { context?: string }).context === "watch"));
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_watch reports a per-expression error without failing the call, and remove/clear mutate the set", async () => {
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s)) return;
+    if (m.command === "evaluate") {
+      if ((m.arguments as { expression: string }).expression === "bogus") dapResponse(s, m, { message: "not in scope" }, false);
+      else dapResponse(s, m, { result: "95", type: "int" });
+    }
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({});
+  let res = (await rec.handler("cs_dbg_watch")({ add: ["Counter", "bogus"] })) as ToolResultLike;
+  let sc = res.structuredContent as { watches: Array<{ expression: string; value: string; error: string | null }> };
+  assert.equal(sc.watches.length, 2);
+  assert.equal(sc.watches[0].error, null);
+  // A failed evaluate yields a non-null error on that entry (the adapter's message is at the
+  // DAP response top level, which the client surfaces; the whole call must still succeed).
+  assert.ok(sc.watches[1].error, "a failed watch expression must carry an error");
+  assert.equal(sc.watches[1].value, "");
+  // remove drops one; a later call re-reads the remaining set
+  res = (await rec.handler("cs_dbg_watch")({ remove: ["bogus"] })) as ToolResultLike;
+  sc = res.structuredContent as { watches: Array<{ expression: string; value: string; error: string | null }> };
+  assert.deepEqual(sc.watches.map((w) => w.expression), ["Counter"]);
+  // clear empties the set
+  const cleared = (await rec.handler("cs_dbg_watch")({ clear: true })) as ToolResultLike;
+  assert.deepEqual((cleared.structuredContent as { watches: unknown[] }).watches, []);
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_set_exception_breakpoints enables filters when the adapter advertises exceptionBreakpointFilters", async () => {
+  let sebReq: DapMsg | undefined;
+  const caps = { supportsConfigurationDoneRequest: true, exceptionBreakpointFilters: [{ filter: "all", label: "all exceptions" }, { filter: "user-unhandled", label: "user-unhandled exceptions" }] };
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s, caps)) return;
+    if (m.command === "setExceptionBreakpoints") { sebReq = m; dapResponse(s, m, { breakpoints: [{ verified: true }] }); }
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({});
+  const res = (await rec.handler("cs_dbg_set_exception_breakpoints")({ filters: ["all"] })) as ToolResultLike;
+  const sc = res.structuredContent as { filters: string[]; available_filters: Array<{ filter: string; label: string }>; breakpoints: Array<{ verified: boolean }> };
+  assert.deepEqual(sc.filters, ["all"]);
+  assert.deepEqual(sc.available_filters.map((f) => f.filter), ["all", "user-unhandled"]);
+  assert.deepEqual(sc.breakpoints, [{ verified: true }]);
+  assert.deepEqual((sebReq!.arguments as { filters: string[] }).filters, ["all"]);
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_set_exception_breakpoints returns 'unsupported' WITHOUT sending when no filters are advertised", async () => {
+  const { srv, received } = await startDap((m, s) => {
+    if (handshake(m, s)) return; // default caps advertise no exceptionBreakpointFilters
+    if (m.command === "setExceptionBreakpoints") dapResponse(s, m, {});
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({});
+  const res = (await rec.handler("cs_dbg_set_exception_breakpoints")({ filters: ["all"] })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.command === "setExceptionBreakpoints"), "must not send setExceptionBreakpoints when unsupported");
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_restart falls back to terminate + relaunch when supportsRestartRequest is absent (netcoredbg)", async () => {
+  const order: string[] = [];
+  const { srv } = await startDap((m, s) => {
+    if (m.command === "initialize") { order.push("initialize"); dapResponse(s, m, { supportsConfigurationDoneRequest: true }); dapEvent(s, "initialized", {}); return; }
+    if (m.command === "launch" || m.command === "configurationDone") { order.push(m.command!); dapResponse(s, m, {}); return; }
+    if (m.command === "terminate") { order.push("terminate"); dapResponse(s, m, {}); return; }
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({});
+  const res = (await rec.handler("cs_dbg_restart")({})) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, { session_id: "csharp", method: "relaunch", state: "running" });
+  // relaunch = a terminate followed by a FRESH initialize/launch handshake.
+  assert.ok(order.includes("terminate"));
+  assert.ok(order.lastIndexOf("initialize") > order.indexOf("terminate"), "a fresh handshake must run after terminate");
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_restart uses the native DAP restart when the adapter advertises supportsRestartRequest", async () => {
+  const caps = { supportsConfigurationDoneRequest: true, supportsRestartRequest: true };
+  let restartReq: DapMsg | undefined;
+  const { srv } = await startDap((m, s) => {
+    if (handshake(m, s, caps)) return;
+    if (m.command === "restart") { restartReq = m; dapResponse(s, m, {}); dapEvent(s, "stopped", { reason: "entry", threadId: 1 }); }
+  });
+  const { dap, rec } = csDapHarness(srv.port);
+  await rec.handler("cs_dbg_launch")({ stop_on_entry: true });
+  const res = (await rec.handler("cs_dbg_restart")({ stop_on_entry: true })) as ToolResultLike;
+  const sc = res.structuredContent as { session_id: string; method: string; state: string };
+  assert.equal(sc.method, "restart");
+  assert.equal(sc.session_id, "csharp");
+  assert.ok(restartReq, "the native DAP restart request must be sent");
+  dap.close();
+  await srv.close();
+});
+
+test("cs_dbg_restart errors clearly when there is no session to restart", async () => {
+  const { srv } = await startDap((m, s) => { handshake(m, s); });
+  const { dap, rec } = csDapHarness(srv.port);
+  const res = (await rec.handler("cs_dbg_restart")({})) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /no C# debug session to restart/i);
+  dap.close();
+  await srv.close();
+});
+
 // ---- StdioChannel end-to-end (the transport netcoredbg actually uses) ------
 // Drives CsDapClient through a REAL spawned subprocess speaking DAP over stdio,
 // so the stdio framing/spawn path is exercised in the unit suite, not only in CI.

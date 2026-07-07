@@ -731,7 +731,7 @@ Set (replace) data breakpoints — 'watchpoints' that halt when a variable's val
 
 ---
 
-# Plane D — C# Debugging (netcoredbg DAP)  (✅ implemented — D4 C3; the C#/.NET mirror of the GDScript debugging plane. **netcoredbg** (Samsung, MIT) is spawned by the host over **stdio** (lazily, on the first `cs_dbg_*` call) and driven against a C# Godot game — launching it (`cs_dbg_launch`) or attaching to a running .NET process (`cs_dbg_attach`) — instead of Godot's built-in TCP debug adapter. Configured via `GODOT_CSDAP_CMD` (default `netcoredbg`), `GODOT_CSDAP_ARGS` (default `--interpreter=vscode`), `GODOT_CSHARP_BIN` (the program `cs_dbg_launch` launches by default) and `GODOT_CSHARP_PROJECT`. First cut = read/inspect + a gated `cs_dbg_set_variable`; the richer GDScript extras (watch / restart / goto / exception & data breakpoints) are deferred to a later cut, exactly as the C2 LSP mutators were. Adapter absent → the lazy stdio spawn fails with an actionable hint, never a hang.)
+# Plane D — C# Debugging (netcoredbg DAP)  (✅ implemented — D4 C3; the C#/.NET mirror of the GDScript debugging plane. **netcoredbg** (Samsung, MIT) is spawned by the host over **stdio** (lazily, on the first `cs_dbg_*` call) and driven against a C# Godot game — launching it (`cs_dbg_launch`) or attaching to a running .NET process (`cs_dbg_attach`) — instead of Godot's built-in TCP debug adapter. Configured via `GODOT_CSDAP_CMD` (default `netcoredbg`), `GODOT_CSDAP_ARGS` (default `--interpreter=vscode`), `GODOT_CSHARP_BIN` (the program `cs_dbg_launch` launches by default) and `GODOT_CSHARP_PROJECT`. On top of read/inspect + a gated `cs_dbg_set_variable`, it carries the GDScript extras netcoredbg actually backs: `cs_dbg_watch`, `cs_dbg_set_exception_breakpoints` (netcoredbg advertises the `all` / `user-unhandled` filters) and `cs_dbg_restart` (terminate + relaunch, since netcoredbg advertises no `supportsRestartRequest`). `dbg_goto` / `dbg_data_breakpoints` are intentionally **not** mirrored here — netcoredbg advertises neither `supportsGotoTargetsRequest` nor `supportsDataBreakpoints`, so those tools would be dead surface. Adapter absent → the lazy stdio spawn fails with an actionable hint, never a hang.)
 
 ### `cs_dbg_launch` ✅ · runs code
 Launch a C# Godot game under netcoredbg. `program` defaults to the configured Mono/.NET Godot binary and `args` to `['--path', <C# project>]`; override either to debug a different .NET program. Buffered breakpoints are applied during the handshake.
@@ -775,6 +775,32 @@ Evaluate a C# expression in the current stopped frame (DAP `evaluate`, repl cont
 Change a variable's value in a stopped C# frame (DAP `setVariable`). `variables_ref` is the container's `variablesReference` (from `cs_dbg_scopes`, or a complex `cs_dbg_variables` entry), `name` is the variable within it, `value` is a C# literal/expression. Feature-detected: on an adapter that advertises `supportsSetVariable: false` it returns a clear "unsupported" message **without prompting**; otherwise a bounded deadline (`GODOT_CSDAP_SETVAR_TIMEOUT_MS`) turns a non-answering adapter into a clear message rather than a hang.
 - **Input** `{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+
+### `cs_dbg_watch` ✅
+Manage a persistent set of C# watch expressions and re-evaluate them in the current stopped frame. Evaluated in DAP `watch` context (side-effect-free), so it is **not** gated. Results are only meaningful while stopped at a breakpoint. Each watch's `evaluate` is bounded by `GODOT_CSDAP_EVALUATE_TIMEOUT_MS` so a stalling expression fails fast on that entry.
+- **Input**
+```json
+{ "type": "object",
+  "properties": {
+    "add": { "type": "array", "items": { "type": "string" }, "description": "Expressions to add to the watch set" },
+    "remove": { "type": "array", "items": { "type": "string" }, "description": "Expressions to remove" },
+    "clear": { "type": "boolean", "description": "Clear all watches before applying add" },
+    "frame_id": { "type": "integer", "description": "Frame id from cs_dbg_stack_trace; omit for the top frame" } } }
+```
+- **Output** `{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }`
+
+### `cs_dbg_set_exception_breakpoints` ✅
+Enable (replace) the debugger's exception breakpoint filters so execution halts when a matching .NET exception is thrown (DAP `setExceptionBreakpoints`). Pass filter IDs to enable; call with no filters (or `[]`) to clear. The result echoes the active `filters` and reports `available_filters` — the exception filters the connected adapter advertises (**netcoredbg exposes `all` and `user-unhandled`**). Requires a running session; **not** gated (it only configures the debugger). Feature-detected: on an adapter that advertises no `exceptionBreakpointFilters` it returns a clear "unsupported" message **without sending anything**.
+- **Input** `{ "type": "object", "properties": { "filters": { "type": "array", "items": { "type": "string" }, "description": "Exception filter IDs to enable (default none = clear); choose from available_filters" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["filters", "available_filters", "breakpoints"], "properties": { "filters": { "type": "array", "items": { "type": "string" } }, "available_filters": { "type": "array", "items": { "type": "object", "properties": { "filter": { "type": "string" }, "label": { "type": "string" } } } }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "verified": { "type": "boolean" } } } } } }
+```
+
+### `cs_dbg_restart` ✅
+Restart the current C# debug session. Uses the DAP `restart` request when the adapter advertises `supportsRestartRequest`; otherwise falls back to `terminate` + a fresh launch/attach handshake, so it works on every adapter (**netcoredbg advertises none, so the relaunch path runs**). Reuses the last `cs_dbg_launch`/`cs_dbg_attach` params; `stop_on_entry` / `program` / `args` override them for a launched session. `method` reports which path ran (`restart` = native DAP restart, `relaunch` = terminate + fresh handshake). C# sessions have no scene, so there is no `scene` field.
+- **Input** `{ "type": "object", "properties": { "stop_on_entry": { "type": "boolean" }, "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } }`
+- **Output** `{ "type": "object", "required": ["session_id", "method", "state"], "properties": { "session_id": { "type": "string" }, "method": { "enum": ["restart", "relaunch"] }, "state": { "type": "string" } } }`
 
 ---
 
@@ -1001,6 +1027,9 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `cs_dbg_variables` | D / C# DAP | ✅ | – |
 | `cs_dbg_evaluate` | D / C# DAP | ✅ | ✔ arbitrary code |
 | `cs_dbg_set_variable` | D / C# DAP | ✅ | ✔ mutates state |
+| `cs_dbg_watch` | D / C# DAP | ✅ | – |
+| `cs_dbg_set_exception_breakpoints` | D / C# DAP | ✅ | – |
+| `cs_dbg_restart` | D / C# DAP | ✅ | – |
 | `runtime_get_tree` | C / Runtime | ✅ | – |
 | `runtime_get_property` | C / Runtime | ✅ | – |
 | `runtime_set_property` | C / Runtime | ✅ | ✔ |
