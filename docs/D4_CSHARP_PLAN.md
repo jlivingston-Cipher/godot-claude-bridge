@@ -164,9 +164,11 @@ elicitation-gated and fail-fast on a non-compliant adapter. Adapter absent → g
 `D7_*` / `D6_CAP_*` convention: `C#_PLANE_*` (C1 boot), `C#_LSP_*` (C2), `C#_DAP_*` (C3). A future
 session reads results with one `gh run view --job=<id> --log | grep 'C#_'`.
 
-**Keep the plane non-blocking until proven.** `csharp-plane` stays `continue-on-error` through C1–C3.
-Promote to a required branch-protection check only after it is green on real runners across a few
-runs — the same discipline that took `runtime-plane` from experimental to required in session 20.
+**Promoted to a required gate (session 25).** `csharp-plane` ran `continue-on-error` through C1–C3
+and the C# LSP mutators; once it was green on real runners across all of those, it was promoted to a
+required branch-protection check in session 25 — the same discipline that took `runtime-plane` from
+experimental to required in session 20. The netcoredbg launch-to-breakpoint flow past the
+`C#_DAP_REACHED` gate remains log-only, so an unproven attach path still cannot block a merge.
 
 **Contract check + tool count.** Every PR that adds `cs_*` tools extends `scripts/contract_check.py`
 and `host/test/registration.test.ts` in the same PR (tool-count + schema parity), and adds a
