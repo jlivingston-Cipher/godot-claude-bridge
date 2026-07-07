@@ -5,7 +5,15 @@ name: integration
 # (which mocks the sockets) deliberately cannot do, and that no competitor's CI
 # is known to do either.
 #
-#   * cli-plane    — headless, deterministic, expected to pass. This is the gate.
+#   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
+#   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
+#                     against its in-game ClaudeRuntimeBridge autoload (:9081). Asserts D6
+#                     zero-config console capture: a live print() reaches runtime_get_log via
+#                     the scriptable Logger. MATRIX across the >=4.5 range where capture applies
+#                     (4.5, the floor where OS.add_logger was introduced, and 4.7, newest stable)
+#                     — on both, the print() must be captured. Headless like cli-plane (no
+#                     Xvfb/GPU), but introduced as continue-on-error until proven green on real
+#                     runners — then a candidate to promote to a gate.
 #   * editor-plane — boots the editor GUI under Xvfb and hits the built-in LSP. Runs as a
 #                    MATRIX across the 4.3 baseline and the newest stable (4.7): the D7_CAPS /
 #                    D7_WS_RAW markers answer whether workspace/symbol and the other
@@ -64,6 +72,65 @@ jobs:
         env:
           GODOT_PROJECT: ${{ github.workspace }}/example
         run: node test-integration/cli.integration.mjs
+
+  runtime-plane:
+    name: runtime plane vs real game (headless)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # first live runtime-plane job; headless & deterministic, so a
+                              # candidate to promote to a required gate once proven green on runners
+    strategy:
+      fail-fast: false        # the 4.5 (capture floor) and 4.7 (newest stable) arms are independent
+      matrix:
+        godot: [ "4.5-stable", "4.7-stable" ]
+    env:
+      # Exercise D6 capture across the >=4.5 range: 4.5 is the floor where the scriptable Logger
+      # (OS.add_logger) was introduced; 4.7 is the newest stable. On both, a live print() must be
+      # captured into runtime_get_log. A <4.5 arm is intentionally omitted here: on Godot 4.3/4.4
+      # the runtime autoload does not currently load at all (tracked separately), so it would
+      # exercise a broken degradation path rather than D6 capture. Overrides GODOT_VERSION for this
+      # job only.
+      GODOT_VERSION: ${{ matrix.godot }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install Godot (standard linux build)
+        run: |
+          set -eux
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          GODOT_BIN="$PWD/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --version
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Build host
+        working-directory: host
+        run: npm ci && npm run build
+      - name: Import the example project (headless)
+        run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example" --import || true'
+      - name: Boot the game headless and run the D6 capture probe
+        working-directory: host
+        env:
+          GODOT_PROJECT: ${{ github.workspace }}/example
+        run: |
+          set -eux
+          # Plane C runs INSIDE the running game (no editor, no GUI): the runtime autoload opens
+          # :9081. Fully headless — no Xvfb / GPU, unlike the editor/dap planes. Boot the game in
+          # the background, wait for the port, then run the probe (its exit status gates the step).
+          "$GODOT_BIN" --headless --path "$GODOT_PROJECT" >/tmp/godot-game.log 2>&1 &
+          for i in $(seq 1 40); do
+            if node -e "require('net').connect(9081,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "runtime bridge port open"; break
+            fi
+            sleep 1
+          done
+          node test-integration/runtime-capture.integration.mjs
+      - name: Game log tail (on failure)
+        if: always()
+        run: tail -n 50 /tmp/godot-game.log || true
 
   editor-plane:
     name: editor / LSP plane vs real editor (experimental)

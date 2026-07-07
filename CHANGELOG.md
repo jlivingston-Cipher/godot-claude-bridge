@@ -6,6 +6,23 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — runtime-plane CI probe (live D6 zero-config console capture)
+- New `runtime-plane` job in `.github/workflows/integration.yml` boots the example **game**
+  headless (no editor / no GUI) and drives Plane C against the in-game `ClaudeRuntimeBridge`
+  autoload (`:9081`), asserting the D6 contract against a LIVE engine: a real `print()` is captured
+  into `runtime_get_log` via the scriptable `Logger`. This gives D6 a live regression guard rather
+  than proving it only by a local one-off probe.
+- Runs as a matrix across the **>=4.5** range where D6 capture applies — **4.5** (the floor where
+  `OS.add_logger` was introduced) and the newest stable **4.7** — asserting on both that the live
+  `print()` is captured. The probe (`host/test-integration/runtime-capture.integration.mjs`) drives
+  the host's own runtime tools (`runtime_get_log` / `runtime_call_method`) against the live game —
+  the CLI-plane pattern, extended to Plane C — and reads the `capture` flag. It is version-aware, so
+  it can also assert the `<4.5` no-op contract if a lower arm is added later.
+- Headless and deterministic (no Xvfb / GPU, unlike the editor/dap planes); introduced as
+  `continue-on-error` until proven green on real runners, then a strong candidate to promote to a
+  required gate. **No host/addon code, tool, resource, or version changes** — CI + test-only (tool
+  count still **70**, host suite still **124**).
+
 ## [0.6.0] — 2026-07-06
 
 ### Added — D6: zero-config console capture in the runtime bridge (Godot 4.5+)
