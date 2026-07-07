@@ -6,22 +6,40 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — runtime bridge failed to load on Godot 4.3/4.4 (D6 regression)
+- `runtime_bridge.gd` called the 4.5+ `OS.add_logger()` / `OS.remove_logger()` **directly**. GDScript
+  resolves those at parse time, so on Godot 4.3/4.4 (where the methods don't exist) the whole script
+  failed to compile and the runtime autoload never loaded — taking **all of Plane C** down, not just
+  D6 capture, despite the `ClassDB.class_has_method` runtime guard (which never got the chance to run).
+  They are now invoked dynamically via `OS.call("add_logger"/"remove_logger", …)`, so the script
+  compiles on 4.3/4.4 and capture stays a clean no-op there while working on 4.5+. Surfaced by the new
+  runtime-plane CI probe below.
+- The example's `project.godot` referenced the runtime autoload by UID (`uid://…`), which Godot 4.3
+  cannot resolve, so the autoload failed to instantiate even once the parse error was fixed. It now
+  uses the `res://addons/claude_bridge/runtime_bridge.gd` path — exactly what `plugin.gd`'s
+  `add_autoload_singleton` writes for real installs (so this only ever affected the bundled example,
+  never users who enable the plugin), and which resolves on every Godot 4.x.
+- `ADDON_VERSION` (and both `plugin.cfg`) **0.6.0 → 0.6.1**. No host/tool changes (still **70 tools**,
+  **124 host tests**).
+
 ### Added — runtime-plane CI probe (live D6 zero-config console capture)
 - New `runtime-plane` job in `.github/workflows/integration.yml` boots the example **game**
   headless (no editor / no GUI) and drives Plane C against the in-game `ClaudeRuntimeBridge`
   autoload (`:9081`), asserting the D6 contract against a LIVE engine: a real `print()` is captured
   into `runtime_get_log` via the scriptable `Logger`. This gives D6 a live regression guard rather
   than proving it only by a local one-off probe.
-- Runs as a matrix across the **>=4.5** range where D6 capture applies — **4.5** (the floor where
-  `OS.add_logger` was introduced) and the newest stable **4.7** — asserting on both that the live
-  `print()` is captured. The probe (`host/test-integration/runtime-capture.integration.mjs`) drives
-  the host's own runtime tools (`runtime_get_log` / `runtime_call_method`) against the live game —
-  the CLI-plane pattern, extended to Plane C — and reads the `capture` flag. It is version-aware, so
-  it can also assert the `<4.5` no-op contract if a lower arm is added later.
-- Headless and deterministic (no Xvfb / GPU, unlike the editor/dap planes); introduced as
-  `continue-on-error` until proven green on real runners, then a strong candidate to promote to a
-  required gate. **No host/addon code, tool, resource, or version changes** — CI + test-only (tool
-  count still **70**, host suite still **124**).
+- Runs as a matrix across **4.3** (below the capture floor — the probe asserts the documented no-op:
+  the bridge loads, `capture` is false, the `print()` is absent, and `push_log` entries are still
+  served), **4.5** (the floor where `OS.add_logger` was introduced) and the newest stable **4.7** (on
+  4.5/4.7 the live `print()` must be captured). The probe
+  (`host/test-integration/runtime-capture.integration.mjs`) drives the host's own runtime tools
+  (`runtime_get_log` / `runtime_call_method`) against the live game — the CLI-plane pattern, extended
+  to Plane C — reads the `capture` flag, and is version-aware, asserting the correct behavior on each
+  side of the 4.5 boundary. (The 4.3 arm depends on the runtime-bridge fix above.)
+- Headless and deterministic (no Xvfb / GPU, unlike the editor/dap planes); a **required gate** like
+  cli-plane — all three arms (4.3/4.5/4.7) must pass, and the three contexts are added to `main`'s
+  branch-protection required checks. **No host/addon code, tool, resource, or version changes** —
+  CI + test-only (tool count still **70**, host suite still **124**).
 
 ## [0.6.0] — 2026-07-06
 

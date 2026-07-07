@@ -98,7 +98,11 @@ func _exit_tree() -> void:
 		if tree.node_renamed.is_connected(_on_tree_structure_changed):
 			tree.node_renamed.disconnect(_on_tree_structure_changed)
 	if _log_capture != null and ClassDB.class_has_method("OS", "remove_logger"):
-		OS.remove_logger(_log_capture)
+		# Call dynamically: OS.remove_logger() is 4.5+, and a literal OS.remove_logger(...) is
+		# resolved at PARSE time, so it fails to compile the whole script on Godot 4.3/4.4 —
+		# taking the entire runtime bridge down, not just capture. OS.call() defers the lookup
+		# to runtime, past the class_has_method guard above.
+		OS.call("remove_logger", _log_capture)
 	_log_capture = null
 	for c in _clients:
 		var peer: StreamPeerTCP = c["peer"]
@@ -207,7 +211,11 @@ func _install_log_capture() -> void:
 		return  # runtime script compilation unavailable — degrade quietly.
 	var inst = src.new()
 	inst.set("sink", Callable(self, "_on_captured_log"))
-	OS.add_logger(inst)
+	# Call dynamically (see _exit_tree): OS.add_logger() is 4.5+, and a literal call is resolved
+	# at PARSE time — a bare OS.add_logger(...) fails to compile the script on Godot 4.3/4.4,
+	# killing the whole runtime bridge. OS.call() defers to runtime, past the class_exists /
+	# class_has_method guard above.
+	OS.call("add_logger", inst)
 	_log_capture = inst
 	push_log("info", "log capture active (Godot %s)" % Engine.get_version_info().get("string", ""))
 

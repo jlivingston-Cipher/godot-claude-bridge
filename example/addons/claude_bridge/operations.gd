@@ -7,7 +7,7 @@ extends RefCounted
 ## wrapped in the EditorUndoRedoManager so a human can Ctrl-Z anything Claude did.
 
 const Codec := preload("res://addons/claude_bridge/variant_json.gd")
-const ADDON_VERSION := "0.6.0"
+const ADDON_VERSION := "0.6.1"
 
 var _plugin: EditorPlugin
 

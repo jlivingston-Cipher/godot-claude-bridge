@@ -20,7 +20,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
-ClaudeRuntimeBridge="*uid://dkyjj7tbsecr0"
+ClaudeRuntimeBridge="*res://addons/claude_bridge/runtime_bridge.gd"
 
 [editor_plugins]
 

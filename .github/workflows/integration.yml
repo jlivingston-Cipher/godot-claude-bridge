@@ -9,11 +9,11 @@ name: integration
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game ClaudeRuntimeBridge autoload (:9081). Asserts D6
 #                     zero-config console capture: a live print() reaches runtime_get_log via
-#                     the scriptable Logger. MATRIX across the >=4.5 range where capture applies
-#                     (4.5, the floor where OS.add_logger was introduced, and 4.7, newest stable)
-#                     — on both, the print() must be captured. Headless like cli-plane (no
-#                     Xvfb/GPU), but introduced as continue-on-error until proven green on real
-#                     runners — then a candidate to promote to a gate.
+#                     the scriptable Logger. MATRIX across 4.3 (below the 4.5 floor — capture is a
+#                     documented no-op: bridge loads, print() absent, push_log still served), 4.5
+#                     (the floor where OS.add_logger was introduced) and 4.7 (newest stable) — on
+#                     4.5/4.7 the print() must be captured. Headless & deterministic like cli-plane
+#                     (no Xvfb/GPU), and — like cli-plane — a REQUIRED gate: all three arms must pass.
 #   * editor-plane — boots the editor GUI under Xvfb and hits the built-in LSP. Runs as a
 #                    MATRIX across the 4.3 baseline and the newest stable (4.7): the D7_CAPS /
 #                    D7_WS_RAW markers answer whether workspace/symbol and the other
@@ -76,19 +76,18 @@ jobs:
   runtime-plane:
     name: runtime plane vs real game (headless)
     runs-on: ubuntu-latest
-    continue-on-error: true   # first live runtime-plane job; headless & deterministic, so a
-                              # candidate to promote to a required gate once proven green on runners
+    # A required gate, like cli-plane: headless & deterministic (no Xvfb/GPU), so a live-engine flake
+    # can't hide a real regression. All three matrix arms must pass; added to branch protection.
     strategy:
-      fail-fast: false        # the 4.5 (capture floor) and 4.7 (newest stable) arms are independent
+      fail-fast: false        # the 4.3 (no-op), 4.5 (capture floor) and 4.7 (newest) arms are independent
       matrix:
-        godot: [ "4.5-stable", "4.7-stable" ]
+        godot: [ "4.3-stable", "4.5-stable", "4.7-stable" ]
     env:
-      # Exercise D6 capture across the >=4.5 range: 4.5 is the floor where the scriptable Logger
-      # (OS.add_logger) was introduced; 4.7 is the newest stable. On both, a live print() must be
-      # captured into runtime_get_log. A <4.5 arm is intentionally omitted here: on Godot 4.3/4.4
-      # the runtime autoload does not currently load at all (tracked separately), so it would
-      # exercise a broken degradation path rather than D6 capture. Overrides GODOT_VERSION for this
-      # job only.
+      # Exercise both sides of the D6 capture boundary. 4.5 (the floor where the scriptable Logger /
+      # OS.add_logger was introduced) and 4.7 (newest stable): a live print() must be captured into
+      # runtime_get_log. 4.3 (below the floor): capture is a documented no-op — the probe asserts the
+      # bridge still loads, capture is false, the print() is absent, and push_log entries are still
+      # served. Overrides GODOT_VERSION for this job only.
       GODOT_VERSION: ${{ matrix.godot }}
     steps:
       - uses: actions/checkout@v4
