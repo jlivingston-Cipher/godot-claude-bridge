@@ -6,6 +6,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — CI: the DAP-plane probe now runs against the newest stable (4.7) too
+- The experimental `dap-plane` integration job gained a Godot-version matrix (`4.3-stable` +
+  `4.7-stable`), so the live D_DAP_* capability probe characterizes both the baseline and the
+  newest stable in one run (4.7 is also the version the maintainer runs locally). Findings:
+  **`dbg_evaluate` gains full expression evaluation on 4.7** (`counter + 1` → `101`; on 4.3 it
+  does bare-name lookup only and returns empty for a compound expression), while
+  **`dbg_set_variable` stays advertised-but-unanswered even on 4.7** (`supportsSetVariable=true`
+  yet no reply) — the ~8 s fail-fast bound from `[0.4.16]` fires cleanly on 4.7, confirming it as
+  permanent behavior rather than a 4.3-only workaround. The conditional / hit-count / logpoint
+  breakpoint modifiers remain advertised-unsupported and ignored through 4.7. CI-only; no tool /
+  schema / host change (still **70 tools / 109 tests**).
+
 ## [0.4.16] — 2026-07-06
 
 ### Changed — `dbg_watch` bounds its watch evaluate so a stalling watch fails fast

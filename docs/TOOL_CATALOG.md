@@ -606,6 +606,7 @@ List the color literals the language server recognizes in a script — the `Colo
 - **Output** `{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
 
 ### `dbg_evaluate` ✅ · destructive (arbitrary code execution — gate hard)
+Evaluate an expression in the current stopped frame (DAP `evaluate`, repl context). **Live-verified in CI:** Godot 4.3 does bare-name lookup only (a compound expression like `counter + 1` returns empty), while **Godot 4.7 performs full expression evaluation** (`counter + 1` → `101`). The request is bounded by `GODOT_DAP_EVALUATE_TIMEOUT_MS` (~8 s) so a non-answering adapter fails fast rather than hanging the full DAP timeout.
 - **Input** `{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" } } }`
 - **Output** `{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
 

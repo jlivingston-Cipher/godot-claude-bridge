@@ -101,7 +101,7 @@ console.log(`D_DAP_LOG: stopped=${log.stopped} ran=${log.ran} logged=${logged} =
 // One-line summary for quick grep.
 console.log(
   `D_DAP_MODIFIERS: condition=${verdict(cond)} hitCondition=${verdict(hit)} logMessage=${logVerdict}` +
-    ` (adapter advertises all three unsupported on Godot 4.3)`,
+    ` (adapter advertises all three unsupported on Godot ${process.env.GODOT_VERSION ?? "this build"})`,
 );
 
 if (!cond.reached && !hit.reached && !log.reached) {
