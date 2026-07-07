@@ -30,6 +30,11 @@ name: integration
 #                    stable (4.7) so the D_DAP_* markers reveal which advertised-but-dead-
 #                    on-4.3 capabilities light up on a modern build. Also EXPERIMENTAL /
 #                    continue-on-error (never blocks).
+#   * csharp-plane  — D4 SCAFFOLD (C1). Downloads a Mono/.NET Godot build + the .NET 8 SDK and
+#                     boots the C# fixture (example-csharp/) headless: dotnet-builds the project
+#                     (OmniSharp-readiness for C2), imports + --build-solutions, then asserts the
+#                     C# scene's _Ready() ran (C#_PLANE_BOOT_OK). EXPERIMENTAL / continue-on-error
+#                     until the toolchain is proven on real runners. See docs/D4_CSHARP_PLAN.md.
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -269,3 +274,62 @@ jobs:
       - name: Editor log tail (on failure)
         if: always()
         run: tail -n 80 /tmp/godot-editor-dap.log || true
+
+  csharp-plane:
+    name: C# / .NET plane vs real Mono build (experimental)
+    runs-on: ubuntu-latest
+    # D4 SCAFFOLD (C1). New language plane; the Mono toolchain + headless C# boot path are being
+    # established, so this runs continue-on-error and must NEVER block a merge — exactly like the
+    # editor/dap planes. Promote to a required gate only once it is green on real runners (the way
+    # runtime-plane was promoted). See docs/D4_CSHARP_PLAN.md.
+    continue-on-error: true
+    env:
+      # The .NET/Mono Godot build (NOT the standard build the other planes download). Its version
+      # MUST match the Godot.NET.Sdk pinned in example-csharp/ExampleCsharp.csproj (4.7.0) and the
+      # net8.0 target — see docs/D4_CSHARP_PLAN.md §"Version alignment".
+      GODOT_VERSION: "4.7-stable"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Mono/.NET Godot (linux x86_64)
+        run: |
+          set -eux
+          # The mono asset differs from the standard planes: the ZIP expands to a DIRECTORY, and the
+          # binary inside carries the "_mono_linux.x86_64" suffix. Resolve it with find so a minor
+          # naming change surfaces as an empty-var failure rather than a wrong path.
+          curl -fL -o godot-mono.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+          unzip -q godot-mono.zip
+          GODOT_BIN="$(find "$PWD/Godot_v${GODOT_VERSION}_mono_linux_x86_64" -maxdepth 1 -type f -name 'Godot_v*_mono_linux.x86_64' | head -1)"
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --version
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Build the C# project standalone (OmniSharp-readiness, C2)
+        working-directory: example-csharp
+        run: |
+          set -eux
+          # Proves the project resolves Godot.NET.Sdk + GodotSharp and compiles WITHOUT the editor —
+          # the same build OmniSharp will drive for the cs_* semantic tools in C2.
+          dotnet restore
+          dotnet build -c Debug --no-restore
+      - name: Import + build C# solution (headless)
+        run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example-csharp" --import --build-solutions --quit-after 200 || true'
+      - name: Boot the C# game headless (C1 smoke — the .NET assembly loads and the scene runs)
+        run: |
+          set -eux
+          # C1 acceptance: the engine boots C#. Player._Ready() prints the marker on the first frame;
+          # --quit-after keeps it deterministic and the outer timeout guards against a hang.
+          timeout 120 "$GODOT_BIN" --headless --path "${{ github.workspace }}/example-csharp" \
+            --quit-after 200 >/tmp/godot-csharp.log 2>&1 || true
+          echo "=== C#_PLANE log ==="; cat /tmp/godot-csharp.log || true
+          if grep -q "\[example-csharp\] player ready" /tmp/godot-csharp.log; then
+            echo "C#_PLANE_BOOT_OK: C# _Ready ran under the Mono build"
+          else
+            echo "C#_PLANE_BOOT_FAIL: '[example-csharp] player ready' marker not found"
+            exit 1
+          fi
+      - name: C# game log tail (on failure)
+        if: always()
+        run: tail -n 80 /tmp/godot-csharp.log || true

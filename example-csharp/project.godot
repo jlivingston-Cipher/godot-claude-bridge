@@ -1,0 +1,28 @@
+; Engine configuration file.
+; C# / .NET counterpart of ../example (the GDScript fixture). Kept deliberately
+; minimal: one scene, one C# script, the members every bridge plane exercises.
+;
+; This project intentionally does NOT bundle the (GDScript) claude_bridge addon:
+; the C#/.NET plane (D4) is served by OmniSharp (LSP) and the Godot Mono debugger
+; (DAP), which are independent of the GDScript editor/runtime bridge. Keeping the
+; addon out also avoids a third ADDON_VERSION copy under contract_check.py.
+
+config_version=5
+
+[application]
+
+config/name="Claude Bridge C# Example"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7")
+
+[dotnet]
+
+project/assembly_name="ExampleCsharp"
+
+[rendering]
+
+; Match ../example: use the OpenGL (Compatibility) renderer so the project runs on
+; GPU-less CI runners under Mesa llvmpipe software GL. The default Forward+/Vulkan
+; renderer segfaults on init without a GPU.
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

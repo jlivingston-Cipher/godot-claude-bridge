@@ -1,0 +1,6 @@
+# .NET build artifacts (the root .gitignore already covers .godot/ and *.import).
+# Godot regenerates the assemblies on --build-solutions / editor open.
+bin/
+obj/
+.mono/
+*.user
