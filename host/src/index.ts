@@ -14,6 +14,7 @@ import { registerProcessTools } from "./tools/processes.js";
 import { registerResources } from "./tools/resources.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
+import { RESOURCE_CAPABILITIES, registerResourceSubscriptions } from "./subscriptions.js";
 import { log } from "./logger.js";
 
 async function main(): Promise<void> {
@@ -32,9 +33,11 @@ async function main(): Promise<void> {
 
   // D2: advertise the MCP task-execution model and hand the SDK a task store,
   // so long jobs (export/import/headless script) support poll/await/cancel.
+  // D3: also advertise resources.subscribe so clients can subscribe to
+  // godot://… resources and receive notifications/resources/updated.
   const server = new McpServer(
     { name: "godot-claude-bridge", version: "0.4.3" },
-    { capabilities: TASK_CAPABILITIES, taskStore },
+    { capabilities: { ...TASK_CAPABILITIES, ...RESOURCE_CAPABILITIES }, taskStore },
   );
 
   // B1: enforce frozen output schemas on every structured tool. Must run before
@@ -55,6 +58,9 @@ async function main(): Promise<void> {
   const processes = registerProcessTools(server, config);
   // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
   registerResources(server, bridge, runtime);
+  // D3: resource subscriptions — push notifications/resources/updated when a
+  // subscribed godot://… resource changes (editor selection / edited scene).
+  registerResourceSubscriptions(server, bridge, runtime);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

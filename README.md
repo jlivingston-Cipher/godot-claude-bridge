@@ -4,7 +4,7 @@
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 115-test host suite
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 121-test host suite
 > and real-Godot integration smokes (CLI, LSP and DAP planes)** on Node 18/20/22 — the
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
@@ -21,7 +21,7 @@ Brings Godot into the Claude development ecosystem via MCP. It ships **all four*
 
 Together these turn Claude from a scaffolder into a co-developer that can author scenes, write type-checked GDScript, run it, watch it, debug it, and drive the live game.
 
-**Safety & UX polish (all implemented):** destructive tools are **elicitation-gated** (a client-side confirmation prompt, with a `confirm: true` override and a safe block when the client can't prompt); long jobs (`godot_export`/`godot_import`/`godot_run_headless_script`) run under the formal **MCP task model** (D2) — a task-aware client creates the job, then polls (`tasks/get`), awaits (`tasks/result`), or cancels (`tasks/cancel`) it, while plain clients still get today's blocking result; `godot_run_managed` + `godot_output` capture the game's full `print()`/error console host-side; and five **MCP resources** (`godot://scene-tree`, `godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose pull-on-demand context.
+**Safety & UX polish (all implemented):** destructive tools are **elicitation-gated** (a client-side confirmation prompt, with a `confirm: true` override and a safe block when the client can't prompt); long jobs (`godot_export`/`godot_import`/`godot_run_headless_script`) run under the formal **MCP task model** (D2) — a task-aware client creates the job, then polls (`tasks/get`), awaits (`tasks/result`), or cancels (`tasks/cancel`) it, while plain clients still get today's blocking result; `godot_run_managed` + `godot_output` capture the game's full `print()`/error console host-side; and five **MCP resources** (`godot://scene-tree`, `godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose pull-on-demand context — and a client can **subscribe** (`resources/subscribe`) to be pushed `notifications/resources/updated` when a subscribed resource changes (D3, e.g. the editor selection or edited scene).
 
 ## Why this one
 
@@ -180,8 +180,8 @@ server.registerTool(name, { title, description, inputSchema /* zod raw shape */ 
 If you install the newer **SDK v2** (`@modelcontextprotocol/server`, `import * as z from "zod/v4"`, `inputSchema: z.object({...})`), adjust the three import lines and wrap each `inputSchema` shape in `z.object(...)`. The tool logic is unchanged. See the SDK's server guide for the exact v2 surface.
 
 ## Status & what's next
-All four capability planes plus the safety/UX polish are implemented and live-validated: elicitation gating, the formal MCP **task model** for long jobs (D2 — create/poll/await/cancel), host-side console capture (`godot_run_managed`/`godot_output`, which sidesteps the GDScript "can't hook `print()`" limit — `ClaudeRuntimeBridge.push_log` remains available for in-game structured logging), enforced output schemas, and MCP resources.
+All four capability planes plus the safety/UX polish are implemented and live-validated: elicitation gating, the formal MCP **task model** for long jobs (D2 — create/poll/await/cancel), host-side console capture (`godot_run_managed`/`godot_output`, which sidesteps the GDScript "can't hook `print()`" limit — `ClaudeRuntimeBridge.push_log` remains available for in-game structured logging), enforced output schemas, MCP resources, and live resource **subscriptions** (D3 — `resources/subscribe` + `notifications/resources/updated`).
 
-Backlog (see `BACKLOG.md`): resource **subscriptions** with live `notifications/resources/updated` pushes (D3); C#/.NET debugging via the OmniSharp path (D4); and an optional GDExtension logger for zero-config in-process capture without a managed parent process (D6). **D2 — the formal MCP task execution model for long jobs — is now implemented** (`godot_export`/`godot_import`/`godot_run_headless_script`); D3 remains best implemented and validated on a live-Godot dev machine.
+Backlog (see `BACKLOG.md`): C#/.NET debugging via the OmniSharp path (D4); and an optional GDExtension logger for zero-config in-process capture without a managed parent process (D6). **D2 — the formal MCP task execution model for long jobs — is now implemented** (`godot_export`/`godot_import`/`godot_run_headless_script`), and **D3 — resource subscriptions — is now implemented** (`resources/subscribe`/`resources/unsubscribe` + `notifications/resources/updated` pushed on editor selection / edited-scene change); the end-to-end push is validated live by the non-blocking `editor-plane` CI probe.
 
 MIT licensed.

@@ -774,6 +774,18 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 | `godot://runtime/log` | application/json | runtime bridge — log ring buffer |
 | `godot://class/{name}` | application/json | editor bridge — ClassDB docs (URI template) |
 
+## Resource subscriptions (D3)
+
+The server advertises the `resources.subscribe` capability. A client may `resources/subscribe` (and
+`resources/unsubscribe`) any of the URIs above; the host then pushes `notifications/resources/updated`
+for a URI when its underlying source changes, so a subscriber re-reads only when needed instead of
+polling. Change signals come from the editor addon: changing the node selection updates
+`godot://editor-state`, and switching the edited scene updates both `godot://editor-state` and
+`godot://scene-tree`. Non-subscribers are unaffected — the pull-on-demand reads above behave exactly
+as before. The push travels over the same addon bridge socket as an unsolicited
+`{"event":"resource.changed","uri":…}` line (no request `id`, so it never collides with a
+request/response); only URIs a client has actually subscribed to are forwarded to that client.
+
 ## Tool Index
 
 | Tool | Plane | Status | Destructive |

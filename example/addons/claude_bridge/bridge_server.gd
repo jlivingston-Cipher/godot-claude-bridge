@@ -109,3 +109,13 @@ func _handle_line(peer: StreamPeerTCP, line: String) -> void:
 func _send(peer: StreamPeerTCP, obj: Dictionary) -> void:
 	var text := JSON.stringify(obj) + "\n"
 	peer.put_data(text.to_utf8_buffer())
+
+
+## D3: push an unsolicited "resource changed" event to every connected client
+## so a subscribed MCP host can emit notifications/resources/updated. Events carry
+## no "id" (they are not responses); the host routes them by the "event" field.
+func broadcast_event(uri: String) -> void:
+	for c in _clients:
+		var peer: StreamPeerTCP = c["peer"]
+		if peer and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			_send(peer, {"event": "resource.changed", "uri": uri})

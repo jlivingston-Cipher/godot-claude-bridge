@@ -8,6 +8,9 @@ interface Pending {
   timer: NodeJS.Timeout;
 }
 
+/** Notified with the changed resource URI when the addon pushes a change event. */
+export type ResourceChangedListener = (uri: string) => void;
+
 export class BridgeError extends Error {
   code: string;
   constructor(code: string, message: string) {
@@ -21,12 +24,22 @@ export class BridgeError extends Error {
  * TCP client for the in-editor Claude Bridge addon. Speaks newline-delimited
  * JSON. Requests are correlated to responses by `id`. Connects lazily and
  * transparently reconnects on the next request after a drop.
+ *
+ * D3: the addon may also PUSH unsolicited change events — lines carrying an
+ * `event` field and no request `id` — so a subscribed MCP host can emit
+ * notifications/resources/updated. Those are routed to onResourceChanged
+ * listeners. For that push channel to stay live even when the host isn't
+ * actively issuing requests, ensureConnected() holds an open connection and
+ * transparently re-dials after a drop (e.g. an editor restart).
  */
 export class BridgeClient {
   private socket: net.Socket | null = null;
   private connecting: Promise<net.Socket> | null = null;
   private buffer = "";
   private pending = new Map<string, Pending>();
+  private eventListeners = new Set<ResourceChangedListener>();
+  private wantConnected = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly host: string,
@@ -35,6 +48,11 @@ export class BridgeClient {
     private readonly label = "editor bridge",
     private readonly hint = 'Is the editor open with the "Claude Bridge" plugin enabled?',
   ) {}
+
+  /** Register a listener for addon-pushed resource-change events. */
+  onResourceChanged(cb: ResourceChangedListener): void {
+    this.eventListeners.add(cb);
+  }
 
   private connect(): Promise<net.Socket> {
     if (this.socket && !this.socket.destroyed) return Promise.resolve(this.socket);
@@ -47,6 +65,7 @@ export class BridgeClient {
       socket.once("connect", () => {
         this.socket = socket;
         this.connecting = null;
+        this.clearReconnect();
         log(`bridge connected to ${this.host}:${this.port}`);
         resolve(socket);
       });
@@ -66,6 +85,43 @@ export class BridgeClient {
     return this.connecting;
   }
 
+  /**
+   * Hold an open connection so addon-pushed change events are received even
+   * without an in-flight request. Idempotent; re-dials after a drop until
+   * close() is called. Never rejects — a not-yet-running editor just retries.
+   */
+  ensureConnected(): Promise<void> {
+    this.wantConnected = true;
+    return this.connect().then(
+      () => {},
+      () => {
+        this.scheduleReconnect();
+      },
+    );
+  }
+
+  private scheduleReconnect(): void {
+    if (!this.wantConnected || this.reconnectTimer) return;
+    if (this.socket && !this.socket.destroyed) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.wantConnected) return;
+      this.connect().then(
+        () => {},
+        () => this.scheduleReconnect(),
+      );
+    }, 1000);
+    // Don't keep the event loop alive just for reconnect attempts.
+    this.reconnectTimer.unref?.();
+  }
+
+  private clearReconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
   private onData(chunk: Buffer | string): void {
     this.buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
     let nl = this.buffer.indexOf("\n");
@@ -78,11 +134,30 @@ export class BridgeClient {
   }
 
   private onMessage(line: string): void {
-    let msg: { id?: string; ok?: boolean; result?: unknown; error?: { code: string; message: string } };
+    let msg: {
+      id?: string;
+      ok?: boolean;
+      result?: unknown;
+      error?: { code: string; message: string };
+      event?: string;
+      uri?: string;
+    };
     try {
       msg = JSON.parse(line);
     } catch {
       log("bridge sent non-JSON line:", line);
+      return;
+    }
+    // D3: unsolicited change events carry an `event` field and no request id.
+    if (msg.event === "resource.changed" && typeof msg.uri === "string") {
+      const uri = msg.uri;
+      for (const cb of this.eventListeners) {
+        try {
+          cb(uri);
+        } catch (err) {
+          log("resource-changed listener threw:", err instanceof Error ? err.message : String(err));
+        }
+      }
       return;
     }
     const id = msg.id;
@@ -105,6 +180,8 @@ export class BridgeClient {
       p.reject(new BridgeError("bridge_closed", "Bridge connection closed before a response arrived"));
     }
     this.pending.clear();
+    // Keep the push channel alive across editor restarts while subscriptions want it.
+    if (this.wantConnected) this.scheduleReconnect();
   }
 
   /** Send one request and await its correlated response. */
@@ -134,6 +211,8 @@ export class BridgeClient {
   }
 
   close(): void {
+    this.wantConnected = false;
+    this.clearReconnect();
     if (this.socket) this.socket.destroy();
     this.socket = null;
   }
