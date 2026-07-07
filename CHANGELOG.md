@@ -6,6 +6,24 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — D3 follow-ups: runtime-side resource change events + host-side coalescing
+- **Runtime SceneTree subscriptions.** The in-game runtime autoload (`runtime_bridge.gd`) now emits a
+  `resource.changed` for `godot://runtime/tree` when the running game's live SceneTree gains, loses, or
+  renames a node, so a subscriber is pushed `notifications/resources/updated` and re-reads the live
+  tree. Emission is collapsed to at most one push per frame via a dirty flag, so a burst of node
+  adds/removes in a single frame is a single event. The host side was already wired (the runtime
+  `BridgeClient`'s `onResourceChanged` + `ensureConnected`); this adds the missing addon emitter,
+  mirroring the editor `broadcast_event`. `ADDON_VERSION` (and both `plugin.cfg`) go **0.5.0 → 0.5.1**
+  (host `package.json` unchanged until the next release cut).
+- **Host-side coalescing.** `registerResourceSubscriptions` now throttles rapid `resources/updated`
+  pushes per URI with a leading-edge + trailing-flush window: the first change pushes immediately, then
+  further changes inside the window (default 50 ms, override via `CLAUDE_RESOURCE_COALESCE_MS`; `0`
+  disables) collapse into at most one trailing push. This applies to every subscribed URI — editor and
+  runtime — so a noisy source (e.g. continuous SceneTree churn) can't fan out as a flood. Multiple
+  `updated` are spec-harmless (the client just re-reads), so this only trims volume.
+- Tool count unchanged (**still 70 tools**); the host suite goes **121 → 123 tests** — a burst of rapid
+  changes collapses to leading + one trailing push, and `coalesceMs = 0` restores one-push-per-change.
+
 ## [0.5.0] — 2026-07-06
 
 ### Added — resource subscriptions with live `notifications/resources/updated` (D3)

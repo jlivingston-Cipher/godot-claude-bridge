@@ -36,6 +36,7 @@ var _clients: Array = [] # Array of {peer, buf}
 var _port: int = DEFAULT_PORT
 var _log: Array = []     # ring buffer of {seq, level, message}
 var _log_seq: int = 0
+var _tree_dirty: bool = false
 
 
 func _ready() -> void:
@@ -50,6 +51,14 @@ func _ready() -> void:
 		push_error("[claude_runtime] could not listen on 127.0.0.1:%d (error %d)" % [_port, err])
 	else:
 		push_log("info", "ClaudeRuntimeBridge listening on 127.0.0.1:%d" % _port)
+	# D3 follow-up: re-emit godot://runtime/tree when the live SceneTree structure
+	# changes so subscribers re-read it. Collapsed to one push per frame via
+	# _tree_dirty (see _process) so a burst of node adds/removes is a single event.
+	var tree := get_tree()
+	if tree:
+		tree.node_added.connect(_on_tree_structure_changed)
+		tree.node_removed.connect(_on_tree_structure_changed)
+		tree.node_renamed.connect(_on_tree_structure_changed)
 
 
 ## Public API: game code can route its own logs here for runtime.get_log to read.
@@ -61,6 +70,14 @@ func push_log(level: String, message: String) -> void:
 
 
 func _exit_tree() -> void:
+	var tree := get_tree()
+	if tree:
+		if tree.node_added.is_connected(_on_tree_structure_changed):
+			tree.node_added.disconnect(_on_tree_structure_changed)
+		if tree.node_removed.is_connected(_on_tree_structure_changed):
+			tree.node_removed.disconnect(_on_tree_structure_changed)
+		if tree.node_renamed.is_connected(_on_tree_structure_changed):
+			tree.node_renamed.disconnect(_on_tree_structure_changed)
 	for c in _clients:
 		var peer: StreamPeerTCP = c["peer"]
 		if peer:
@@ -93,6 +110,10 @@ func _process(_delta: float) -> void:
 		_drain_lines(c)
 		alive.append(c)
 	_clients = alive
+	# D3 follow-up: one runtime-tree push per frame if the SceneTree changed.
+	if _tree_dirty:
+		_tree_dirty = false
+		broadcast_event("godot://runtime/tree")
 
 
 func _drain_lines(c: Dictionary) -> void:
@@ -125,6 +146,24 @@ func _handle_line(peer: StreamPeerTCP, line: String) -> void:
 
 func _send(peer: StreamPeerTCP, obj: Dictionary) -> void:
 	peer.put_data((JSON.stringify(obj) + "\n").to_utf8_buffer())
+
+
+## D3: push an unsolicited "resource changed" event to every connected client so
+## a subscribed MCP host can emit notifications/resources/updated. Mirrors the
+## editor bridge_server; events carry no "id" (they are not responses), so the
+## host routes them by the "event" field without colliding with request/response.
+func broadcast_event(uri: String) -> void:
+	for c in _clients:
+		var peer: StreamPeerTCP = c["peer"]
+		if peer and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			_send(peer, {"event": "resource.changed", "uri": uri})
+
+
+## D3 follow-up: the live SceneTree gained/lost/renamed a node. Mark it dirty;
+## _process coalesces to a single godot://runtime/tree push per frame regardless
+## of how many nodes changed this frame.
+func _on_tree_structure_changed(_node: Node) -> void:
+	_tree_dirty = true
 
 
 # ----------------------------------------------------------- dispatch --------

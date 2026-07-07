@@ -779,12 +779,19 @@ Read-mostly context Claude can pull on demand (clients may subscribe). Each degr
 The server advertises the `resources.subscribe` capability. A client may `resources/subscribe` (and
 `resources/unsubscribe`) any of the URIs above; the host then pushes `notifications/resources/updated`
 for a URI when its underlying source changes, so a subscriber re-reads only when needed instead of
-polling. Change signals come from the editor addon: changing the node selection updates
-`godot://editor-state`, and switching the edited scene updates both `godot://editor-state` and
-`godot://scene-tree`. Non-subscribers are unaffected — the pull-on-demand reads above behave exactly
-as before. The push travels over the same addon bridge socket as an unsolicited
-`{"event":"resource.changed","uri":…}` line (no request `id`, so it never collides with a
-request/response); only URIs a client has actually subscribed to are forwarded to that client.
+polling. Change signals come from two sources. The **editor addon**: changing the node selection
+updates `godot://editor-state`, and switching the edited scene updates both `godot://editor-state`
+and `godot://scene-tree`. The **in-game runtime autoload**: when the running game's live SceneTree
+gains, loses, or renames a node, it updates `godot://runtime/tree` (coalesced to at most one push per
+frame regardless of how many nodes changed that frame). Non-subscribers are unaffected — the
+pull-on-demand reads above behave exactly as before. The push travels over the same bridge socket as
+an unsolicited `{"event":"resource.changed","uri":…}` line (no request `id`, so it never collides
+with a request/response); only URIs a client has actually subscribed to are forwarded to that client.
+
+The host also **coalesces** rapid updates per URI with a leading-edge + trailing-flush throttle: the
+first change pushes immediately, then further changes inside a short window (default 50 ms, override
+via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one trailing push. Multiple
+`updated` notifications are spec-harmless — the client just re-reads — so this only trims volume.
 
 ## Tool Index
 

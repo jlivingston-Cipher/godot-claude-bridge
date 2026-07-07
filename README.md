@@ -4,7 +4,7 @@
 > exercised end-to-end against a real Godot 4.7 editor and a real npm-installed
 > `@modelcontextprotocol/sdk@1.29.0`; the Go/No-Go checklist is GO (see
 > `LIVE_VALIDATION_SIGNOFF.md`). Output schemas are enforced (B1), the SDK floor is
-> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 121-test host suite
+> pinned to `^1.17.0` (D1), and CI runs the real build **plus a 123-test host suite
 > and real-Godot integration smokes (CLI, LSP and DAP planes)** on Node 18/20/22 — the
 > DAP plane lands a **real breakpoint stop** and reads live stack/scopes/variables, and the
 > request-driven `dbg_*` paths — `set_variable`, `evaluate`, and `dbg_watch`'s per-stop watch
@@ -21,7 +21,7 @@ Brings Godot into the Claude development ecosystem via MCP. It ships **all four*
 
 Together these turn Claude from a scaffolder into a co-developer that can author scenes, write type-checked GDScript, run it, watch it, debug it, and drive the live game.
 
-**Safety & UX polish (all implemented):** destructive tools are **elicitation-gated** (a client-side confirmation prompt, with a `confirm: true` override and a safe block when the client can't prompt); long jobs (`godot_export`/`godot_import`/`godot_run_headless_script`) run under the formal **MCP task model** (D2) — a task-aware client creates the job, then polls (`tasks/get`), awaits (`tasks/result`), or cancels (`tasks/cancel`) it, while plain clients still get today's blocking result; `godot_run_managed` + `godot_output` capture the game's full `print()`/error console host-side; and five **MCP resources** (`godot://scene-tree`, `godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose pull-on-demand context — and a client can **subscribe** (`resources/subscribe`) to be pushed `notifications/resources/updated` when a subscribed resource changes (D3, e.g. the editor selection or edited scene).
+**Safety & UX polish (all implemented):** destructive tools are **elicitation-gated** (a client-side confirmation prompt, with a `confirm: true` override and a safe block when the client can't prompt); long jobs (`godot_export`/`godot_import`/`godot_run_headless_script`) run under the formal **MCP task model** (D2) — a task-aware client creates the job, then polls (`tasks/get`), awaits (`tasks/result`), or cancels (`tasks/cancel`) it, while plain clients still get today's blocking result; `godot_run_managed` + `godot_output` capture the game's full `print()`/error console host-side; and five **MCP resources** (`godot://scene-tree`, `godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose pull-on-demand context — and a client can **subscribe** (`resources/subscribe`) to be pushed `notifications/resources/updated` when a subscribed resource changes (D3): the editor selection or edited scene, and the running game's live SceneTree (`godot://runtime/tree`). Rapid changes are coalesced per URI (leading-edge + trailing flush, overridable via `CLAUDE_RESOURCE_COALESCE_MS`).
 
 ## Why this one
 

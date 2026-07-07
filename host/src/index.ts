@@ -59,8 +59,13 @@ async function main(): Promise<void> {
   // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
   registerResources(server, bridge, runtime);
   // D3: resource subscriptions — push notifications/resources/updated when a
-  // subscribed godot://… resource changes (editor selection / edited scene).
-  registerResourceSubscriptions(server, bridge, runtime);
+  // subscribed godot://… resource changes (editor selection / edited scene, or
+  // the running game's live SceneTree). Rapid changes are coalesced per-URI; the
+  // trailing window is overridable via CLAUDE_RESOURCE_COALESCE_MS.
+  const coalesceMs = process.env.CLAUDE_RESOURCE_COALESCE_MS
+    ? Number.parseInt(process.env.CLAUDE_RESOURCE_COALESCE_MS, 10)
+    : undefined;
+  registerResourceSubscriptions(server, bridge, runtime, undefined, { coalesceMs });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
