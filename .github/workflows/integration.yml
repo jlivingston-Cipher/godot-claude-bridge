@@ -13,7 +13,10 @@ name: integration
 #                    Debug Adapter (DAP, :6006): runs the initialize handshake, dumps
 #                    the adapter's advertised capabilities (D_DAP_CAPS / D_DAP_FILTERS —
 #                    the "D-DAP" probe), and best-effort launches the example scene to a
-#                    breakpoint. Also EXPERIMENTAL / continue-on-error (never blocks).
+#                    breakpoint. Runs as a MATRIX across the 4.3 baseline and the newest
+#                    stable (4.7) so the D_DAP_* markers reveal which advertised-but-dead-
+#                    on-4.3 capabilities light up on a modern build. Also EXPERIMENTAL /
+#                    continue-on-error (never blocks).
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -113,6 +116,16 @@ jobs:
     name: DAP / debugger plane vs real adapter (experimental)
     runs-on: ubuntu-latest
     continue-on-error: true   # novel live-adapter probe; must never block a merge
+    strategy:
+      fail-fast: false        # one Godot version's probe must not cancel the other
+      matrix:
+        godot: [ "4.3-stable", "4.7-stable" ]
+    env:
+      # Probe BOTH the 4.3 baseline and the newest stable (4.7): the D_DAP_* markers then
+      # show which advertised-but-dead-on-4.3 capabilities (setVariable / evaluate /
+      # breakpoint modifiers) actually light up on a modern build. Overrides the
+      # workflow-level GODOT_VERSION for this job only; the run steps use it verbatim.
+      GODOT_VERSION: ${{ matrix.godot }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
