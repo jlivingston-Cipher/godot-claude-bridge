@@ -97,7 +97,7 @@ Run the project (detached), optionally from a specific scene.
 ```
 
 ### `godot_export` ✅  · destructive (writes build artifacts)
-Headless export via an export preset. Runs to completion; can be slow.
+Headless export via an export preset. Runs to completion; can be slow. Exposed as an MCP task (D2): task-aware clients poll/await/cancel it via `tasks/get` / `tasks/result` / `tasks/cancel`; plain clients still get a synchronous result.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false,
@@ -123,7 +123,7 @@ Headless export via an export preset. Runs to completion; can be slow.
 ```
 
 ### `godot_import` ✅
-Headless (re)import of project assets.
+Headless (re)import of project assets. Exposed as an MCP task (D2): poll/await/cancel via `tasks/get` / `tasks/result` / `tasks/cancel`; plain clients still get a synchronous result.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false,
@@ -141,7 +141,7 @@ Headless (re)import of project assets.
 ```
 
 ### `godot_run_headless_script` ✅
-Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT test runners or batch tools.
+Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT test runners or batch tools. Exposed as an MCP task (D2): a long test run can be polled/awaited/cancelled via `tasks/get` / `tasks/result` / `tasks/cancel`; plain clients still get a synchronous result.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false,
@@ -714,7 +714,7 @@ Set (replace) data breakpoints — 'watchpoints' that halt when a variable's val
 
 Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
 
-The long-running tools (`godot_export`, `godot_import`, `godot_run_headless_script`) emit `notifications/progress` while running whenever the caller supplies a `progressToken`.
+The long-running tools (`godot_export`, `godot_import`, `godot_run_headless_script`) run under the formal MCP **task-execution model** (D2), registered with `taskSupport: 'optional'`. A task-aware client calls the tool with a `task` augmentation to get a task handle back immediately, then drives it with `tasks/get` (poll status), `tasks/result` (await the final result), and `tasks/cancel` (stop the run — which aborts the underlying headless Godot process). A plain client that omits the `task` augmentation is unaffected: the host auto-creates a task, polls it to completion, and returns the result synchronously, exactly as before.
 
 ---
 

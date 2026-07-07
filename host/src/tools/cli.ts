@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { log } from "../logger.js";
+import { registerTaskTool } from "../tasks.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,12 +20,14 @@ async function runCaptured(
   cfg: Config,
   args: string[],
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<CapturedResult> {
   try {
     const { stdout, stderr } = await execFileAsync(cfg.godotBin, args, {
       cwd: cfg.projectPath,
       timeout: timeoutMs,
       maxBuffer: 32 * 1024 * 1024,
+      signal,
     });
     return { code: 0, stdout, stderr, timedOut: false };
   } catch (err: unknown) {
@@ -60,30 +63,6 @@ function textResult(obj: unknown) {
     content: [{ type: "text" as const, text: JSON.stringify(obj, null, 2) }],
     structuredContent: obj as Record<string, unknown>,
   };
-}
-
-/**
- * Emit periodic progress notifications while a long tool runs, if the caller
- * supplied a progressToken. Returns a stop function. Fully defensive: never
- * throws and no-ops when progress isn't supported.
- */
-function startProgress(extra: unknown, message: string): () => void {
-  const e = extra as { _meta?: { progressToken?: unknown }; sendNotification?: (n: unknown) => unknown } | undefined;
-  const token = e?._meta?.progressToken;
-  const send = e?.sendNotification;
-  if (token === undefined || typeof send !== "function") return () => {};
-  let n = 0;
-  const timer = setInterval(() => {
-    n += 1;
-    try {
-      Promise.resolve(
-        send({ method: "notifications/progress", params: { progressToken: token, progress: n, message: `${message}… (${n * 2}s)` } }),
-      ).catch(() => {});
-    } catch {
-      /* ignore */
-    }
-  }, 2000);
-  return () => clearInterval(timer);
 }
 
 export function registerCliTools(server: McpServer, cfg: Config): void {
@@ -133,12 +112,14 @@ export function registerCliTools(server: McpServer, cfg: Config): void {
     },
   );
 
-  server.registerTool(
+  registerTaskTool(
+    server,
     "godot_export",
     {
       title: "Export project",
       description:
-        "Headless export using an export preset. Runs to completion and returns exit code + logs. Can be slow.",
+        "Headless export using an export preset. Runs to completion and returns exit code + logs. Can be slow — " +
+        "exposed as an MCP task, so task-aware clients can poll, await, or cancel it (tasks/get, tasks/result, tasks/cancel).",
       inputSchema: {
         preset: z.string().describe("Export preset name as defined in export_presets.cfg"),
         output_path: z.string().describe("Output file path for the exported build"),
@@ -146,84 +127,77 @@ export function registerCliTools(server: McpServer, cfg: Config): void {
         timeout_ms: z.number().int().positive().optional().describe("Max run time (default 600000)"),
       },
     },
-    async ({ preset, output_path, debug, timeout_ms }, extra) => {
+    async ({ preset, output_path, debug, timeout_ms }, signal) => {
       const flag = debug ? "--export-debug" : "--export-release";
-      const stop = startProgress(extra, `Exporting "${preset}"`);
-      try {
-        const r = await runCaptured(
-          cfg,
-          ["--headless", "--path", cfg.projectPath, flag, preset, output_path],
-          timeout_ms ?? 600000,
-        );
-        return textResult({
-          preset,
-          output_path,
-          exit_code: r.code,
-          timed_out: r.timedOut,
-          stdout: tail(r.stdout),
-          stderr: tail(r.stderr),
-        });
-      } finally {
-        stop();
-      }
+      const r = await runCaptured(
+        cfg,
+        ["--headless", "--path", cfg.projectPath, flag, preset, output_path],
+        timeout_ms ?? 600000,
+        signal,
+      );
+      return textResult({
+        preset,
+        output_path,
+        exit_code: r.code,
+        timed_out: r.timedOut,
+        stdout: tail(r.stdout),
+        stderr: tail(r.stderr),
+      });
     },
   );
 
-  server.registerTool(
+  registerTaskTool(
+    server,
     "godot_import",
     {
       title: "Import assets",
-      description: "Headless (re)import of project assets. Runs to completion and returns exit code + logs.",
+      description:
+        "Headless (re)import of project assets. Runs to completion and returns exit code + logs. " +
+        "Exposed as an MCP task (poll/await/cancel via tasks/get, tasks/result, tasks/cancel).",
       inputSchema: {
         timeout_ms: z.number().int().positive().optional().describe("Max run time (default 600000)"),
       },
     },
-    async ({ timeout_ms }, extra) => {
-      const stop = startProgress(extra, "Importing assets");
-      try {
-        const r = await runCaptured(
-          cfg,
-          ["--headless", "--path", cfg.projectPath, "--import"],
-          timeout_ms ?? 600000,
-        );
-        return textResult({ exit_code: r.code, timed_out: r.timedOut, stdout: tail(r.stdout), stderr: tail(r.stderr) });
-      } finally {
-        stop();
-      }
+    async ({ timeout_ms }, signal) => {
+      const r = await runCaptured(
+        cfg,
+        ["--headless", "--path", cfg.projectPath, "--import"],
+        timeout_ms ?? 600000,
+        signal,
+      );
+      return textResult({ exit_code: r.code, timed_out: r.timedOut, stdout: tail(r.stdout), stderr: tail(r.stderr) });
     },
   );
 
-  server.registerTool(
+  registerTaskTool(
+    server,
     "godot_run_headless_script",
     {
       title: "Run headless script",
       description:
         "Run a GDScript in headless mode (godot --headless -s <script>). Use this to invoke test runners " +
-        "(GdUnit4 / GUT) or any batch tool. Returns exit code + logs.",
+        "(GdUnit4 / GUT) or any batch tool. Returns exit code + logs. Exposed as an MCP task, so a long test " +
+        "run can be polled, awaited, or cancelled (tasks/get, tasks/result, tasks/cancel).",
       inputSchema: {
         script_path: z.string().describe("Script to execute, e.g. res://addons/gdUnit4/bin/GdUnitCmdTool.gd"),
         args: z.array(z.string()).optional().describe("Extra CLI args passed after the script"),
         timeout_ms: z.number().int().positive().optional().describe("Max run time (default 600000)"),
       },
     },
-    async ({ script_path, args, timeout_ms }, extra) => {
-      const stop = startProgress(extra, `Running ${script_path}`);
-      try {
-        const r = await runCaptured(
-          cfg,
-          ["--headless", "--path", cfg.projectPath, "-s", script_path, ...(args ?? [])],
-          timeout_ms ?? 600000,
-        );
-        return textResult({
-          script_path,
-          exit_code: r.code,
-          timed_out: r.timedOut,
-          stdout: tail(r.stdout),
-          stderr: tail(r.stderr),
-        });
-      } finally {
-        stop();
-      }
+    async ({ script_path, args, timeout_ms }, signal) => {
+      const r = await runCaptured(
+        cfg,
+        ["--headless", "--path", cfg.projectPath, "-s", script_path, ...(args ?? [])],
+        timeout_ms ?? 600000,
+        signal,
+      );
+      return textResult({
+        script_path,
+        exit_code: r.code,
+        timed_out: r.timedOut,
+        stdout: tail(r.stdout),
+        stderr: tail(r.stderr),
+      });
     },
   );
 }
