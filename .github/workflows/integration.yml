@@ -38,8 +38,10 @@ name: integration
 #                     netcoredbg and runs a live cs_dbg_* DAP probe (markers C#_DAP_*: initialize gate
 #                     reached + capabilities, then a best-effort launch-to-breakpoint flow — log-only,
 #                     as the netcoredbg + Godot native-host attach story is being established).
-#                     EXPERIMENTAL / continue-on-error until the toolchain is proven on real runners.
-#                     See docs/D4_CSHARP_PLAN.md.
+#                     Now a REQUIRED gate (session 25): the fixture build, live OmniSharp cs_* LSP
+#                     probe and the netcoredbg initialize gate must pass — the launch-to-breakpoint
+#                     flow past C#_DAP_REACHED stays log-only. Promoted from experimental the way
+#                     runtime-plane was in session 20. See docs/D4_CSHARP_PLAN.md.
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -281,14 +283,14 @@ jobs:
         run: tail -n 80 /tmp/godot-editor-dap.log || true
 
   csharp-plane:
-    name: C# / .NET plane vs real Mono build (experimental)
+    name: C# / .NET plane vs real Mono build
     runs-on: ubuntu-latest
-    # D4 C1 (fixture/boot) + C2 (cs_* semantic tools via OmniSharp). New language plane; the Mono
-    # toolchain, headless C# boot path, and the OmniSharp LSP probe are being established, so this
-    # runs continue-on-error and must NEVER block a merge — exactly like the editor/dap planes.
-    # Promote to a required gate only once it is green on real runners (the way runtime-plane was
-    # promoted). See docs/D4_CSHARP_PLAN.md.
-    continue-on-error: true
+    # D4 C1 (fixture/boot) + C2 (cs_* semantic tools via OmniSharp) + C3 (cs_dbg_* via netcoredbg).
+    # A REQUIRED gate as of session 25: green on real runners across C1+C2+C3 and the C# LSP
+    # mutators, so a live-engine regression in the C#/.NET plane now blocks a merge — the way
+    # runtime-plane was promoted in session 20. The fixture/host builds, the OmniSharp cs_* LSP
+    # probe and the netcoredbg initialize gate (C#_DAP_REACHED) all gate the job; the netcoredbg
+    # launch-to-breakpoint flow past that gate stays log-only. See docs/D4_CSHARP_PLAN.md.
     env:
       # The .NET/Mono Godot build (NOT the standard build the other planes download). Its version
       # MUST match the Godot.NET.Sdk pinned in example-csharp/ExampleCsharp.csproj (4.7.0) and the
