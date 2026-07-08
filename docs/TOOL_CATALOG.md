@@ -596,6 +596,8 @@ Batch 2 (`anim_tree_*`, `anim_statemachine_*`) authors an `AnimationTree` node a
 
 Disk-backed TileSet authoring: each tool loads a `.tres` `TileSet`, mutates it, and re-saves — so all four are file-writing and **gated** by confirmation, and none need a scene open. Sources are `TileSetAtlasSource` (a texture carved into a grid); tiles are addressed by `atlas_coords` in cells; per-tile collision polygons live on `TileData` under numbered physics layers (created on demand). `tilemaplayer_create` and the `tilemap_*` cell painters (Group D batch 2) consume the TileSet produced here.
 
+Batch 2 (`tilemaplayer_create`, `tilemap_*`) is the other half: it authors a `TileMapLayer` **node in the edited scene** and paints its cells. Unlike the disk-backed writers above, these mutate the open scene and are **undoable** via `EditorUndoRedoManager` and **ungated** (the in-scene `node_*` model). `tilemaplayer_create` optionally binds a TileSet `.tres` as the layer's `tile_set`; cells are addressed by integer `coords` and painted with a `source_id` + `atlas_coords` (+ `alternative`). `set_cell` with `source_id` -1 erases; `set_cells_rect` fills a region in one undoable action (capped at 65536 cells); an empty cell reads back as `source_id` -1 / `atlas_coords` [-1, -1] / `alternative` 0. `TileMapLayer` supersedes the deprecated `TileMap` node in Godot 4.x.
+
 ### `tileset_create` ✅ · destructive (writes a file)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string", "pattern": "^res://" }, "tile_size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["created", "tile_size"], "properties": { "created": { "type": "string" }, "tile_size": { "type": "array", "items": { "type": "integer" } } } }`
@@ -611,6 +613,26 @@ Disk-backed TileSet authoring: each tool loads a `.tres` `TileSet`, mutates it, 
 ### `tileset_set_tile_collision` ✅ · destructive (writes a file)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords", "polygon"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "polygon": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "physics_layer": { "type": "integer" }, "one_way": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "physics_layer", "polygon_index", "points", "one_way"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "physics_layer": { "type": "integer" }, "polygon_index": { "type": "integer" }, "points": { "type": "integer" }, "one_way": { "type": "boolean" } } }`
+
+### `tilemaplayer_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "tileset_path": { "type": "string", "pattern": "^res://" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "tile_set"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "tile_set": { "type": "string" } } }`
+
+### `tilemap_set_cell` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }`
+
+### `tilemap_set_cells_rect` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "rect"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "description": "[x, y, width, height] in cells" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["path", "rect", "cells", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" } }, "cells": { "type": "integer" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }`
+
+### `tilemap_get_cell` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } } } }`
+- **Output** `{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "empty"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "empty": { "type": "boolean" } } }`
+
+### `tilemap_clear` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "cleared_cells"], "properties": { "path": { "type": "string" }, "cleared_cells": { "type": "integer" } } }`
 
 ---
 
@@ -1261,6 +1283,11 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `tileset_add_source` | D / Editor | ✅ | ✔ writes file |
 | `tileset_add_tile` | D / Editor | ✅ | ✔ writes file |
 | `tileset_set_tile_collision` | D / Editor | ✅ | ✔ writes file |
+| `tilemaplayer_create` | D / Editor | ✅ | undoable |
+| `tilemap_set_cell` | D / Editor | ✅ | undoable |
+| `tilemap_set_cells_rect` | D / Editor | ✅ | undoable |
+| `tilemap_get_cell` | D / Editor | ✅ | – |
+| `tilemap_clear` | D / Editor | ✅ | undoable |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

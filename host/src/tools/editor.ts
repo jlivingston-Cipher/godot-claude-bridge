@@ -1179,4 +1179,98 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
       return call("tileset.set_tile_collision", params);
     },
   );
+
+  // ---- Group D batch 2: TileMapLayer + cell painting (operations.gd _tilemap*; in-scene, undoable, ungated) ----
+  server.registerTool(
+    "tilemaplayer_create",
+    {
+      title: "Create TileMapLayer",
+      description:
+        "Add a TileMapLayer node under a parent in the edited scene (undoable), optionally binding a TileSet .tres so cells can be painted. In-scene and undoable — not gated.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path relative to the scene root; \".\" for the root"),
+        name: z.string().optional().describe("Node name (default \"TileMapLayer\")"),
+        tileset_path: z.string().optional().describe("TileSet res:// .tres path to bind as tile_set (e.g. from tileset_create)"),
+      },
+    },
+    async ({ parent_path, name, tileset_path }) => {
+      const params: Record<string, unknown> = { parent_path };
+      if (name !== undefined) params.name = name;
+      if (tileset_path !== undefined) params.tileset_path = tileset_path;
+      return call("tilemaplayer.create", params);
+    },
+  );
+
+  server.registerTool(
+    "tilemap_set_cell",
+    {
+      title: "Set TileMapLayer cell",
+      description:
+        "Paint a single cell on a TileMapLayer (undoable). source_id -1 erases the cell (default). atlas_coords defaults to [0, 0]; alternative defaults to 0.",
+      inputSchema: {
+        path: z.string().describe("TileMapLayer node path relative to the scene root"),
+        coords: z.array(z.number().int()).describe("Cell coordinates [x, y] (in cells)"),
+        source_id: z.number().int().optional().describe("Atlas source id from the bound TileSet, or -1 to erase (default -1)"),
+        atlas_coords: z.array(z.number().int()).optional().describe("Tile atlas coordinates [x, y] within the source (default [0, 0])"),
+        alternative: z.number().int().optional().describe("Alternative tile id (default 0)"),
+      },
+    },
+    async ({ path, coords, source_id, atlas_coords, alternative }) => {
+      const params: Record<string, unknown> = { path, coords };
+      if (source_id !== undefined) params.source_id = source_id;
+      if (atlas_coords !== undefined) params.atlas_coords = atlas_coords;
+      if (alternative !== undefined) params.alternative = alternative;
+      return call("tilemap.set_cell", params);
+    },
+  );
+
+  server.registerTool(
+    "tilemap_set_cells_rect",
+    {
+      title: "Fill TileMapLayer cells (rect)",
+      description:
+        "Paint every cell in a rectangular region of a TileMapLayer with one tile (undoable, one action). source_id -1 clears the region. Capped at 65536 cells; split larger fills across calls.",
+      inputSchema: {
+        path: z.string().describe("TileMapLayer node path relative to the scene root"),
+        rect: z.array(z.number().int()).describe("Region [x, y, width, height] in cells (width/height > 0)"),
+        source_id: z.number().int().optional().describe("Atlas source id from the bound TileSet, or -1 to clear (default -1)"),
+        atlas_coords: z.array(z.number().int()).optional().describe("Tile atlas coordinates [x, y] within the source (default [0, 0])"),
+        alternative: z.number().int().optional().describe("Alternative tile id (default 0)"),
+      },
+    },
+    async ({ path, rect, source_id, atlas_coords, alternative }) => {
+      const params: Record<string, unknown> = { path, rect };
+      if (source_id !== undefined) params.source_id = source_id;
+      if (atlas_coords !== undefined) params.atlas_coords = atlas_coords;
+      if (alternative !== undefined) params.alternative = alternative;
+      return call("tilemap.set_cells_rect", params);
+    },
+  );
+
+  server.registerTool(
+    "tilemap_get_cell",
+    {
+      title: "Get TileMapLayer cell",
+      description:
+        "Read one cell of a TileMapLayer. An empty cell reads back as source_id -1, atlas_coords [-1, -1], alternative 0 (empty = true).",
+      inputSchema: {
+        path: z.string().describe("TileMapLayer node path relative to the scene root"),
+        coords: z.array(z.number().int()).describe("Cell coordinates [x, y] (in cells)"),
+      },
+    },
+    async ({ path, coords }) => call("tilemap.get_cell", { path, coords }),
+  );
+
+  server.registerTool(
+    "tilemap_clear",
+    {
+      title: "Clear TileMapLayer",
+      description:
+        "Remove every painted cell from a TileMapLayer (undoable — prior cells are restored on undo). Returns the number of cells cleared.",
+      inputSchema: {
+        path: z.string().describe("TileMapLayer node path relative to the scene root"),
+      },
+    },
+    async ({ path }) => call("tilemap.clear", { path }),
+  );
 }

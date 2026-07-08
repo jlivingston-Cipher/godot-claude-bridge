@@ -195,6 +195,13 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   tileset_add_tile: { tileset: z.string(), source_id: z.number(), atlas_coords: z.array(z.number()), size: z.array(z.number()), tiles_count: z.number() },
   tileset_set_tile_collision: { tileset: z.string(), source_id: z.number(), atlas_coords: z.array(z.number()), physics_layer: z.number(), polygon_index: z.number(), points: z.number(), one_way: z.boolean() },
 
+  // ---- Group D batch 2: TileMapLayer + cell painting (tools/editor.ts -> operations.gd _tilemap*) ----
+  tilemaplayer_create: { path: z.string(), name: z.string(), type: z.string(), tile_set: z.string() },
+  tilemap_set_cell: { path: z.string(), coords: z.array(z.number()), source_id: z.number(), atlas_coords: z.array(z.number()), alternative: z.number(), erased: z.boolean() },
+  tilemap_set_cells_rect: { path: z.string(), rect: z.array(z.number()), cells: z.number(), source_id: z.number(), atlas_coords: z.array(z.number()), alternative: z.number(), erased: z.boolean() },
+  tilemap_get_cell: { path: z.string(), coords: z.array(z.number()), source_id: z.number(), atlas_coords: z.array(z.number()), alternative: z.number(), empty: z.boolean() },
+  tilemap_clear: { path: z.string(), cleared_cells: z.number() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

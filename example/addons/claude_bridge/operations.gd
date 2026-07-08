@@ -159,6 +159,16 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _tileset_add_tile(params)
 		"tileset.set_tile_collision":
 			return _tileset_set_tile_collision(params)
+		"tilemaplayer.create":
+			return _tilemaplayer_create(params)
+		"tilemap.set_cell":
+			return _tilemap_set_cell(params)
+		"tilemap.set_cells_rect":
+			return _tilemap_set_cells_rect(params)
+		"tilemap.get_cell":
+			return _tilemap_get_cell(params)
+		"tilemap.clear":
+			return _tilemap_clear(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -1960,3 +1970,139 @@ func _tileset_set_tile_collision(params: Dictionary) -> Dictionary:
 	if e != OK:
 		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
 	return _ok({"tileset": tileset_path, "source_id": sid, "atlas_coords": [coords.x, coords.y], "physics_layer": layer, "polygon_index": poly_index, "points": poly.size(), "one_way": one_way})
+
+
+# ---------------------------------------------- Group D: tilemap (batch 2) --
+# In-scene TileMapLayer authoring + cell painting. Unlike the disk-backed
+# tileset_* family (which writes a .tres and is host-gated), these mutate a
+# TileMapLayer node in the edited scene and are undoable via
+# EditorUndoRedoManager — the ungated node_* model. Empty cells read back as
+# source_id -1 / atlas_coords (-1, -1) / alternative 0, which is exactly what
+# the undo path restores.
+
+func _as_tilemap_layer(root: Node, path: String) -> TileMapLayer:
+	var n := _resolve(root, path)
+	if n is TileMapLayer:
+		return n
+	return null
+
+
+func _tilemaplayer_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var layer := TileMapLayer.new()
+	layer.name = String(params.get("name", "TileMapLayer"))
+	var tileset_path := String(params.get("tileset_path", ""))
+	if tileset_path != "":
+		var ts = _load_tileset(tileset_path)
+		if ts == null:
+			return _err("not_found", "TileSet not found: %s" % tileset_path)
+		layer.tile_set = ts
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add TileMapLayer %s" % layer.name)
+	ur.add_do_method(parent, "add_child", layer)
+	ur.add_do_method(layer, "set_owner", root)
+	ur.add_do_reference(layer)
+	ur.add_undo_method(parent, "remove_child", layer)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, layer), "name": String(layer.name), "type": "TileMapLayer", "tile_set": tileset_path})
+
+
+func _tilemap_set_cell(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var layer := _as_tilemap_layer(root, String(params.get("path", "")))
+	if layer == null:
+		return _err("bad_path", "TileMapLayer not found: %s" % params.get("path", ""))
+	var coords := _to_vec2i(params.get("coords"))
+	var source_id := int(params.get("source_id", -1))
+	var atlas := Vector2i.ZERO
+	if params.has("atlas_coords"):
+		atlas = _to_vec2i(params.get("atlas_coords"))
+	var alternative := int(params.get("alternative", 0))
+	var old_src := layer.get_cell_source_id(coords)
+	var old_atlas := layer.get_cell_atlas_coords(coords)
+	var old_alt := layer.get_cell_alternative_tile(coords)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set cell %s" % str(coords))
+	ur.add_do_method(layer, "set_cell", coords, source_id, atlas, alternative)
+	ur.add_undo_method(layer, "set_cell", coords, old_src, old_atlas, old_alt)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, layer), "coords": [coords.x, coords.y], "source_id": source_id, "atlas_coords": [atlas.x, atlas.y], "alternative": alternative, "erased": source_id < 0})
+
+
+func _tilemap_set_cells_rect(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var layer := _as_tilemap_layer(root, String(params.get("path", "")))
+	if layer == null:
+		return _err("bad_path", "TileMapLayer not found: %s" % params.get("path", ""))
+	var r = params.get("rect")
+	if not (r is Array) or r.size() < 4:
+		return _err("bad_params", "'rect' must be [x, y, width, height]")
+	var rx := int(r[0])
+	var ry := int(r[1])
+	var rw := int(r[2])
+	var rh := int(r[3])
+	if rw <= 0 or rh <= 0:
+		return _err("bad_params", "'rect' width and height must be > 0")
+	var area := rw * rh
+	if area > 65536:
+		return _err("too_large", "rect covers %d cells (max 65536); split into multiple calls" % area)
+	var source_id := int(params.get("source_id", -1))
+	var atlas := Vector2i.ZERO
+	if params.has("atlas_coords"):
+		atlas = _to_vec2i(params.get("atlas_coords"))
+	var alternative := int(params.get("alternative", 0))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set cells rect %d,%d %dx%d" % [rx, ry, rw, rh])
+	for dy in range(rh):
+		for dx in range(rw):
+			var c := Vector2i(rx + dx, ry + dy)
+			var os := layer.get_cell_source_id(c)
+			var oa := layer.get_cell_atlas_coords(c)
+			var oal := layer.get_cell_alternative_tile(c)
+			ur.add_do_method(layer, "set_cell", c, source_id, atlas, alternative)
+			ur.add_undo_method(layer, "set_cell", c, os, oa, oal)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, layer), "rect": [rx, ry, rw, rh], "cells": area, "source_id": source_id, "atlas_coords": [atlas.x, atlas.y], "alternative": alternative, "erased": source_id < 0})
+
+
+func _tilemap_get_cell(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var layer := _as_tilemap_layer(root, String(params.get("path", "")))
+	if layer == null:
+		return _err("bad_path", "TileMapLayer not found: %s" % params.get("path", ""))
+	var coords := _to_vec2i(params.get("coords"))
+	var src := layer.get_cell_source_id(coords)
+	var atlas := layer.get_cell_atlas_coords(coords)
+	var alt := layer.get_cell_alternative_tile(coords)
+	return _ok({"path": _path_of(root, layer), "coords": [coords.x, coords.y], "source_id": src, "atlas_coords": [atlas.x, atlas.y], "alternative": alt, "empty": src < 0})
+
+
+func _tilemap_clear(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var layer := _as_tilemap_layer(root, String(params.get("path", "")))
+	if layer == null:
+		return _err("bad_path", "TileMapLayer not found: %s" % params.get("path", ""))
+	var used := layer.get_used_cells()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: clear TileMapLayer %s" % layer.name)
+	ur.add_do_method(layer, "clear")
+	for c in used:
+		var os := layer.get_cell_source_id(c)
+		var oa := layer.get_cell_atlas_coords(c)
+		var oal := layer.get_cell_alternative_tile(c)
+		ur.add_undo_method(layer, "set_cell", c, os, oa, oal)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, layer), "cleared_cells": used.size()})
