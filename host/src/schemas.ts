@@ -152,6 +152,21 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     signals: z.array(z.string()),
   },
 
+  // ---- Group B: resources (tools/editor.ts -> operations.gd _resource_*) ----
+  resource_create: { created: z.string(), type: z.string() },
+  resource_load: {
+    path: z.string(),
+    type: z.string(),
+    resource_name: z.string(),
+    properties: z.array(z.object({ name: z.string(), type: z.number(), class_name: z.string(), usage: z.number() })),
+  },
+  resource_save: { saved: z.string(), from: z.string() },
+  resource_duplicate: { duplicated: z.string(), from: z.string(), deep: z.boolean() },
+  resource_get_property: { path: z.string(), property: z.string(), value: encodedValue },
+  resource_set_property: { path: z.string(), property: z.string(), value: encodedValue },
+  resource_get_import_settings: { path: z.string(), imported: z.boolean(), importer: z.string(), settings: z.record(encodedValue) },
+  resource_set_import_settings: { path: z.string(), reimported: z.boolean(), settings: z.array(z.string()) },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

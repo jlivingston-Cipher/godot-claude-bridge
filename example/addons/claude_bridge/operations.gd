@@ -99,6 +99,22 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _signal_add_user_signal(params)
 		"signal.emit":
 			return _signal_emit(params)
+		"resource.create":
+			return _resource_create(params)
+		"resource.load":
+			return _resource_load(params)
+		"resource.save":
+			return _resource_save(params)
+		"resource.duplicate":
+			return _resource_duplicate(params)
+		"resource.get_property":
+			return _resource_get_property(params)
+		"resource.set_property":
+			return _resource_set_property(params)
+		"resource.get_import_settings":
+			return _resource_get_import_settings(params)
+		"resource.set_import_settings":
+			return _resource_set_import_settings(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -1015,3 +1031,177 @@ func _signal_emit(params: Dictionary) -> Dictionary:
 		call_args.append(Codec.decode(a))
 	node.callv("emit_signal", call_args)
 	return _ok({"path": _path_of(root, node), "signal": sig, "emitted": true})
+
+
+# ------------------------------------------------- Group B: resources --------
+
+func _resource_class_ok(cls: String) -> bool:
+	return ClassDB.class_exists(cls) and ClassDB.is_parent_class(cls, "Resource") and ClassDB.can_instantiate(cls)
+
+
+func _resource_props(res: Resource) -> Array:
+	var props: Array = []
+	for p in res.get_property_list():
+		var usage := int(p.get("usage", 0))
+		if (usage & PROPERTY_USAGE_EDITOR) == 0:
+			continue
+		var ptype := int(p.get("type", 0))
+		if ptype == TYPE_NIL:
+			continue
+		props.append({
+			"name": String(p.get("name", "")),
+			"type": ptype,
+			"class_name": String(p.get("class_name", "")),
+			"usage": usage,
+		})
+	return props
+
+
+func _resource_create(params: Dictionary) -> Dictionary:
+	var cls := String(params.get("class_name", ""))
+	if cls == "":
+		return _err("bad_params", "Missing 'class_name'")
+	if not _resource_class_ok(cls):
+		return _err("bad_class", "Not an instantiable Resource class: %s" % cls)
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var res: Resource = ClassDB.instantiate(cls)
+	if res == null:
+		return _err("create_failed", "Could not instantiate %s" % cls)
+	for key in params.get("properties", {}):
+		res.set(String(key), Codec.decode(params["properties"][key]))
+	var e := ResourceSaver.save(res, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"created": to_path, "type": cls})
+
+
+func _resource_load(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if not ResourceLoader.exists(path):
+		return _err("not_found", "Resource not found: %s" % path)
+	var res := ResourceLoader.load(path)
+	if res == null:
+		return _err("load_failed", "Could not load resource: %s" % path)
+	return _ok({
+		"path": path,
+		"type": res.get_class(),
+		"resource_name": String(res.resource_name),
+		"properties": _resource_props(res),
+	})
+
+
+func _resource_save(params: Dictionary) -> Dictionary:
+	var from_path := String(params.get("from_path", ""))
+	if not ResourceLoader.exists(from_path):
+		return _err("not_found", "Resource not found: %s" % from_path)
+	var to_path := String(params.get("to_path", from_path))
+	if to_path == "":
+		to_path = from_path
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var res := ResourceLoader.load(from_path)
+	if res == null:
+		return _err("load_failed", "Could not load resource: %s" % from_path)
+	var flags := int(params.get("flags", 0))
+	var e := ResourceSaver.save(res, to_path, flags)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"saved": to_path, "from": from_path})
+
+
+func _resource_duplicate(params: Dictionary) -> Dictionary:
+	var from_path := String(params.get("path", ""))
+	if not ResourceLoader.exists(from_path):
+		return _err("not_found", "Resource not found: %s" % from_path)
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var res := ResourceLoader.load(from_path)
+	if res == null:
+		return _err("load_failed", "Could not load resource: %s" % from_path)
+	var deep := bool(params.get("deep", false))
+	var dup := res.duplicate(deep)
+	if dup == null:
+		return _err("duplicate_failed", "Could not duplicate resource")
+	var e := ResourceSaver.save(dup, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"duplicated": to_path, "from": from_path, "deep": deep})
+
+
+func _resource_get_property(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if not ResourceLoader.exists(path):
+		return _err("not_found", "Resource not found: %s" % path)
+	var res := ResourceLoader.load(path)
+	if res == null:
+		return _err("load_failed", "Could not load resource: %s" % path)
+	var prop := String(params.get("property", ""))
+	if prop == "":
+		return _err("bad_params", "Missing 'property'")
+	return _ok({"path": path, "property": prop, "value": Codec.encode(res.get(prop))})
+
+
+func _resource_set_property(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if not ResourceLoader.exists(path):
+		return _err("not_found", "Resource not found: %s" % path)
+	var res := ResourceLoader.load(path)
+	if res == null:
+		return _err("load_failed", "Could not load resource: %s" % path)
+	var prop := String(params.get("property", ""))
+	if prop == "":
+		return _err("bad_params", "Missing 'property'")
+	res.set(prop, Codec.decode(params.get("value")))
+	var e := ResourceSaver.save(res, path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"path": path, "property": prop, "value": Codec.encode(res.get(prop))})
+
+
+func _resource_get_import_settings(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if path == "":
+		return _err("bad_params", "Missing 'path'")
+	var import_path := path + ".import"
+	if not FileAccess.file_exists(import_path):
+		return _ok({"path": path, "imported": false, "importer": "", "settings": {}})
+	var cfg := ConfigFile.new()
+	var e := cfg.load(import_path)
+	if e != OK:
+		return _err("load_failed", "Could not read import metadata: %s (%d)" % [import_path, e])
+	var importer := ""
+	if cfg.has_section_key("remap", "importer"):
+		importer = String(cfg.get_value("remap", "importer"))
+	var settings: Dictionary = {}
+	if cfg.has_section("params"):
+		for key in cfg.get_section_keys("params"):
+			settings[key] = Codec.encode(cfg.get_value("params", key))
+	return _ok({"path": path, "imported": true, "importer": importer, "settings": settings})
+
+
+func _resource_set_import_settings(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if path == "":
+		return _err("bad_params", "Missing 'path'")
+	var import_path := path + ".import"
+	if not FileAccess.file_exists(import_path):
+		return _err("not_imported", "No .import metadata for %s (not an imported asset)" % path)
+	var cfg := ConfigFile.new()
+	var e := cfg.load(import_path)
+	if e != OK:
+		return _err("load_failed", "Could not read import metadata: %s (%d)" % [import_path, e])
+	var applied: Array = []
+	for key in params.get("settings", {}):
+		cfg.set_value("params", String(key), Codec.decode(params["settings"][key]))
+		applied.append(String(key))
+	e = cfg.save(import_path)
+	if e != OK:
+		return _err("save_failed", "Could not write import metadata (%d)" % e)
+	var reimport := bool(params.get("reimport", true))
+	if reimport:
+		var efs := EditorInterface.get_resource_filesystem()
+		efs.reimport_files(PackedStringArray([path]))
+	return _ok({"path": path, "reimported": reimport, "settings": applied})

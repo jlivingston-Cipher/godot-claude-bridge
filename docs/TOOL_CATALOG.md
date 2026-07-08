@@ -480,6 +480,38 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
   } }
 ```
 
+### `resource_create` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["class_name", "to_path"], "properties": { "class_name": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "properties": { "type": "object" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["created", "type"], "properties": { "created": { "type": "string" }, "type": { "type": "string" } } }`
+
+### `resource_load` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "type", "resource_name", "properties"], "properties": { "path": { "type": "string" }, "type": { "type": "string" }, "resource_name": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }`
+
+### `resource_save` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["from_path"], "properties": { "from_path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "flags": { "type": "integer" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["saved", "from"], "properties": { "saved": { "type": "string" }, "from": { "type": "string" } } }`
+
+### `resource_duplicate` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "deep": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["duplicated", "from", "deep"], "properties": { "duplicated": { "type": "string" }, "from": { "type": "string" }, "deep": { "type": "boolean" } } }`
+
+### `resource_get_property` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "property"], "properties": { "path": { "type": "string" }, "property": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }`
+
+### `resource_set_property` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }`
+
+### `resource_get_import_settings` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "imported", "importer", "settings"], "properties": { "path": { "type": "string" }, "imported": { "type": "boolean" }, "importer": { "type": "string" }, "settings": { "type": "object" } } }`
+
+### `resource_set_import_settings` ✅ · destructive (rewrites metadata + reimports)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "settings"], "properties": { "path": { "type": "string" }, "settings": { "type": "object" }, "reimport": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "reimported", "settings"], "properties": { "path": { "type": "string" }, "reimported": { "type": "boolean" }, "settings": { "type": "array", "items": { "type": "string" } } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1099,6 +1131,14 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `selection_set` | A / Editor | ✅ | – |
 | `classdb_get_class` | A / Editor | ✅ | – |
 | `screenshot_editor` | A / Editor | ✅ | – |
+| `resource_create` | A / Editor | ✅ | ✔ writes file |
+| `resource_load` | A / Editor | ✅ | – |
+| `resource_save` | A / Editor | ✅ | ✔ writes file |
+| `resource_duplicate` | A / Editor | ✅ | ✔ writes file |
+| `resource_get_property` | A / Editor | ✅ | – |
+| `resource_set_property` | A / Editor | ✅ | ✔ writes file |
+| `resource_get_import_settings` | A / Editor | ✅ | – |
+| `resource_set_import_settings` | A / Editor | ✅ | ✔ reimports |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

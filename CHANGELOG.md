@@ -6,6 +6,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group B (batch 1): resources (8 tools, 118 → 126)
+- First family of **Group B (Resources & FileSystem)** from the breadth-superset plan — the layer that
+  unblocks Groups C–F (animation/tileset/shader/audio are all Resources). Eight A/Editor tools,
+  schema-enforced, in lockstep with `scripts/contract_check.py` (126), `registration.test.ts`
+  (`EXPECTED_TOOL_COUNT` 118 → 126), and `docs/TOOL_CATALOG.md`:
+  - **`resource_create`** — instantiate a Resource subclass (with optional initial properties) and save it as a new file; **destructive** (writes a file), elicitation-gated.
+  - **`resource_load`** — load a resource and return its class, `resource_name`, and inspector-visible property list. Read-only.
+  - **`resource_save`** — load and (re-)save a resource, optionally to a new path and with `ResourceSaver` flags; **destructive** (writes a file), elicitation-gated.
+  - **`resource_duplicate`** — duplicate a resource (optionally deep, cloning subresources) to a new path; **destructive** (writes a file), elicitation-gated.
+  - **`resource_get_property`** / **`resource_set_property`** — read or write a single resource property by name (tagged-Variant values). Set is **destructive** (writes a file), elicitation-gated.
+  - **`resource_get_import_settings`** / **`resource_set_import_settings`** — read an asset's `.import` metadata (importer + params), or update those params and reimport. Set is **destructive** (rewrites metadata + reimports), elicitation-gated; both feature-detect the `.import` sidecar.
+- Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_resource_*`), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. Built on `ResourceLoader`/`ResourceSaver`, `ClassDB`, and `ConfigFile` for import metadata. File-writing ops are elicitation-gated rather than `EditorUndoRedoManager`-undoable (they mutate disk, like `scene_pack`/`scene_save_as`).
+
 ## [0.10.0] — 2026-07-08
 
 Lands **Group A of the breadth-superset plan** — the full scene-graph authoring foundation, the biggest
