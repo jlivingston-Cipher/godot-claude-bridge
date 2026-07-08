@@ -282,6 +282,30 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 - **Output** `{ "type": "object", "required": ["created", "root_type"], "properties": { "created": { "type": "string" }, "root_type": { "type": "string" } } }`
 
+### `scene_list_open` ✅
+- **Input** `{ "type": "object", "properties": {} }`
+- **Output** `{ "type": "object", "required": ["scenes", "current", "unsaved"], "properties": { "scenes": { "type": "array", "items": { "type": "string" } }, "current": { "type": ["string", "null"] }, "unsaved": { "type": "array", "items": { "type": "string" } } } }`
+
+### `scene_reload` ✅ · destructive (discards unsaved changes)
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }`
+- **Output** `{ "type": "object", "required": ["reloaded"], "properties": { "reloaded": { "type": "string" } } }`
+
+### `scene_close` ✅ · destructive (discards unsaved changes)
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "optional assertion of the current scene path" } } }`
+- **Output** `{ "type": "object", "required": ["closed"], "properties": { "closed": { "type": "string" } } }`
+
+### `scene_pack` ✅ · destructive (writes a new file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" } } }`
+- **Output** `{ "type": "object", "required": ["packed", "branch"], "properties": { "packed": { "type": "string" }, "branch": { "type": "string" } } }`
+
+### `scene_get_dependencies` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }`
+- **Output** `{ "type": "object", "required": ["path", "dependencies"], "properties": { "path": { "type": "string" }, "dependencies": { "type": "array", "items": { "type": "string" } } } }`
+
+### `scene_save_as` ✅ · destructive (writes a new file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }`
+- **Output** `{ "type": "object", "required": ["saved_as"], "properties": { "saved_as": { "type": "string" } } }`
+
 ### `node_add` ✅  (undoable)
 - **Input**
 ```json
@@ -1016,6 +1040,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `scene_open` | A / Editor | ✅ | – |
 | `scene_save` | A / Editor | ✅ | writes file |
 | `scene_new` | A / Editor | ✅ | writes file |
+| `scene_list_open` | A / Editor | ✅ | – |
+| `scene_reload` | A / Editor | ✅ | ✔ |
+| `scene_close` | A / Editor | ✅ | ✔ |
+| `scene_pack` | A / Editor | ✅ | ✔ writes file |
+| `scene_get_dependencies` | A / Editor | ✅ | – |
+| `scene_save_as` | A / Editor | ✅ | ✔ writes file |
 | `node_add` | A / Editor | ✅ | undoable |
 | `node_delete` | A / Editor | ✅ | ✔ undoable |
 | `node_rename` | A / Editor | ✅ | undoable |
