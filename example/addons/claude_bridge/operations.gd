@@ -169,6 +169,14 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _tilemap_get_cell(params)
 		"tilemap.clear":
 			return _tilemap_clear(params)
+		"body.create":
+			return _body_create(params)
+		"collisionshape.add":
+			return _collisionshape_add(params)
+		"body.set_collision_layer":
+			return _body_set_collision_layer(params)
+		"body.set_collision_mask":
+			return _body_set_collision_mask(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -2106,3 +2114,172 @@ func _tilemap_clear(params: Dictionary) -> Dictionary:
 		ur.add_undo_method(layer, "set_cell", c, os, oa, oal)
 	ur.commit_action()
 	return _ok({"path": _path_of(root, layer), "cleared_cells": used.size()})
+
+
+# ---------------------------------------------- Group E: physics (batch 1) --
+# In-scene physics authoring: bodies (Static/Rigid/Character/Area, 2D+3D),
+# their collision shapes (CollisionShape2D/3D carrying a Shape resource), and
+# the collision_layer / collision_mask bitmasks. Every mutation goes through
+# EditorUndoRedoManager and is ungated — the in-scene node_* model.
+
+func _to_vec3(v) -> Vector3:
+	if v is Array and v.size() >= 3:
+		return Vector3(float(v[0]), float(v[1]), float(v[2]))
+	return Vector3.ZERO
+
+
+func _to_packed_vec3(v) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if v is Array:
+		for p in v:
+			if p is Array and p.size() >= 3:
+				out.append(Vector3(float(p[0]), float(p[1]), float(p[2])))
+	return out
+
+
+func _body_class(kind: String, dim3: bool) -> String:
+	if kind == "static":
+		return "StaticBody3D" if dim3 else "StaticBody2D"
+	if kind == "rigid":
+		return "RigidBody3D" if dim3 else "RigidBody2D"
+	if kind == "character":
+		return "CharacterBody3D" if dim3 else "CharacterBody2D"
+	if kind == "area":
+		return "Area3D" if dim3 else "Area2D"
+	return ""
+
+
+func _body_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var kind := String(params.get("type", ""))
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	var cls := _body_class(kind, dim3)
+	if cls == "":
+		return _err("bad_params", "Unknown body type '%s' (want static|rigid|character|area)" % kind)
+	if not ClassDB.can_instantiate(cls):
+		return _err("bad_type", "Cannot instantiate class: %s" % cls)
+	var node: Node = ClassDB.instantiate(cls)
+	node.name = String(params.get("name", cls))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": cls, "body": kind, "dim": ("3d" if dim3 else "2d")})
+
+
+func _make_collision_shape(kind: String, dim3: bool, params: Dictionary):
+	if kind == "rect":
+		if dim3:
+			var b := BoxShape3D.new()
+			b.size = _to_vec3(params.get("size", [1, 1, 1]))
+			return b
+		var r := RectangleShape2D.new()
+		r.size = _to_vec2(params.get("size", [32, 32]))
+		return r
+	if kind == "circle":
+		if dim3:
+			var s := SphereShape3D.new()
+			s.radius = float(params.get("radius", 0.5))
+			return s
+		var c := CircleShape2D.new()
+		c.radius = float(params.get("radius", 16.0))
+		return c
+	if kind == "capsule":
+		if dim3:
+			var cap3 := CapsuleShape3D.new()
+			cap3.radius = float(params.get("radius", 0.5))
+			cap3.height = float(params.get("height", 2.0))
+			return cap3
+		var cap := CapsuleShape2D.new()
+		cap.radius = float(params.get("radius", 16.0))
+		cap.height = float(params.get("height", 48.0))
+		return cap
+	if kind == "polygon":
+		if dim3:
+			var cp3 := ConvexPolygonShape3D.new()
+			cp3.points = _to_packed_vec3(params.get("points"))
+			return cp3
+		var cp := ConvexPolygonShape2D.new()
+		cp.points = _to_packed_vec2(params.get("points"))
+		return cp
+	return null
+
+
+func _collisionshape_add(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var kind := String(params.get("shape", ""))
+	if not (kind in ["rect", "circle", "capsule", "polygon"]):
+		return _err("bad_params", "Unknown shape '%s' (want rect|circle|capsule|polygon)" % kind)
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	if kind == "polygon":
+		if dim3 and _to_packed_vec3(params.get("points")).size() < 4:
+			return _err("bad_params", "'polygon' (3D) needs at least 4 points")
+		if not dim3 and _to_packed_vec2(params.get("points")).size() < 3:
+			return _err("bad_params", "'polygon' (2D) needs at least 3 points")
+	var shape_res = _make_collision_shape(kind, dim3, params)
+	if shape_res == null:
+		return _err("bad_params", "Could not build shape for '%s'" % kind)
+	var node: Node
+	if dim3:
+		var cs3 := CollisionShape3D.new()
+		cs3.set("shape", shape_res)
+		node = cs3
+	else:
+		var cs2 := CollisionShape2D.new()
+		cs2.set("shape", shape_res)
+		node = cs2
+	node.name = String(params.get("name", node.get_class()))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": node.get_class(), "shape": kind, "shape_class": shape_res.get_class(), "dim": ("3d" if dim3 else "2d")})
+
+
+func _body_set_collision_layer(params: Dictionary) -> Dictionary:
+	return _body_set_collision_field(params, "collision_layer", "layer")
+
+
+func _body_set_collision_mask(params: Dictionary) -> Dictionary:
+	return _body_set_collision_field(params, "collision_mask", "mask")
+
+
+func _body_set_collision_field(params: Dictionary, field: String, key: String) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is CollisionObject2D or node is CollisionObject3D):
+		return _err("bad_type", "%s is not a physics body/area (CollisionObject2D/3D)" % node.name)
+	if not params.has(key):
+		return _err("bad_params", "Missing '%s'" % key)
+	var new_value := int(params.get(key, 0))
+	if new_value < 0:
+		return _err("bad_params", "'%s' must be a non-negative bitmask" % key)
+	var old_value: int = node.get(field)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s.%s" % [node.name, field])
+	ur.add_do_property(node, field, new_value)
+	ur.add_undo_property(node, field, old_value)
+	ur.commit_action()
+	var result := {"path": _path_of(root, node)}
+	result[field] = new_value
+	return _ok(result)

@@ -1273,4 +1273,83 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
     },
     async ({ path }) => call("tilemap.clear", { path }),
   );
+
+  // ---- Group E: Physics & collision (operations.gd _body_*/_collisionshape_add; in-scene, undoable, ungated) ----
+  server.registerTool(
+    "body_create",
+    {
+      title: "Create physics body",
+      description:
+        "Add a physics body node under a parent in the edited scene (undoable): a StaticBody, RigidBody, CharacterBody, or Area, in 2D or 3D. In-scene and undoable — not gated. Attach collision shapes with collisionshape_add.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path relative to the scene root; \".\" for the root"),
+        type: z.enum(["static", "rigid", "character", "area"]).describe("Body kind: static | rigid | character | area"),
+        dim: z.enum(["2d", "3d"]).optional().describe("Dimension: \"2d\" (default) or \"3d\""),
+        name: z.string().optional().describe("Node name (default the class name, e.g. \"StaticBody2D\")"),
+      },
+    },
+    async ({ parent_path, type, dim, name }) => {
+      const params: Record<string, unknown> = { parent_path, type };
+      if (dim !== undefined) params.dim = dim;
+      if (name !== undefined) params.name = name;
+      return call("body.create", params);
+    },
+  );
+
+  server.registerTool(
+    "collisionshape_add",
+    {
+      title: "Add collision shape",
+      description:
+        "Add a CollisionShape2D/3D node carrying a shape resource under a parent (usually a body) in the edited scene (undoable). shape is rect | circle | capsule | polygon; dim selects 2D (Rectangle/Circle/Capsule/ConvexPolygon 2D) or 3D (Box/Sphere/Capsule/ConvexPolygon 3D). In-scene and undoable — not gated.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path (usually a body) relative to the scene root; \".\" for the root"),
+        shape: z.enum(["rect", "circle", "capsule", "polygon"]).describe("Shape kind: rect | circle | capsule | polygon"),
+        dim: z.enum(["2d", "3d"]).optional().describe("Dimension: \"2d\" (default) or \"3d\""),
+        name: z.string().optional().describe("Node name (default \"CollisionShape2D\"/\"CollisionShape3D\")"),
+        size: z.array(z.number()).optional().describe("rect: [w, h] (2D) or [w, h, d] (3D)"),
+        radius: z.number().optional().describe("circle/capsule radius"),
+        height: z.number().optional().describe("capsule height"),
+        points: z.array(z.array(z.number())).optional().describe("polygon: convex-hull points, [[x, y], …] (2D, ≥3) or [[x, y, z], …] (3D, ≥4)"),
+      },
+    },
+    async ({ parent_path, shape, dim, name, size, radius, height, points }) => {
+      const params: Record<string, unknown> = { parent_path, shape };
+      if (dim !== undefined) params.dim = dim;
+      if (name !== undefined) params.name = name;
+      if (size !== undefined) params.size = size;
+      if (radius !== undefined) params.radius = radius;
+      if (height !== undefined) params.height = height;
+      if (points !== undefined) params.points = points;
+      return call("collisionshape.add", params);
+    },
+  );
+
+  server.registerTool(
+    "body_set_collision_layer",
+    {
+      title: "Set collision layer",
+      description:
+        "Set the collision_layer bitmask on a physics body or area (CollisionObject2D/3D) in the edited scene (undoable). layer is the integer bitmask of layers this object occupies.",
+      inputSchema: {
+        path: z.string().describe("Body/Area node path relative to the scene root"),
+        layer: z.number().int().describe("collision_layer bitmask (non-negative integer)"),
+      },
+    },
+    async ({ path, layer }) => call("body.set_collision_layer", { path, layer }),
+  );
+
+  server.registerTool(
+    "body_set_collision_mask",
+    {
+      title: "Set collision mask",
+      description:
+        "Set the collision_mask bitmask on a physics body or area (CollisionObject2D/3D) in the edited scene (undoable). mask is the integer bitmask of layers this object scans for collisions.",
+      inputSchema: {
+        path: z.string().describe("Body/Area node path relative to the scene root"),
+        mask: z.number().int().describe("collision_mask bitmask (non-negative integer)"),
+      },
+    },
+    async ({ path, mask }) => call("body.set_collision_mask", { path, mask }),
+  );
 }

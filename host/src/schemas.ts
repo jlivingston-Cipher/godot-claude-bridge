@@ -202,6 +202,12 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   tilemap_get_cell: { path: z.string(), coords: z.array(z.number()), source_id: z.number(), atlas_coords: z.array(z.number()), alternative: z.number(), empty: z.boolean() },
   tilemap_clear: { path: z.string(), cleared_cells: z.number() },
 
+  // ---- Group E: Physics & collision (tools/editor.ts -> operations.gd _body_*/_collisionshape_add) ----
+  body_create: { path: z.string(), name: z.string(), type: z.string(), body: z.string(), dim: z.string() },
+  collisionshape_add: { path: z.string(), name: z.string(), type: z.string(), shape: z.string(), shape_class: z.string(), dim: z.string() },
+  body_set_collision_layer: { path: z.string(), collision_layer: z.number() },
+  body_set_collision_mask: { path: z.string(), collision_mask: z.number() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

@@ -6,6 +6,27 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group E (batch 1): Physics bodies & collision shapes (4 tools, 153 → 157)
+- Starts **Group E (Physics & collision)** from the breadth-superset plan — the group that crosses
+  godot-mcp-pro's 162-tool ceiling (at ~166 once the group lands). Four A/Editor tools that author physics
+  nodes in the edited scene, all in-scene, undoable via `EditorUndoRedoManager`, and **ungated** (the
+  `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model):
+  - **`body_create`** — add a `StaticBody` / `RigidBody` / `CharacterBody` / `Area` node (2D or 3D via `dim`) under a parent.
+  - **`collisionshape_add`** — add a `CollisionShape2D` / `CollisionShape3D` carrying a shape resource: `rect` (Rectangle/Box), `circle` (Circle/Sphere), `capsule` (Capsule 2D/3D), or `polygon` (ConvexPolygon 2D/3D).
+  - **`body_set_collision_layer`** / **`body_set_collision_mask`** — set the `collision_layer` / `collision_mask` bitmask on any body or area (`CollisionObject2D/3D`).
+- Same rigor bar as Groups A–D: bodies/shapes go through the `node_add` do/undo reference pattern, layer/mask
+  through `add_do_property` / `add_undo_property`. The `StaticBody/RigidBody/CharacterBody/Area` (2D+3D),
+  `CollisionShape2D/3D`, and `RectangleShape2D / CircleShape2D / CapsuleShape2D / ConvexPolygonShape2D` +
+  `BoxShape3D / SphereShape3D / CapsuleShape3D / ConvexPolygonShape3D` APIs were probed live on Godot 4.7
+  before design, and a `Node2D → StaticBody2D → CollisionShape2D(RectangleShape2D)` scene was packed to a
+  `.tscn`, saved, and reloaded — the body's `collision_layer` and the shape (type + `size`) survive the
+  round-trip; the shape-building helpers were unit-exercised against a live `operations.gd` instance. Handlers
+  in both `addons/claude_bridge/operations.gd` copies (dispatch + `_body_create` / `_collisionshape_add` /
+  `_body_set_collision_layer` / `_body_set_collision_mask`), statically parse-checked against local Godot 4.7;
+  host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`;
+  `registration.test.ts` `EXPECTED_TOOL_COUNT` 153 → 157; `docs/TOOL_CATALOG.md` (Group E section + index).
+  `contract_check` 157; host tests 173. No version bump — Group E completes across batches, then the E+F release cut.
+
 ## [0.12.0] — 2026-07-08
 
 ### Added — Group D (batch 2): TileMapLayer + cell painting (5 tools, 148 → 153)
