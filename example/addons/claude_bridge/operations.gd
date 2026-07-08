@@ -61,6 +61,20 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _node_add_to_group(params)
 		"node.remove_from_group":
 			return _node_remove_from_group(params)
+		"node.instantiate_scene":
+			return _node_instantiate_scene(params)
+		"node.move_child":
+			return _node_move_child(params)
+		"node.change_type":
+			return _node_change_type(params)
+		"node.set_owner":
+			return _node_set_owner(params)
+		"node.call_method":
+			return _node_call_method(params)
+		"node.get_path":
+			return _node_get_path(params)
+		"node.list_properties":
+			return _node_list_properties(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -543,3 +557,185 @@ func _node_remove_from_group(params: Dictionary) -> Dictionary:
 	ur.add_undo_method(node, "add_to_group", group, true)
 	ur.commit_action()
 	return _ok({"path": _path_of(root, node), "group": group, "removed": true})
+
+
+# ------------------------------------- Group A: node depth (batch 2) ---------
+
+func _node_instantiate_scene(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var scene_path := String(params.get("scene_path", ""))
+	if scene_path == "" or not ResourceLoader.exists(scene_path):
+		return _err("not_found", "Scene not found: %s" % scene_path)
+	var res := ResourceLoader.load(scene_path)
+	if res == null or not (res is PackedScene):
+		return _err("bad_type", "Not a PackedScene: %s" % scene_path)
+	var inst: Node = (res as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
+	if inst == null:
+		return _err("instantiate_failed", "Could not instantiate %s" % scene_path)
+	if params.has("name"):
+		inst.name = String(params.get("name"))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: instance scene %s" % scene_path)
+	ur.add_do_method(parent, "add_child", inst)
+	ur.add_do_method(inst, "set_owner", root)
+	ur.add_do_reference(inst)
+	ur.add_undo_method(parent, "remove_child", inst)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, inst), "name": String(inst.name), "type": inst.get_class(), "scene": scene_path})
+
+
+func _node_move_child(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if node == root:
+		return _err("refused", "Cannot move the scene root")
+	var parent := node.get_parent()
+	var count := parent.get_child_count()
+	var to_index := int(params.get("to_index", node.get_index()))
+	if to_index < 0:
+		to_index = count + to_index
+	if to_index < 0 or to_index >= count:
+		return _err("bad_index", "to_index out of range 0..%d" % (count - 1))
+	var old_index := node.get_index()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: move %s to %d" % [node.name, to_index])
+	ur.add_do_method(parent, "move_child", node, to_index)
+	ur.add_undo_method(parent, "move_child", node, old_index)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "index": node.get_index()})
+
+
+func _node_change_type(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if node == root:
+		return _err("refused", "Cannot change the type of the scene root")
+	var type := String(params.get("type", ""))
+	if not ClassDB.can_instantiate(type):
+		return _err("bad_type", "Cannot instantiate class: %s" % type)
+	var old_type := node.get_class()
+	var replacement: Node = ClassDB.instantiate(type)
+	replacement.name = node.name
+	var new_props := {}
+	for np in replacement.get_property_list():
+		new_props[String(np.get("name", ""))] = true
+	for op in node.get_property_list():
+		var pname := String(op.get("name", ""))
+		if pname == "" or pname == "name" or pname == "owner" or pname == "script":
+			continue
+		if (int(op.get("usage", 0)) & PROPERTY_USAGE_STORAGE) == 0:
+			continue
+		if not new_props.has(pname):
+			continue
+		replacement.set(pname, node.get(pname))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: change type %s -> %s" % [node.name, type])
+	ur.add_do_method(node, "replace_by", replacement, true)
+	ur.add_do_method(replacement, "set_owner", root)
+	ur.add_do_reference(replacement)
+	ur.add_undo_method(replacement, "replace_by", node, true)
+	ur.add_undo_method(node, "set_owner", root)
+	ur.add_undo_reference(node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, replacement), "name": String(replacement.name), "type": replacement.get_class(), "old_type": old_type})
+
+
+func _node_set_owner(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if node == root:
+		return _err("refused", "The scene root cannot have an owner")
+	var owner_node: Node = root
+	if params.has("owner_path") and String(params.get("owner_path", "")) != "":
+		owner_node = _resolve(root, String(params.get("owner_path")))
+		if owner_node == null:
+			return _err("bad_path", "Owner not found: %s" % params.get("owner_path", ""))
+	var old_owner := node.owner
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set owner of %s" % node.name)
+	ur.add_do_method(node, "set_owner", owner_node)
+	ur.add_undo_method(node, "set_owner", old_owner)
+	ur.commit_action()
+	var owner_out: Variant = (_path_of(root, node.owner) if node.owner else null)
+	return _ok({"path": _path_of(root, node), "owner": owner_out})
+
+
+func _node_call_method(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var method := String(params.get("method", ""))
+	if method == "":
+		return _err("bad_params", "Missing 'method'")
+	if not node.has_method(method):
+		return _err("no_method", "%s has no method %s" % [node.get_class(), method])
+	var call_args: Array = []
+	for a in params.get("args", []):
+		call_args.append(Codec.decode(a))
+	var result: Variant = node.callv(method, call_args)
+	return _ok({"path": _path_of(root, node), "method": method, "result": Codec.encode(result)})
+
+
+func _node_get_path(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var parent := node.get_parent()
+	var parent_out: Variant = null
+	if node != root and parent != null:
+		parent_out = _path_of(root, parent)
+	return _ok({
+		"path": _path_of(root, node),
+		"name": String(node.name),
+		"type": node.get_class(),
+		"index": node.get_index(),
+		"parent": parent_out,
+		"child_count": node.get_child_count(),
+	})
+
+
+func _node_list_properties(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var props: Array = []
+	for p in node.get_property_list():
+		var usage := int(p.get("usage", 0))
+		if (usage & PROPERTY_USAGE_EDITOR) == 0:
+			continue
+		var ptype := int(p.get("type", 0))
+		if ptype == TYPE_NIL:
+			continue
+		props.append({
+			"name": String(p.get("name", "")),
+			"type": ptype,
+			"class_name": String(p.get("class_name", "")),
+			"usage": usage,
+		})
+	return _ok({"path": _path_of(root, node), "properties": props})

@@ -6,6 +6,19 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group A (batch 2): node-depth authoring (7 tools, 99 → 106)
+- Completes the `node_*` depth surface from the breadth-superset plan. Seven A/Editor tools, all
+  schema-enforced and — where they mutate — undoable via `EditorUndoRedoManager`, in lockstep with
+  `scripts/contract_check.py` (106), `registration.test.ts` (`EXPECTED_TOOL_COUNT` 99 → 106), and
+  `docs/TOOL_CATALOG.md`:
+  - **`node_instantiate_scene`** — instance an external `PackedScene` as an editable child of a parent (undoable; instanced with `GEN_EDIT_STATE_INSTANCE`).
+  - **`node_move_child`** — reorder a node among its siblings by index (undoable; negative indices count from the end).
+  - **`node_change_type`** — replace a node with a different class via `Node.replace_by`, carrying over compatible storage properties, children, and groups (undoable; refuses the scene root).
+  - **`node_set_owner`** — set a node's owner ancestor (undoable); ownership decides which scene a node saves into.
+  - **`node_call_method`** — invoke a method on an edited-scene node; **destructive** (arbitrary invocation, not undoable), elicitation-gated.
+  - **`node_get_path`** / **`node_list_properties`** — read a node's path/index/parent metadata, or its inspector-visible property list (name, Variant type, class_name, usage). Read-only.
+- Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_node_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. No release cut; the live `authoring-plane` CI probe for the Group A mutators remains a tracked follow-up.
+
 ### Added — Group A (batch 1): node-graph authoring depth (6 tools, 93 → 99)
 - First installment of the breadth-superset plan (Group A). Six A/Editor authoring tools, all
   schema-enforced and — where they mutate — undoable via `EditorUndoRedoManager`, in lockstep with

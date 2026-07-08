@@ -298,6 +298,106 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
   );
 
   server.registerTool(
+    "node_instantiate_scene",
+    {
+      title: "Instance scene under node",
+      description:
+        "Instance an external PackedScene (res:// path) as an editable child of a parent node (undoable). Returns the new node's path.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path relative to the scene root; \".\" for the root"),
+        scene_path: z.string().describe("Scene to instance, e.g. res://actors/enemy.tscn"),
+        name: z.string().optional().describe("Node name (defaults to the instanced scene's root name)"),
+      },
+    },
+    async ({ parent_path, scene_path, name }) =>
+      call("node.instantiate_scene", name !== undefined ? { parent_path, scene_path, name } : { parent_path, scene_path }),
+  );
+
+  server.registerTool(
+    "node_move_child",
+    {
+      title: "Move child",
+      description: "Reorder a node among its siblings by index (undoable). Negative indices count from the end (-1 = last).",
+      inputSchema: {
+        path: z.string().describe("Node path relative to the scene root"),
+        to_index: z.number().int().describe("New sibling index (0-based; negative counts from the end)"),
+      },
+    },
+    async ({ path, to_index }) => call("node.move_child", { path, to_index }),
+  );
+
+  server.registerTool(
+    "node_change_type",
+    {
+      title: "Change node type",
+      description:
+        "Replace a node with a new node of a different class, carrying over compatible properties, children, and groups (undoable). Refuses the scene root.",
+      inputSchema: {
+        path: z.string().describe("Node path relative to the scene root"),
+        type: z.string().describe("New node class, e.g. Sprite2D, StaticBody3D"),
+      },
+    },
+    async ({ path, type }) => call("node.change_type", { path, type }),
+  );
+
+  server.registerTool(
+    "node_set_owner",
+    {
+      title: "Set node owner",
+      description:
+        "Set a node's owner (undoable). Owner must be an ancestor; \".\" or omitted sets the scene root. Ownership determines which scene a node is saved into.",
+      inputSchema: {
+        path: z.string().describe("Node path relative to the scene root"),
+        owner_path: z.string().optional().describe("Ancestor to own the node; \".\" or omitted for the scene root"),
+      },
+    },
+    async ({ path, owner_path }) =>
+      call("node.set_owner", owner_path !== undefined ? { path, owner_path } : { path }),
+  );
+
+  server.registerTool(
+    "node_call_method",
+    {
+      title: "Call node method (edit-time)",
+      description:
+        "Invoke a method on a node in the EDITED scene. DESTRUCTIVE (arbitrary invocation, not undoable) — gated by confirmation. " +
+        "Args use the tagged-Variant convention; the return value comes back tagged.",
+      inputSchema: {
+        path: z.string().describe("Node path relative to the scene root"),
+        method: z.string().describe("Method name"),
+        args: z.array(z.any()).optional().describe("Positional arguments (JSON scalars or __type__-tagged Variants)"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ path, method, args, confirm }) => {
+      const blocked = await gate(server, confirm, `Call ${path}.${method}() in the edited scene`);
+      if (blocked) return blocked;
+      return call("node.call_method", { path, method, args: args ?? [] });
+    },
+  );
+
+  server.registerTool(
+    "node_get_path",
+    {
+      title: "Get node path",
+      description: "Return a node's scene-relative path, class, sibling index, parent path, and child count. Read-only.",
+      inputSchema: { path: z.string().describe("Node path relative to the scene root; \".\" for the root") },
+    },
+    async ({ path }) => call("node.get_path", { path }),
+  );
+
+  server.registerTool(
+    "node_list_properties",
+    {
+      title: "List node properties",
+      description:
+        "List a node's inspector-visible properties (name, Variant type, class_name, usage flags). Read-only. Use node_get_property to read a value.",
+      inputSchema: { path: z.string().describe("Node path relative to the scene root") },
+    },
+    async ({ path }) => call("node.list_properties", { path }),
+  );
+
+  server.registerTool(
     "selection_get",
     { title: "Get selection", description: "Return the paths of the nodes currently selected in the editor.", inputSchema: {} },
     async () => call("selection.get"),

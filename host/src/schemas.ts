@@ -113,6 +113,19 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   node_list_groups: { path: z.string(), groups: z.array(z.string()) },
   node_add_to_group: { path: z.string(), group: z.string(), added: z.boolean() },
   node_remove_from_group: { path: z.string(), group: z.string(), removed: z.boolean() },
+  node_instantiate_scene: { path: z.string(), name: z.string(), type: z.string(), scene: z.string() },
+  node_move_child: { path: z.string(), index: z.number() },
+  node_change_type: { path: z.string(), name: z.string(), type: z.string(), old_type: z.string() },
+  node_set_owner: { path: z.string(), owner: z.string().nullable() },
+  node_call_method: { path: z.string(), method: z.string(), result: encodedValue },
+  node_get_path: {
+    path: z.string(), name: z.string(), type: z.string(),
+    index: z.number(), parent: z.string().nullable(), child_count: z.number(),
+  },
+  node_list_properties: {
+    path: z.string(),
+    properties: z.array(z.object({ name: z.string(), type: z.number(), class_name: z.string(), usage: z.number() })),
+  },
   selection_get: { selection: z.array(z.string()) },
   selection_set: { selection: z.array(z.string()) },
   classdb_get_class: {
