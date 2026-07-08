@@ -634,6 +634,26 @@ Batch 2 (`tilemaplayer_create`, `tilemap_*`) is the other half: it authors a `Ti
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["path", "cleared_cells"], "properties": { "path": { "type": "string" }, "cleared_cells": { "type": "integer" } } }`
 
+## Group E — Physics & collision (Plane A / Editor)
+
+In-scene physics authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model. `body_create` adds a `StaticBody`/`RigidBody`/`CharacterBody`/`Area` node; `collisionshape_add` adds a `CollisionShape2D`/`CollisionShape3D` carrying a shape resource (`rect`→Rectangle/Box, `circle`→Circle/Sphere, `capsule`→Capsule 2D/3D, `polygon`→ConvexPolygon 2D/3D); `body_set_collision_layer` / `body_set_collision_mask` set the bitmasks on any body or area (`CollisionObject2D/3D`). `dim` selects 2D (default) or 3D. The API surface (bodies + `CollisionShape2D/3D` + the six shape resources) was probed live on Godot 4.7, and a `StaticBody2D → CollisionShape2D(RectangleShape2D)` scene was packed to a `.tscn`, saved, and reloaded — body `collision_layer` and the shape (type + `size`) survive the round-trip. This is the group that crosses godot-mcp-pro's 162-tool ceiling (batch 1 here; group completes at ~166).
+
+### `body_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["static", "rigid", "character", "area"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "body", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "body": { "type": "string" }, "dim": { "type": "string" } } }`
+
+### `collisionshape_add` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "shape"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string", "enum": ["rect", "circle", "capsule", "polygon"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "size": { "type": "array", "items": { "type": "number" } }, "radius": { "type": "number" }, "height": { "type": "number" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "shape", "shape_class", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" }, "shape_class": { "type": "string" }, "dim": { "type": "string" } } }`
+
+### `body_set_collision_layer` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "layer"], "properties": { "path": { "type": "string" }, "layer": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["path", "collision_layer"], "properties": { "path": { "type": "string" }, "collision_layer": { "type": "integer" } } }`
+
+### `body_set_collision_mask` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "mask"], "properties": { "path": { "type": "string" }, "mask": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["path", "collision_mask"], "properties": { "path": { "type": "string" }, "collision_mask": { "type": "integer" } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1288,6 +1308,10 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `tilemap_set_cells_rect` | D / Editor | ✅ | undoable |
 | `tilemap_get_cell` | D / Editor | ✅ | – |
 | `tilemap_clear` | D / Editor | ✅ | undoable |
+| `body_create` | E / Editor | ✅ | undoable |
+| `collisionshape_add` | E / Editor | ✅ | undoable |
+| `body_set_collision_layer` | E / Editor | ✅ | undoable |
+| `body_set_collision_mask` | E / Editor | ✅ | undoable |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |
