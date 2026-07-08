@@ -534,6 +534,8 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 
 Authoring over an in-scene `AnimationPlayer`; animations live in its `AnimationLibrary` resources. Every mutation goes through `EditorUndoRedoManager` (undoable, nothing written to disk). Names are addressed as `animation` within a `library` (default `""`).
 
+Batch 2 (`anim_tree_*`, `anim_statemachine_*`) authors an `AnimationTree` node and its `tree_root` graph — an `AnimationNodeBlendTree` or `AnimationNodeStateMachine` — adding graph nodes, state-machine states, and transitions. Same model: undoable via `EditorUndoRedoManager`, ungated, nothing written to disk.
+
 ### `anim_player_create` ✅
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
@@ -573,6 +575,22 @@ Authoring over an in-scene `AnimationPlayer`; animations live in its `AnimationL
 ### `anim_list` ✅
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path"], "properties": { "player_path": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["player", "animations"], "properties": { "player": { "type": "string" }, "animations": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "library": { "type": "string" }, "animation": { "type": "string" }, "length": { "type": "number" }, "loop_mode": { "type": "string" }, "track_count": { "type": "integer" } } } } } }`
+
+### `anim_tree_create` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "root_type": { "type": "string", "enum": ["blend_tree", "state_machine"] }, "anim_player_path": { "type": "string" }, "active": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "root_type", "anim_player", "active"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "root_type": { "type": "string" }, "anim_player": { "type": "string" }, "active": { "type": "boolean" } } }`
+
+### `anim_tree_add_node` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "node_name", "node_type"], "properties": { "tree_path": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+- **Output** `{ "type": "object", "required": ["tree", "node_name", "node_type", "position"], "properties": { "tree": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+
+### `anim_statemachine_add_state` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "state_name"], "properties": { "tree_path": { "type": "string" }, "state_name": { "type": "string" }, "animation": { "type": "string" }, "node_type": { "type": "string" }, "state_machine": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+- **Output** `{ "type": "object", "required": ["tree", "state_machine", "state_name", "node_type", "animation", "position"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "state_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+
+### `anim_statemachine_add_transition` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "from_state", "to_state"], "properties": { "tree_path": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "state_machine": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string", "enum": ["immediate", "sync", "at_end"] }, "advance_mode": { "type": "string", "enum": ["disabled", "enabled", "auto"] }, "advance_condition": { "type": "string" }, "priority": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["tree", "state_machine", "from_state", "to_state", "xfade_time", "switch_mode", "advance_mode", "transition_count"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string" }, "advance_mode": { "type": "string" }, "transition_count": { "type": "integer" } } }`
 
 ---
 
@@ -1215,6 +1233,10 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `anim_set_loop` | C / Editor | ✅ | – |
 | `anim_get_track_keys` | C / Editor | ✅ | – |
 | `anim_list` | C / Editor | ✅ | – |
+| `anim_tree_create` | C / Editor | ✅ | – |
+| `anim_tree_add_node` | C / Editor | ✅ | – |
+| `anim_statemachine_add_state` | C / Editor | ✅ | – |
+| `anim_statemachine_add_transition` | C / Editor | ✅ | – |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

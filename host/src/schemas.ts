@@ -184,6 +184,10 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   anim_set_loop: { mode: z.string(), previous: z.string() },
   anim_get_track_keys: { track: z.number(), type: z.string(), path: z.string(), keys: z.array(z.object({ index: z.number(), time: z.number(), value: encodedValue, transition: z.number() })) },
   anim_list: { player: z.string(), animations: z.array(z.object({ name: z.string(), library: z.string(), animation: z.string(), length: z.number(), loop_mode: z.string(), track_count: z.number() })) },
+  anim_tree_create: { path: z.string(), name: z.string(), type: z.string(), root_type: z.string(), anim_player: z.string(), active: z.boolean() },
+  anim_tree_add_node: { tree: z.string(), node_name: z.string(), node_type: z.string(), position: z.array(z.number()) },
+  anim_statemachine_add_state: { tree: z.string(), state_machine: z.string(), state_name: z.string(), node_type: z.string(), animation: z.string(), position: z.array(z.number()) },
+  anim_statemachine_add_transition: { tree: z.string(), state_machine: z.string(), from_state: z.string(), to_state: z.string(), xfade_time: z.number(), switch_mode: z.string(), advance_mode: z.string(), transition_count: z.number() },
 
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },

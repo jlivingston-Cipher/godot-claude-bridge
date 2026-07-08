@@ -6,6 +6,21 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group C (batch 2): animation state machines — AnimationTree + StateMachine (4 tools, 140 → 144)
+- Completes **Group C (Animation)** from the breadth-superset plan. Four C/Editor `anim_*` tools that author an
+  `AnimationTree` node and its `tree_root` graph, schema-enforced and undoable:
+  - **`anim_tree_create`** — add an `AnimationTree` node with a fresh `tree_root` (`AnimationNodeBlendTree` or `AnimationNodeStateMachine`); created inactive, optionally wired to an `AnimationPlayer` via `anim_player`.
+  - **`anim_tree_add_node`** — add any `AnimationNode` subclass to the tree_root graph (blend tree or state machine); binds a clip for `AnimationNodeAnimation`.
+  - **`anim_statemachine_add_state`** — add a state (default `AnimationNodeAnimation`) to a state machine — the `tree_root`, or a nested state-machine node.
+  - **`anim_statemachine_add_transition`** — connect two states with an `AnimationNodeStateMachineTransition` (xfade time, switch mode, advance mode/condition, priority).
+- Same rigor bar as batch 1: every mutation goes through `EditorUndoRedoManager` (undoable; nothing written to
+  disk), ungated (in-scene mutation, like `node_*`). The `AnimationTree` / `AnimationNode*` API surface was probed
+  live on Godot 4.7 before design. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch +
+  `_anim_tree_*` / `_anim_statemachine_*`), statically parse-checked against local Godot 4.7; host registrations in
+  `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`; `registration.test.ts`
+  `EXPECTED_TOOL_COUNT` 140 → 144; `docs/TOOL_CATALOG.md` (detail + index). `contract_check` 144; host tests 173.
+  Group C complete; a release cut follows after Group D.
+
 ### Added — Group C (batch 1): animation authoring — AnimationPlayer + Animation (10 tools, 130 → 140)
 - First family of **Group C (Animation)** from the breadth-superset plan (unblocked by Group B — animations
   are Resources). Ten C/Editor `anim_*` tools over the editor bridge, schema-enforced, authoring an in-scene

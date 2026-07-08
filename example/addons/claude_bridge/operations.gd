@@ -143,6 +143,14 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _anim_get_track_keys(params)
 		"anim.list":
 			return _anim_list(params)
+		"anim.tree_create":
+			return _anim_tree_create(params)
+		"anim.tree_add_node":
+			return _anim_tree_add_node(params)
+		"anim.statemachine_add_state":
+			return _anim_statemachine_add_state(params)
+		"anim.statemachine_add_transition":
+			return _anim_statemachine_add_transition(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -1608,3 +1616,210 @@ func _anim_list(params: Dictionary) -> Dictionary:
 				"track_count": anim.get_track_count(),
 			})
 	return _ok({"player": _path_of(root, player), "animations": out})
+
+
+## AnimationTree authoring (Group C batch 2): create an AnimationTree node and edit
+## its tree_root graph (AnimationNodeBlendTree) or state machine (AnimationNodeStateMachine).
+## Undoable via EditorUndoRedoManager, ungated (in-scene, like node_* / batch-1 anim_*).
+
+func _as_anim_tree(root: Node, path: String) -> AnimationTree:
+	var n := _resolve(root, path)
+	if n is AnimationTree:
+		return n
+	return null
+
+
+func _anim_root_type_class(s: String) -> String:
+	match s:
+		"blend_tree":
+			return "AnimationNodeBlendTree"
+		"state_machine":
+			return "AnimationNodeStateMachine"
+		_:
+			return ""
+
+
+func _to_vec2(v) -> Vector2:
+	if v is Array and v.size() >= 2:
+		return Vector2(float(v[0]), float(v[1]))
+	return Vector2.ZERO
+
+
+func _sm_switch_mode(s: String) -> int:
+	var m := {"immediate": 0, "sync": 1, "at_end": 2}
+	return int(m.get(s, -1))
+
+
+func _sm_switch_name(mode: int) -> String:
+	var names := ["immediate", "sync", "at_end"]
+	if mode >= 0 and mode < names.size():
+		return String(names[mode])
+	return "unknown"
+
+
+func _sm_advance_mode(s: String) -> int:
+	var m := {"disabled": 0, "enabled": 1, "auto": 2}
+	return int(m.get(s, -1))
+
+
+func _sm_advance_name(mode: int) -> String:
+	var names := ["disabled", "enabled", "auto"]
+	if mode >= 0 and mode < names.size():
+		return String(names[mode])
+	return "unknown"
+
+
+## Resolve the target AnimationNodeStateMachine: tree_root itself when sm_name is
+## empty, or a nested state-machine node inside the tree_root graph.
+func _resolve_state_machine(tree: AnimationTree, sm_name: String):
+	var rootnode = tree.get("tree_root")
+	if rootnode == null:
+		return null
+	if sm_name == "":
+		if rootnode is AnimationNodeStateMachine:
+			return rootnode
+		return null
+	if not rootnode.has_method("has_node") or not rootnode.has_node(sm_name):
+		return null
+	var sub = rootnode.get_node(sm_name)
+	if sub is AnimationNodeStateMachine:
+		return sub
+	return null
+
+
+func _anim_tree_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var rt := String(params.get("root_type", "blend_tree"))
+	var rt_class := _anim_root_type_class(rt)
+	if rt_class == "":
+		return _err("bad_params", "'root_type' must be one of: blend_tree, state_machine")
+	var node := AnimationTree.new()
+	node.name = String(params.get("name", "AnimationTree"))
+	node.set("tree_root", ClassDB.instantiate(rt_class))
+	var anim_player_path := String(params.get("anim_player_path", ""))
+	if anim_player_path != "":
+		node.set("anim_player", NodePath(anim_player_path))
+	node.set("active", bool(params.get("active", false)))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add AnimationTree %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "AnimationTree", "root_type": rt, "anim_player": anim_player_path, "active": bool(node.get("active"))})
+
+
+func _anim_tree_add_node(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var tree := _as_anim_tree(root, String(params.get("tree_path", "")))
+	if tree == null:
+		return _err("bad_path", "AnimationTree not found: %s" % params.get("tree_path", ""))
+	var rootnode = tree.get("tree_root")
+	if rootnode == null or not rootnode.has_method("add_node"):
+		return _err("bad_root", "tree_root does not accept nodes (need AnimationNodeBlendTree or AnimationNodeStateMachine)")
+	var node_name := String(params.get("node_name", ""))
+	if node_name == "":
+		return _err("bad_params", "Missing 'node_name'")
+	if rootnode.has_node(node_name):
+		return _err("exists", "Node already exists in the graph: %s" % node_name)
+	var node_type := String(params.get("node_type", ""))
+	if node_type == "" or not ClassDB.can_instantiate(node_type) or not ClassDB.is_parent_class(node_type, "AnimationNode"):
+		return _err("bad_type", "'node_type' must be an instantiable AnimationNode subclass: %s" % node_type)
+	var sub = ClassDB.instantiate(node_type)
+	if params.has("animation") and sub is AnimationNodeAnimation:
+		sub.set("animation", StringName(String(params.get("animation"))))
+	var pos := _to_vec2(params.get("position", null))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add anim node %s" % node_name)
+	ur.add_do_method(rootnode, "add_node", node_name, sub, pos)
+	ur.add_do_reference(sub)
+	ur.add_undo_method(rootnode, "remove_node", node_name)
+	ur.commit_action()
+	return _ok({"tree": _path_of(root, tree), "node_name": node_name, "node_type": node_type, "position": [pos.x, pos.y]})
+
+
+func _anim_statemachine_add_state(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var tree := _as_anim_tree(root, String(params.get("tree_path", "")))
+	if tree == null:
+		return _err("bad_path", "AnimationTree not found: %s" % params.get("tree_path", ""))
+	var sm_name := String(params.get("state_machine", ""))
+	var sm = _resolve_state_machine(tree, sm_name)
+	if sm == null:
+		return _err("bad_root", "No AnimationNodeStateMachine at %s" % ("tree_root" if sm_name == "" else sm_name))
+	var state_name := String(params.get("state_name", ""))
+	if state_name == "":
+		return _err("bad_params", "Missing 'state_name'")
+	if sm.has_node(state_name):
+		return _err("exists", "State already exists: %s" % state_name)
+	var node_type := String(params.get("node_type", "AnimationNodeAnimation"))
+	if not ClassDB.can_instantiate(node_type) or not ClassDB.is_parent_class(node_type, "AnimationNode"):
+		return _err("bad_type", "'node_type' must be an instantiable AnimationNode subclass: %s" % node_type)
+	var state = ClassDB.instantiate(node_type)
+	var anim_name := String(params.get("animation", ""))
+	if anim_name != "" and state is AnimationNodeAnimation:
+		state.set("animation", StringName(anim_name))
+	var pos := _to_vec2(params.get("position", null))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add state %s" % state_name)
+	ur.add_do_method(sm, "add_node", state_name, state, pos)
+	ur.add_do_reference(state)
+	ur.add_undo_method(sm, "remove_node", state_name)
+	ur.commit_action()
+	return _ok({"tree": _path_of(root, tree), "state_machine": sm_name, "state_name": state_name, "node_type": node_type, "animation": anim_name, "position": [pos.x, pos.y]})
+
+
+func _anim_statemachine_add_transition(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var tree := _as_anim_tree(root, String(params.get("tree_path", "")))
+	if tree == null:
+		return _err("bad_path", "AnimationTree not found: %s" % params.get("tree_path", ""))
+	var sm_name := String(params.get("state_machine", ""))
+	var sm = _resolve_state_machine(tree, sm_name)
+	if sm == null:
+		return _err("bad_root", "No AnimationNodeStateMachine at %s" % ("tree_root" if sm_name == "" else sm_name))
+	var from_state := String(params.get("from_state", ""))
+	var to_state := String(params.get("to_state", ""))
+	if from_state == "" or to_state == "":
+		return _err("bad_params", "Missing 'from_state' or 'to_state'")
+	if from_state != "Start" and from_state != "End" and not sm.has_node(from_state):
+		return _err("not_found", "from_state not in state machine: %s" % from_state)
+	if to_state != "Start" and to_state != "End" and not sm.has_node(to_state):
+		return _err("not_found", "to_state not in state machine: %s" % to_state)
+	if sm.has_transition(from_state, to_state):
+		return _err("exists", "Transition already exists: %s -> %s" % [from_state, to_state])
+	var switch_s := String(params.get("switch_mode", "immediate"))
+	var switch_mode := _sm_switch_mode(switch_s)
+	if switch_mode < 0:
+		return _err("bad_params", "'switch_mode' must be one of: immediate, sync, at_end")
+	var advance_s := String(params.get("advance_mode", "enabled"))
+	var advance_mode := _sm_advance_mode(advance_s)
+	if advance_mode < 0:
+		return _err("bad_params", "'advance_mode' must be one of: disabled, enabled, auto")
+	var tr := AnimationNodeStateMachineTransition.new()
+	tr.set("xfade_time", float(params.get("xfade_time", 0.0)))
+	tr.set("switch_mode", switch_mode)
+	tr.set("advance_mode", advance_mode)
+	if String(params.get("advance_condition", "")) != "":
+		tr.set("advance_condition", StringName(String(params.get("advance_condition"))))
+	if params.has("priority"):
+		tr.set("priority", int(params.get("priority")))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add transition %s -> %s" % [from_state, to_state])
+	ur.add_do_method(sm, "add_transition", from_state, to_state, tr)
+	ur.add_do_reference(tr)
+	ur.add_undo_method(sm, "remove_transition", from_state, to_state)
+	ur.commit_action()
+	return _ok({"tree": _path_of(root, tree), "state_machine": sm_name, "from_state": from_state, "to_state": to_state, "xfade_time": float(tr.get("xfade_time")), "switch_mode": _sm_switch_name(int(tr.get("switch_mode"))), "advance_mode": _sm_advance_name(int(tr.get("advance_mode"))), "transition_count": sm.get_transition_count()})

@@ -1004,4 +1004,82 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
     },
     async ({ player_path }) => call("anim.list", { player_path }),
   );
+
+  // ---- Group C batch 2: AnimationTree + state machine (undoable in-scene) ----
+  server.registerTool(
+    "anim_tree_create",
+    {
+      title: "Create AnimationTree",
+      description:
+        "Add an AnimationTree node under a parent (undoable) with a fresh tree_root graph. root_type \"blend_tree\" (AnimationNodeBlendTree) or \"state_machine\" (AnimationNodeStateMachine). Created inactive by default; set anim_player_path to the AnimationPlayer it should drive.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path relative to the scene root; \".\" for the root"),
+        name: z.string().optional().describe("Node name (default \"AnimationTree\")"),
+        root_type: z.enum(["blend_tree", "state_machine"]).optional().describe("tree_root graph type (default blend_tree)"),
+        anim_player_path: z.string().optional().describe("NodePath to the AnimationPlayer this tree drives, relative to the AnimationTree node"),
+        active: z.boolean().optional().describe("Whether the tree processes immediately (default false)"),
+      },
+    },
+    async ({ parent_path, name, root_type, anim_player_path, active }) =>
+      call("anim.tree_create", { parent_path, name, root_type: root_type ?? "blend_tree", anim_player_path: anim_player_path ?? "", active: active ?? false }),
+  );
+
+  server.registerTool(
+    "anim_tree_add_node",
+    {
+      title: "Add AnimationTree graph node",
+      description:
+        "Add a node to an AnimationTree's tree_root graph (AnimationNodeBlendTree or AnimationNodeStateMachine), undoable. node_type is any AnimationNode subclass (e.g. AnimationNodeAnimation, AnimationNodeBlend2, AnimationNodeStateMachine). For AnimationNodeAnimation, pass animation to bind a clip.",
+      inputSchema: {
+        tree_path: z.string().describe("AnimationTree node path relative to the scene root"),
+        node_name: z.string().describe("Unique node name within the graph"),
+        node_type: z.string().describe("AnimationNode subclass to instantiate (e.g. AnimationNodeAnimation)"),
+        animation: z.string().optional().describe("For AnimationNodeAnimation: the animation name to play"),
+        position: z.array(z.number()).optional().describe("Graph editor position [x, y] (default [0, 0])"),
+      },
+    },
+    async ({ tree_path, node_name, node_type, animation, position }) =>
+      call("anim.tree_add_node", { tree_path, node_name, node_type, animation, position }),
+  );
+
+  server.registerTool(
+    "anim_statemachine_add_state",
+    {
+      title: "Add state machine state",
+      description:
+        "Add a state to an AnimationNodeStateMachine (undoable). Targets the AnimationTree's tree_root when it is a state machine, or a nested state-machine node via state_machine. Defaults the state to an AnimationNodeAnimation; pass animation to bind a clip.",
+      inputSchema: {
+        tree_path: z.string().describe("AnimationTree node path relative to the scene root"),
+        state_name: z.string().describe("Unique state name within the state machine"),
+        animation: z.string().optional().describe("For an AnimationNodeAnimation state: the animation name to play"),
+        node_type: z.string().optional().describe("AnimationNode subclass for the state (default AnimationNodeAnimation)"),
+        state_machine: z.string().optional().describe("Name of a nested AnimationNodeStateMachine node within tree_root; omit to target tree_root itself"),
+        position: z.array(z.number()).optional().describe("Graph editor position [x, y] (default [0, 0])"),
+      },
+    },
+    async ({ tree_path, state_name, animation, node_type, state_machine, position }) =>
+      call("anim.statemachine_add_state", { tree_path, state_name, animation, node_type: node_type ?? "AnimationNodeAnimation", state_machine: state_machine ?? "", position }),
+  );
+
+  server.registerTool(
+    "anim_statemachine_add_transition",
+    {
+      title: "Add state machine transition",
+      description:
+        "Add a transition between two states in an AnimationNodeStateMachine (undoable). from_state/to_state must exist (or be the built-in \"Start\"/\"End\"). switch_mode: immediate|sync|at_end; advance_mode: disabled|enabled|auto.",
+      inputSchema: {
+        tree_path: z.string().describe("AnimationTree node path relative to the scene root"),
+        from_state: z.string().describe("Source state name (or \"Start\")"),
+        to_state: z.string().describe("Destination state name (or \"End\")"),
+        state_machine: z.string().optional().describe("Name of a nested AnimationNodeStateMachine node within tree_root; omit to target tree_root itself"),
+        xfade_time: z.number().optional().describe("Cross-fade time in seconds (default 0)"),
+        switch_mode: z.enum(["immediate", "sync", "at_end"]).optional().describe("Switch mode (default immediate)"),
+        advance_mode: z.enum(["disabled", "enabled", "auto"]).optional().describe("Advance mode (default enabled)"),
+        advance_condition: z.string().optional().describe("Advance condition parameter name (used with advance_mode auto)"),
+        priority: z.number().int().optional().describe("Transition priority (lower wins when multiple are valid)"),
+      },
+    },
+    async ({ tree_path, from_state, to_state, state_machine, xfade_time, switch_mode, advance_mode, advance_condition, priority }) =>
+      call("anim.statemachine_add_transition", { tree_path, from_state, to_state, state_machine: state_machine ?? "", xfade_time: xfade_time ?? 0.0, switch_mode: switch_mode ?? "immediate", advance_mode: advance_mode ?? "enabled", advance_condition: advance_condition ?? "", priority }),
+  );
 }
