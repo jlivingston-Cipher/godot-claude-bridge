@@ -6,6 +6,27 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group D (batch 2): TileMapLayer + cell painting (5 tools, 148 → 153)
+- Completes **Group D (TileMap/TileSet)** from the breadth-superset plan. Five D/Editor tools that author a
+  `TileMapLayer` node in the edited scene and paint its cells — the in-scene counterpart to batch 1's disk-backed
+  `tileset_*` writers:
+  - **`tilemaplayer_create`** — add a `TileMapLayer` node under a parent, optionally binding a TileSet `.tres` (e.g. from `tileset_create`) as its `tile_set`.
+  - **`tilemap_set_cell`** — paint (or erase, with `source_id` -1) a single cell by `coords`, `source_id`, `atlas_coords`, `alternative`.
+  - **`tilemap_set_cells_rect`** — fill a rectangular region `[x, y, w, h]` with one tile in a single undoable action (capped at 65536 cells).
+  - **`tilemap_get_cell`** — read a cell; an empty cell reports `source_id` -1 / `atlas_coords` [-1, -1] / `alternative` 0 (`empty: true`).
+  - **`tilemap_clear`** — remove every painted cell; undo restores the prior cells.
+- Same rigor bar as the rest of Groups A–C: every mutator goes through `EditorUndoRedoManager` (undoable) and is
+  **ungated** — an in-scene mutation like `node_*` / `anim_*`, not the disk-writing gated model of `tileset_*`.
+  `set_cell`/`set_cells_rect`/`clear` capture the prior per-cell state (source/atlas/alternative) for exact undo.
+  The `TileMapLayer` API (`set_cell` / `get_cell_source_id` / `get_cell_atlas_coords` / `get_cell_alternative_tile`
+  / `clear` / `get_used_cells`) was probed live on Godot 4.7 before design, and the create → set_cell → get_cell →
+  clear chain (plus a `.tscn` save/reload round-trip of the painted cells) was verified end-to-end. Handlers in both
+  `addons/claude_bridge/operations.gd` copies (dispatch + `_tilemaplayer_create` / `_tilemap_*`), statically
+  parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts`; output schemas in
+  `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT` 148 → 153; `docs/TOOL_CATALOG.md`
+  (detail + index). `contract_check` 153; host tests 173. `TileMapLayer` supersedes the deprecated `TileMap` node in
+  Godot 4.x. Group D is now complete; the Group C+D release cut follows.
+
 ### Added — Group D (batch 1): TileSet authoring — TileSet / atlas source / tile / collision (4 tools, 144 → 148)
 - First family of **Group D (TileMap/TileSet)** from the breadth-superset plan (unblocked by Group B —
   `TileSet` is a Resource). Four D/Editor `tileset_*` tools over the editor bridge, schema-enforced, that author
