@@ -1082,4 +1082,101 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
     async ({ tree_path, from_state, to_state, state_machine, xfade_time, switch_mode, advance_mode, advance_condition, priority }) =>
       call("anim.statemachine_add_transition", { tree_path, from_state, to_state, state_machine: state_machine ?? "", xfade_time: xfade_time ?? 0.0, switch_mode: switch_mode ?? "immediate", advance_mode: advance_mode ?? "enabled", advance_condition: advance_condition ?? "", priority }),
   );
+
+  // ---- Group D: TileSet (operations.gd _tileset_*; disk-backed .tres, gated writers) ----
+  server.registerTool(
+    "tileset_create",
+    {
+      title: "Create TileSet",
+      description:
+        "Instantiate a TileSet resource and save it as a new .tres file. DESTRUCTIVE (writes a file) — gated by confirmation. tile_size is the base grid cell size in pixels (default 16×16).",
+      inputSchema: {
+        to_path: z.string().describe("Destination res:// path, e.g. res://tiles/world.tres"),
+        tile_size: z.array(z.number().int()).optional().describe("Base tile grid size [x, y] in pixels (default [16, 16])"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ to_path, tile_size, confirm }) => {
+      const blocked = await gate(server, confirm, `Create TileSet resource at ${to_path}`);
+      if (blocked) return blocked;
+      return call("tileset.create", tile_size !== undefined ? { to_path, tile_size } : { to_path });
+    },
+  );
+
+  server.registerTool(
+    "tileset_add_source",
+    {
+      title: "Add TileSet atlas source",
+      description:
+        "Add a TileSetAtlasSource (backed by a Texture2D) to a TileSet .tres and re-save. DESTRUCTIVE (writes a file) — gated by confirmation. texture_region_size defaults to the TileSet's tile_size; source_id -1 auto-assigns.",
+      inputSchema: {
+        tileset_path: z.string().describe("TileSet res:// .tres path"),
+        texture_path: z.string().describe("Texture2D res:// path used as the atlas image"),
+        texture_region_size: z.array(z.number().int()).optional().describe("Atlas cell size [x, y] in pixels (default = tile_size)"),
+        source_id: z.number().int().optional().describe("Explicit source id, or -1 to auto-assign (default -1)"),
+        margins: z.array(z.number().int()).optional().describe("Atlas margins [x, y] in pixels"),
+        separation: z.array(z.number().int()).optional().describe("Atlas separation [x, y] in pixels"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ tileset_path, texture_path, texture_region_size, source_id, margins, separation, confirm }) => {
+      const blocked = await gate(server, confirm, `Add atlas source (${texture_path}) to TileSet ${tileset_path}`);
+      if (blocked) return blocked;
+      const params: Record<string, unknown> = { tileset_path, texture_path };
+      if (texture_region_size !== undefined) params.texture_region_size = texture_region_size;
+      if (source_id !== undefined) params.source_id = source_id;
+      if (margins !== undefined) params.margins = margins;
+      if (separation !== undefined) params.separation = separation;
+      return call("tileset.add_source", params);
+    },
+  );
+
+  server.registerTool(
+    "tileset_add_tile",
+    {
+      title: "Add TileSet tile",
+      description:
+        "Create a tile at atlas_coords in an atlas source of a TileSet .tres and re-save. DESTRUCTIVE (writes a file) — gated by confirmation. size is measured in atlas cells (default [1, 1]).",
+      inputSchema: {
+        tileset_path: z.string().describe("TileSet res:// .tres path"),
+        source_id: z.number().int().describe("Atlas source id within the TileSet"),
+        atlas_coords: z.array(z.number().int()).describe("Tile atlas coordinates [x, y] (in cells)"),
+        size: z.array(z.number().int()).optional().describe("Tile size in atlas cells [x, y] (default [1, 1])"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ tileset_path, source_id, atlas_coords, size, confirm }) => {
+      const blocked = await gate(server, confirm, `Add tile ${JSON.stringify(atlas_coords)} to source ${source_id} in ${tileset_path}`);
+      if (blocked) return blocked;
+      const params: Record<string, unknown> = { tileset_path, source_id, atlas_coords };
+      if (size !== undefined) params.size = size;
+      return call("tileset.add_tile", params);
+    },
+  );
+
+  server.registerTool(
+    "tileset_set_tile_collision",
+    {
+      title: "Set tile collision polygon",
+      description:
+        "Add a collision polygon to a tile on a TileSet physics layer and re-save. DESTRUCTIVE (writes a file) — gated by confirmation. Physics layers are created as needed. polygon is an array of [x, y] points (>= 3), tile-local pixels.",
+      inputSchema: {
+        tileset_path: z.string().describe("TileSet res:// .tres path"),
+        source_id: z.number().int().describe("Atlas source id within the TileSet"),
+        atlas_coords: z.array(z.number().int()).describe("Tile atlas coordinates [x, y] (in cells)"),
+        polygon: z.array(z.array(z.number())).describe("Collision polygon points [[x, y], ...] (>= 3), tile-local pixels"),
+        physics_layer: z.number().int().optional().describe("TileSet physics layer index (default 0; created if missing)"),
+        one_way: z.boolean().optional().describe("Mark the polygon as one-way collision"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ tileset_path, source_id, atlas_coords, polygon, physics_layer, one_way, confirm }) => {
+      const blocked = await gate(server, confirm, `Set collision on tile ${JSON.stringify(atlas_coords)} in ${tileset_path}`);
+      if (blocked) return blocked;
+      const params: Record<string, unknown> = { tileset_path, source_id, atlas_coords, polygon };
+      if (physics_layer !== undefined) params.physics_layer = physics_layer;
+      if (one_way !== undefined) params.one_way = one_way;
+      return call("tileset.set_tile_collision", params);
+    },
+  );
 }

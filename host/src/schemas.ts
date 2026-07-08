@@ -189,6 +189,12 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   anim_statemachine_add_state: { tree: z.string(), state_machine: z.string(), state_name: z.string(), node_type: z.string(), animation: z.string(), position: z.array(z.number()) },
   anim_statemachine_add_transition: { tree: z.string(), state_machine: z.string(), from_state: z.string(), to_state: z.string(), xfade_time: z.number(), switch_mode: z.string(), advance_mode: z.string(), transition_count: z.number() },
 
+  // ---- Group D: TileSet (tools/editor.ts -> operations.gd _tileset_*) ----
+  tileset_create: { created: z.string(), tile_size: z.array(z.number()) },
+  tileset_add_source: { tileset: z.string(), source_id: z.number(), texture: z.string(), texture_region_size: z.array(z.number()), source_count: z.number() },
+  tileset_add_tile: { tileset: z.string(), source_id: z.number(), atlas_coords: z.array(z.number()), size: z.array(z.number()), tiles_count: z.number() },
+  tileset_set_tile_collision: { tileset: z.string(), source_id: z.number(), atlas_coords: z.array(z.number()), physics_layer: z.number(), polygon_index: z.number(), points: z.number(), one_way: z.boolean() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

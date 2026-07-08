@@ -151,6 +151,14 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _anim_statemachine_add_state(params)
 		"anim.statemachine_add_transition":
 			return _anim_statemachine_add_transition(params)
+		"tileset.create":
+			return _tileset_create(params)
+		"tileset.add_source":
+			return _tileset_add_source(params)
+		"tileset.add_tile":
+			return _tileset_add_tile(params)
+		"tileset.set_tile_collision":
+			return _tileset_set_tile_collision(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -1823,3 +1831,132 @@ func _anim_statemachine_add_transition(params: Dictionary) -> Dictionary:
 	ur.add_undo_method(sm, "remove_transition", from_state, to_state)
 	ur.commit_action()
 	return _ok({"tree": _path_of(root, tree), "state_machine": sm_name, "from_state": from_state, "to_state": to_state, "xfade_time": float(tr.get("xfade_time")), "switch_mode": _sm_switch_name(int(tr.get("switch_mode"))), "advance_mode": _sm_advance_name(int(tr.get("advance_mode"))), "transition_count": sm.get_transition_count()})
+# --------------------------------------------------------- Group D: tileset --
+# Disk-backed TileSet authoring: load a .tres TileSet, mutate it, re-save.
+# All four are file-writing → gated on the host side.
+
+func _to_vec2i(v) -> Vector2i:
+	if v is Array and v.size() >= 2:
+		return Vector2i(int(v[0]), int(v[1]))
+	return Vector2i.ZERO
+
+
+func _to_packed_vec2(v) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if v is Array:
+		for p in v:
+			if p is Array and p.size() >= 2:
+				out.append(Vector2(float(p[0]), float(p[1])))
+	return out
+
+
+func _load_tileset(path: String):
+	if not ResourceLoader.exists(path):
+		return null
+	var res := ResourceLoader.load(path)
+	if res is TileSet:
+		return res
+	return null
+
+
+func _tileset_create(params: Dictionary) -> Dictionary:
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var ts := TileSet.new()
+	if params.has("tile_size"):
+		ts.set("tile_size", _to_vec2i(params.get("tile_size")))
+	var e := ResourceSaver.save(ts, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	var tsz: Vector2i = ts.get("tile_size")
+	return _ok({"created": to_path, "tile_size": [tsz.x, tsz.y]})
+
+
+func _tileset_add_source(params: Dictionary) -> Dictionary:
+	var tileset_path := String(params.get("tileset_path", ""))
+	var ts = _load_tileset(tileset_path)
+	if ts == null:
+		return _err("not_found", "TileSet not found: %s" % tileset_path)
+	var texture_path := String(params.get("texture_path", ""))
+	if texture_path == "" or not ResourceLoader.exists(texture_path):
+		return _err("not_found", "Texture not found: %s" % texture_path)
+	var tex := ResourceLoader.load(texture_path)
+	if not (tex is Texture2D):
+		return _err("bad_texture", "Not a Texture2D: %s" % texture_path)
+	var atlas := TileSetAtlasSource.new()
+	atlas.set("texture", tex)
+	var region: Vector2i = ts.get("tile_size")
+	if params.has("texture_region_size"):
+		region = _to_vec2i(params.get("texture_region_size"))
+	atlas.set("texture_region_size", region)
+	if params.has("margins"):
+		atlas.set("margins", _to_vec2i(params.get("margins")))
+	if params.has("separation"):
+		atlas.set("separation", _to_vec2i(params.get("separation")))
+	var assigned: int = ts.add_source(atlas, int(params.get("source_id", -1)))
+	var e := ResourceSaver.save(ts, tileset_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"tileset": tileset_path, "source_id": assigned, "texture": texture_path, "texture_region_size": [region.x, region.y], "source_count": ts.get_source_count()})
+
+
+func _tileset_add_tile(params: Dictionary) -> Dictionary:
+	var tileset_path := String(params.get("tileset_path", ""))
+	var ts = _load_tileset(tileset_path)
+	if ts == null:
+		return _err("not_found", "TileSet not found: %s" % tileset_path)
+	var sid := int(params.get("source_id", -1))
+	if not ts.has_source(sid):
+		return _err("not_found", "No source with id %d" % sid)
+	var src = ts.get_source(sid)
+	if not (src is TileSetAtlasSource):
+		return _err("bad_source", "Source %d is not a TileSetAtlasSource" % sid)
+	var coords := _to_vec2i(params.get("atlas_coords"))
+	if src.has_tile(coords):
+		return _err("exists", "Tile already exists at %s" % str(coords))
+	var size := Vector2i(1, 1)
+	if params.has("size"):
+		size = _to_vec2i(params.get("size"))
+	src.create_tile(coords, size)
+	var e := ResourceSaver.save(ts, tileset_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"tileset": tileset_path, "source_id": sid, "atlas_coords": [coords.x, coords.y], "size": [size.x, size.y], "tiles_count": src.get_tiles_count()})
+
+
+func _tileset_set_tile_collision(params: Dictionary) -> Dictionary:
+	var tileset_path := String(params.get("tileset_path", ""))
+	var ts = _load_tileset(tileset_path)
+	if ts == null:
+		return _err("not_found", "TileSet not found: %s" % tileset_path)
+	var sid := int(params.get("source_id", -1))
+	if not ts.has_source(sid):
+		return _err("not_found", "No source with id %d" % sid)
+	var src = ts.get_source(sid)
+	if not (src is TileSetAtlasSource):
+		return _err("bad_source", "Source %d is not a TileSetAtlasSource" % sid)
+	var coords := _to_vec2i(params.get("atlas_coords"))
+	if not src.has_tile(coords):
+		return _err("not_found", "No tile at %s in source %d" % [str(coords), sid])
+	var layer := int(params.get("physics_layer", 0))
+	if layer < 0:
+		return _err("bad_params", "'physics_layer' must be >= 0")
+	var poly := _to_packed_vec2(params.get("polygon"))
+	if poly.size() < 3:
+		return _err("bad_params", "'polygon' needs at least 3 [x, y] points")
+	while ts.get_physics_layers_count() <= layer:
+		ts.add_physics_layer(-1)
+	var td: TileData = src.get_tile_data(coords, 0)
+	if td == null:
+		return _err("no_tile_data", "Could not get TileData for %s" % str(coords))
+	td.add_collision_polygon(layer)
+	var poly_index := td.get_collision_polygons_count(layer) - 1
+	td.set_collision_polygon_points(layer, poly_index, poly)
+	var one_way := bool(params.get("one_way", false))
+	if params.has("one_way"):
+		td.set_collision_polygon_one_way(layer, poly_index, one_way)
+	var e := ResourceSaver.save(ts, tileset_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"tileset": tileset_path, "source_id": sid, "atlas_coords": [coords.x, coords.y], "physics_layer": layer, "polygon_index": poly_index, "points": poly.size(), "one_way": one_way})

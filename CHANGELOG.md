@@ -6,6 +6,24 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group D (batch 1): TileSet authoring — TileSet / atlas source / tile / collision (4 tools, 144 → 148)
+- First family of **Group D (TileMap/TileSet)** from the breadth-superset plan (unblocked by Group B —
+  `TileSet` is a Resource). Four D/Editor `tileset_*` tools over the editor bridge, schema-enforced, that author
+  a disk-backed `.tres` `TileSet` (load → mutate → re-save; no scene needs to be open):
+  - **`tileset_create`** — instantiate a `TileSet` and save it as a new `.tres`; optional base `tile_size` (default 16×16 px).
+  - **`tileset_add_source`** — add a `TileSetAtlasSource` backed by a `Texture2D`; `texture_region_size` defaults to the tile size, `source_id` -1 auto-assigns; optional atlas `margins` / `separation`.
+  - **`tileset_add_tile`** — create a tile at `atlas_coords` (in cells) in an atlas source; optional multi-cell `size` (default 1×1).
+  - **`tileset_set_tile_collision`** — add a collision polygon (≥3 tile-local points) to a tile on a numbered physics layer (created on demand); optional `one_way`.
+- All four are **file-writing → elicitation-gated** (the disk-writing `resource_*` / `filesystem_*` precedent,
+  not the in-scene undoable `node_*` / `anim_*` model). The `TileSet` / `TileSetAtlasSource` / `TileData` API
+  surface was probed live on Godot 4.7 before design, and the create → add_source → add_tile → set_collision
+  chain was verified end-to-end through a `.tres` save/reload round-trip. Handlers in both
+  `addons/claude_bridge/operations.gd` copies (dispatch + `_tileset_*`), statically parse-checked against local
+  Godot 4.7; host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`;
+  `registration.test.ts` `EXPECTED_TOOL_COUNT` 144 → 148; `docs/TOOL_CATALOG.md` (detail + index).
+  `contract_check` 148; host tests 173. Group D batch 2 (`tilemaplayer_create` + `tilemap_*`) is next, then the
+  Group C+D release cut.
+
 ### Added — Group C (batch 2): animation state machines — AnimationTree + StateMachine (4 tools, 140 → 144)
 - Completes **Group C (Animation)** from the breadth-superset plan. Four C/Editor `anim_*` tools that author an
   `AnimationTree` node and its `tree_root` graph, schema-enforced and undoable:

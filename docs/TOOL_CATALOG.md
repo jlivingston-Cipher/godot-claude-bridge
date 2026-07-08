@@ -592,6 +592,26 @@ Batch 2 (`anim_tree_*`, `anim_statemachine_*`) authors an `AnimationTree` node a
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "from_state", "to_state"], "properties": { "tree_path": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "state_machine": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string", "enum": ["immediate", "sync", "at_end"] }, "advance_mode": { "type": "string", "enum": ["disabled", "enabled", "auto"] }, "advance_condition": { "type": "string" }, "priority": { "type": "integer" } } }`
 - **Output** `{ "type": "object", "required": ["tree", "state_machine", "from_state", "to_state", "xfade_time", "switch_mode", "advance_mode", "transition_count"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string" }, "advance_mode": { "type": "string" }, "transition_count": { "type": "integer" } } }`
 
+## Group D — TileMap/TileSet (Plane A / Editor)
+
+Disk-backed TileSet authoring: each tool loads a `.tres` `TileSet`, mutates it, and re-saves — so all four are file-writing and **gated** by confirmation, and none need a scene open. Sources are `TileSetAtlasSource` (a texture carved into a grid); tiles are addressed by `atlas_coords` in cells; per-tile collision polygons live on `TileData` under numbered physics layers (created on demand). `tilemaplayer_create` and the `tilemap_*` cell painters (Group D batch 2) consume the TileSet produced here.
+
+### `tileset_create` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string", "pattern": "^res://" }, "tile_size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["created", "tile_size"], "properties": { "created": { "type": "string" }, "tile_size": { "type": "array", "items": { "type": "integer" } } } }`
+
+### `tileset_add_source` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "texture_path"], "properties": { "tileset_path": { "type": "string" }, "texture_path": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "margins": { "type": "array", "items": { "type": "integer" } }, "separation": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["tileset", "source_id", "texture", "texture_region_size", "source_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "texture": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_count": { "type": "integer" } } }`
+
+### `tileset_add_tile` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "size", "tiles_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "tiles_count": { "type": "integer" } } }`
+
+### `tileset_set_tile_collision` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords", "polygon"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "polygon": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "physics_layer": { "type": "integer" }, "one_way": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "physics_layer", "polygon_index", "points", "one_way"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "physics_layer": { "type": "integer" }, "polygon_index": { "type": "integer" }, "points": { "type": "integer" }, "one_way": { "type": "boolean" } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1237,6 +1257,10 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `anim_tree_add_node` | C / Editor | ✅ | – |
 | `anim_statemachine_add_state` | C / Editor | ✅ | – |
 | `anim_statemachine_add_transition` | C / Editor | ✅ | – |
+| `tileset_create` | D / Editor | ✅ | ✔ writes file |
+| `tileset_add_source` | D / Editor | ✅ | ✔ writes file |
+| `tileset_add_tile` | D / Editor | ✅ | ✔ writes file |
+| `tileset_set_tile_collision` | D / Editor | ✅ | ✔ writes file |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |
