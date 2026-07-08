@@ -362,6 +362,34 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "group"], "properties": { "path": { "type": "string" }, "group": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["path", "group", "removed"], "properties": { "path": { "type": "string" }, "group": { "type": "string" }, "removed": { "type": "boolean" } } }`
 
+### `node_instantiate_scene` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "scene_path"], "properties": { "parent_path": { "type": "string", "description": "'.' for root" }, "scene_path": { "type": "string", "pattern": "^res://" }, "name": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "scene"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "scene": { "type": "string" } } }`
+
+### `node_move_child` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_index"], "properties": { "path": { "type": "string" }, "to_index": { "type": "integer", "description": "0-based; negative counts from the end" } } }`
+- **Output** `{ "type": "object", "required": ["path", "index"], "properties": { "path": { "type": "string" }, "index": { "type": "integer" } } }`
+
+### `node_change_type` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "type"], "properties": { "path": { "type": "string" }, "type": { "type": "string", "description": "new engine class" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "old_type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "old_type": { "type": "string" } } }`
+
+### `node_set_owner` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "owner_path": { "type": "string", "description": "'.' or omitted = scene root" } } }`
+- **Output** `{ "type": "object", "required": ["path", "owner"], "properties": { "path": { "type": "string" }, "owner": { "type": ["string", "null"] } } }`
+
+### `node_call_method` ✅ · destructive (arbitrary invocation, edit-time)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "method"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }`
+- **Output** `{ "type": "object", "required": ["path", "method", "result"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "result": { "$ref": "#/$defs/Variant" } } }`
+
+### `node_get_path` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "index", "child_count"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "index": { "type": "integer" }, "parent": { "type": ["string", "null"] }, "child_count": { "type": "integer" } } }`
+
+### `node_list_properties` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "properties"], "properties": { "path": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }`
+
 ### `selection_get` ✅
 - **Input** `{ "type": "object", "properties": {} }`
 - **Output** `{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }`
@@ -1000,6 +1028,13 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `node_list_groups` | A / Editor | ✅ | – |
 | `node_add_to_group` | A / Editor | ✅ | undoable |
 | `node_remove_from_group` | A / Editor | ✅ | undoable |
+| `node_instantiate_scene` | A / Editor | ✅ | undoable |
+| `node_move_child` | A / Editor | ✅ | undoable |
+| `node_change_type` | A / Editor | ✅ | undoable |
+| `node_set_owner` | A / Editor | ✅ | undoable |
+| `node_call_method` | A / Editor | ✅ | ✔ |
+| `node_get_path` | A / Editor | ✅ | – |
+| `node_list_properties` | A / Editor | ✅ | – |
 | `selection_get` | A / Editor | ✅ | – |
 | `selection_set` | A / Editor | ✅ | – |
 | `classdb_get_class` | A / Editor | ✅ | – |
