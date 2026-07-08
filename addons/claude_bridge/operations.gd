@@ -37,6 +37,18 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _scene_save()
 		"scene.new":
 			return _scene_new(params)
+		"scene.list_open":
+			return _ok(_scene_list_open())
+		"scene.reload":
+			return _scene_reload(params)
+		"scene.close":
+			return _scene_close(params)
+		"scene.pack":
+			return _scene_pack(params)
+		"scene.get_dependencies":
+			return _scene_get_dependencies(params)
+		"scene.save_as":
+			return _scene_save_as(params)
 		"node.add":
 			return _node_add(params)
 		"node.delete":
@@ -739,3 +751,101 @@ func _node_list_properties(params: Dictionary) -> Dictionary:
 			"usage": usage,
 		})
 	return _ok({"path": _path_of(root, node), "properties": props})
+
+
+# ---------------------------------------------- Group A: scene depth ---------
+
+func _scene_list_open() -> Dictionary:
+	var scenes: Array = []
+	for p in EditorInterface.get_open_scenes():
+		scenes.append(String(p))
+	var unsaved: Array = []
+	for p in EditorInterface.get_unsaved_scenes():
+		unsaved.append(String(p))
+	var root := _edited_root()
+	var current: Variant = null
+	if root and root.scene_file_path != "":
+		current = root.scene_file_path
+	return {"scenes": scenes, "current": current, "unsaved": unsaved}
+
+
+func _scene_reload(params: Dictionary) -> Dictionary:
+	var target := String(params.get("path", ""))
+	if target == "":
+		var root := _edited_root()
+		if root == null:
+			return _err("no_scene", "No scene is open")
+		target = root.scene_file_path
+	if target == "":
+		return _err("bad_params", "Current scene has no saved path yet")
+	if not ResourceLoader.exists(target):
+		return _err("not_found", "Scene not found: %s" % target)
+	EditorInterface.reload_scene_from_path(target)
+	return _ok({"reloaded": target})
+
+
+func _scene_close(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var current := root.scene_file_path
+	var target := String(params.get("path", ""))
+	if target != "" and target != current:
+		return _err("not_current", "Only the current scene (%s) can be closed; open %s first" % [current, target])
+	EditorInterface.close_scene()
+	return _ok({"closed": current})
+
+
+func _scene_get_dependencies(params: Dictionary) -> Dictionary:
+	var target := String(params.get("path", ""))
+	if target == "":
+		var root := _edited_root()
+		if root == null:
+			return _err("no_scene", "No scene is open")
+		target = root.scene_file_path
+	if target == "":
+		return _err("bad_params", "Current scene has no saved path yet")
+	if not ResourceLoader.exists(target):
+		return _err("not_found", "Scene not found: %s" % target)
+	var deps: Array = []
+	for d in ResourceLoader.get_dependencies(target):
+		deps.append(String(d))
+	return _ok({"path": target, "dependencies": deps})
+
+
+func _scene_pack(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var branch := _resolve(root, String(params.get("path", "")))
+	if branch == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var to_path := String(params.get("to_path", ""))
+	if to_path == "" or not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var dup: Node = branch.duplicate()
+	if dup == null:
+		return _err("duplicate_failed", "Could not duplicate branch")
+	for d in _descendants(dup):
+		d.owner = dup
+	var packed := PackedScene.new()
+	var e := packed.pack(dup)
+	if e != OK:
+		dup.free()
+		return _err("pack_failed", "PackedScene.pack() returned %d" % e)
+	e = ResourceSaver.save(packed, to_path)
+	dup.free()
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"packed": to_path, "branch": _path_of(root, branch)})
+
+
+func _scene_save_as(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var to_path := String(params.get("path", ""))
+	if to_path == "" or not to_path.begins_with("res://"):
+		return _err("bad_params", "'path' must be a res:// path")
+	EditorInterface.save_scene_as(to_path)
+	return _ok({"saved_as": to_path})

@@ -6,6 +6,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group A (batch 3): scene depth (6 tools, 106 → 112)
+- Extends the `scene_*` family from the breadth-superset plan. Six A/Editor tools, schema-enforced,
+  in lockstep with `scripts/contract_check.py` (112), `registration.test.ts` (`EXPECTED_TOOL_COUNT`
+  106 → 112), and `docs/TOOL_CATALOG.md`:
+  - **`scene_list_open`** — list open scene paths, the current one, and which have unsaved changes (read-only).
+  - **`scene_reload`** — reload a scene from disk; **destructive** (discards unsaved changes), elicitation-gated.
+  - **`scene_close`** — close the current scene tab; **destructive** (discards unsaved changes), elicitation-gated (only the current scene closes; an optional `path` asserts which).
+  - **`scene_pack`** — save a node branch as a new `PackedScene` file (editor "Save Branch as Scene"); **destructive** (writes a file), elicitation-gated. Packs a detached duplicate, so the edited scene is never mutated.
+  - **`scene_get_dependencies`** — list a scene file's external resource dependencies (read-only).
+  - **`scene_save_as`** — save the current scene to a new res:// path (Save As); **destructive** (writes a file), elicitation-gated.
+- Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_scene_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. `scene_close`/`scene_reload` use Godot 4.7 `EditorInterface.close_scene()` / `reload_scene_from_path()`. No release cut.
+
 ### Added — Group A (batch 2): node-depth authoring (7 tools, 99 → 106)
 - Completes the `node_*` depth surface from the breadth-superset plan. Seven A/Editor tools, all
   schema-enforced and — where they mutate — undoable via `EditorUndoRedoManager`, in lockstep with
