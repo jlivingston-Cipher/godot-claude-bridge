@@ -123,6 +123,26 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _filesystem_move(params)
 		"filesystem.create_dir":
 			return _filesystem_create_dir(params)
+		"anim.player_create":
+			return _anim_player_create(params)
+		"anim.create":
+			return _anim_create(params)
+		"anim.delete":
+			return _anim_delete(params)
+		"anim.add_track":
+			return _anim_add_track(params)
+		"anim.insert_key":
+			return _anim_insert_key(params)
+		"anim.remove_key":
+			return _anim_remove_key(params)
+		"anim.set_length":
+			return _anim_set_length(params)
+		"anim.set_loop":
+			return _anim_set_loop(params)
+		"anim.get_track_keys":
+			return _anim_get_track_keys(params)
+		"anim.list":
+			return _anim_list(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -1285,3 +1305,306 @@ func _filesystem_create_dir(params: Dictionary) -> Dictionary:
 		return _err("mkdir_failed", "make_dir_recursive_absolute() returned %d" % e)
 	EditorInterface.get_resource_filesystem().scan()
 	return _ok({"created": path, "existed": false})
+
+
+# ------------------------------------------------------ Group C: Animation ----
+## Authoring over an in-scene AnimationPlayer. Animations live in the player's
+## AnimationLibrary resources; every mutation goes through EditorUndoRedoManager
+## (undoable, like the node_* tools), so nothing is written to disk here.
+
+func _as_anim_player(root: Node, path: String) -> AnimationPlayer:
+	var n := _resolve(root, path)
+	if n is AnimationPlayer:
+		return n
+	return null
+
+
+func _anim_of(player: AnimationPlayer, lib_name: String, anim_name: String) -> Animation:
+	if not player.has_animation_library(lib_name):
+		return null
+	var lib := player.get_animation_library(lib_name)
+	if lib == null or not lib.has_animation(anim_name):
+		return null
+	return lib.get_animation(anim_name)
+
+
+func _anim_track_type(s: String) -> int:
+	var m := {
+		"value": Animation.TYPE_VALUE,
+		"position_3d": Animation.TYPE_POSITION_3D,
+		"rotation_3d": Animation.TYPE_ROTATION_3D,
+		"scale_3d": Animation.TYPE_SCALE_3D,
+		"blend_shape": Animation.TYPE_BLEND_SHAPE,
+		"method": Animation.TYPE_METHOD,
+		"bezier": Animation.TYPE_BEZIER,
+		"audio": Animation.TYPE_AUDIO,
+		"animation": Animation.TYPE_ANIMATION,
+	}
+	return int(m.get(s, -1))
+
+
+func _anim_track_type_name(t: int) -> String:
+	var names := ["value", "position_3d", "rotation_3d", "scale_3d", "blend_shape", "method", "bezier", "audio", "animation"]
+	if t >= 0 and t < names.size():
+		return String(names[t])
+	return "unknown"
+
+
+func _anim_loop_mode(s: String) -> int:
+	var m := {"none": Animation.LOOP_NONE, "linear": Animation.LOOP_LINEAR, "pingpong": Animation.LOOP_PINGPONG}
+	return int(m.get(s, -1))
+
+
+func _anim_loop_name(mode: int) -> String:
+	var names := ["none", "linear", "pingpong"]
+	if mode >= 0 and mode < names.size():
+		return String(names[mode])
+	return "unknown"
+
+
+func _anim_player_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var node := AnimationPlayer.new()
+	node.name = String(params.get("name", "AnimationPlayer"))
+	node.add_animation_library("", AnimationLibrary.new())
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add AnimationPlayer %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "AnimationPlayer"})
+
+
+func _anim_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var lib_name := String(params.get("library", ""))
+	var anim_name := String(params.get("name", ""))
+	if anim_name == "":
+		return _err("bad_params", "Missing 'name'")
+	if player.has_animation_library(lib_name) and player.get_animation_library(lib_name).has_animation(anim_name):
+		return _err("exists", "Animation already exists: %s" % anim_name)
+	var anim := Animation.new()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: create animation %s" % anim_name)
+	var lib: AnimationLibrary
+	if player.has_animation_library(lib_name):
+		lib = player.get_animation_library(lib_name)
+	else:
+		lib = AnimationLibrary.new()
+		ur.add_do_method(player, "add_animation_library", lib_name, lib)
+		ur.add_do_reference(lib)
+		ur.add_undo_method(player, "remove_animation_library", lib_name)
+	ur.add_do_method(lib, "add_animation", anim_name, anim)
+	ur.add_do_reference(anim)
+	ur.add_undo_method(lib, "remove_animation", anim_name)
+	ur.commit_action()
+	return _ok({"player": _path_of(root, player), "library": lib_name, "name": anim_name})
+
+
+func _anim_delete(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var lib_name := String(params.get("library", ""))
+	var anim_name := String(params.get("name", ""))
+	var anim := _anim_of(player, lib_name, anim_name)
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % anim_name)
+	var lib := player.get_animation_library(lib_name)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: delete animation %s" % anim_name)
+	ur.add_do_method(lib, "remove_animation", anim_name)
+	ur.add_undo_method(lib, "add_animation", anim_name, anim)
+	ur.add_undo_reference(anim)
+	ur.commit_action()
+	return _ok({"player": _path_of(root, player), "library": lib_name, "deleted": anim_name})
+
+
+func _anim_add_track(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var ttype := _anim_track_type(String(params.get("type", "value")))
+	if ttype < 0:
+		return _err("bad_params", "Unknown track type: %s" % params.get("type", ""))
+	var track_path := String(params.get("path", ""))
+	if track_path == "":
+		return _err("bad_params", "Missing track 'path' (node or node:property the track drives)")
+	var idx := anim.get_track_count()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s track" % _anim_track_type_name(ttype))
+	ur.add_do_method(anim, "add_track", ttype, -1)
+	ur.add_do_method(anim, "track_set_path", idx, NodePath(track_path))
+	ur.add_undo_method(anim, "remove_track", idx)
+	ur.commit_action()
+	return _ok({"track": idx, "type": _anim_track_type_name(ttype), "path": track_path})
+
+
+func _anim_insert_key(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var track := int(params.get("track", -1))
+	if track < 0 or track >= anim.get_track_count():
+		return _err("bad_track", "Track index out of range: %d" % track)
+	if not params.has("value"):
+		return _err("bad_params", "Missing 'value'")
+	var time := float(params.get("time", 0.0))
+	var value: Variant = Codec.decode(params.get("value"))
+	var transition := float(params.get("transition", 1.0))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: insert key @ %s" % time)
+	ur.add_do_method(anim, "track_insert_key", track, time, value, transition)
+	ur.add_undo_method(anim, "track_remove_key_at_time", track, time)
+	ur.commit_action()
+	return _ok({"track": track, "time": time, "key_count": anim.track_get_key_count(track)})
+
+
+func _anim_remove_key(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var track := int(params.get("track", -1))
+	if track < 0 or track >= anim.get_track_count():
+		return _err("bad_track", "Track index out of range: %d" % track)
+	var key := int(params.get("key", -1))
+	if key < 0 or key >= anim.track_get_key_count(track):
+		return _err("bad_key", "Key index out of range: %d" % key)
+	var time := anim.track_get_key_time(track, key)
+	var value: Variant = anim.track_get_key_value(track, key)
+	var transition := anim.track_get_key_transition(track, key)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: remove key %d" % key)
+	ur.add_do_method(anim, "track_remove_key", track, key)
+	ur.add_undo_method(anim, "track_insert_key", track, time, value, transition)
+	ur.commit_action()
+	return _ok({"track": track, "removed_key": key, "time": time})
+
+
+func _anim_set_length(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var length := float(params.get("length", -1.0))
+	if length <= 0.0:
+		return _err("bad_params", "'length' must be greater than 0")
+	var old := anim.length
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set animation length")
+	ur.add_do_property(anim, "length", length)
+	ur.add_undo_property(anim, "length", old)
+	ur.commit_action()
+	return _ok({"length": length, "previous": old})
+
+
+func _anim_set_loop(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var mode := _anim_loop_mode(String(params.get("mode", "")))
+	if mode < 0:
+		return _err("bad_params", "'mode' must be one of: none, linear, pingpong")
+	var old := anim.loop_mode
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set animation loop mode")
+	ur.add_do_property(anim, "loop_mode", mode)
+	ur.add_undo_property(anim, "loop_mode", old)
+	ur.commit_action()
+	return _ok({"mode": _anim_loop_name(mode), "previous": _anim_loop_name(old)})
+
+
+func _anim_get_track_keys(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var anim := _anim_of(player, String(params.get("library", "")), String(params.get("name", "")))
+	if anim == null:
+		return _err("not_found", "Animation not found: %s" % params.get("name", ""))
+	var track := int(params.get("track", -1))
+	if track < 0 or track >= anim.get_track_count():
+		return _err("bad_track", "Track index out of range: %d" % track)
+	var keys: Array = []
+	for i in anim.track_get_key_count(track):
+		keys.append({
+			"index": i,
+			"time": anim.track_get_key_time(track, i),
+			"value": Codec.encode(anim.track_get_key_value(track, i)),
+			"transition": anim.track_get_key_transition(track, i),
+		})
+	return _ok({"track": track, "type": _anim_track_type_name(anim.track_get_type(track)), "path": String(anim.track_get_path(track)), "keys": keys})
+
+
+func _anim_list(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var player := _as_anim_player(root, String(params.get("player_path", "")))
+	if player == null:
+		return _err("bad_path", "AnimationPlayer not found: %s" % params.get("player_path", ""))
+	var out: Array = []
+	for lib_name in player.get_animation_library_list():
+		var lib := player.get_animation_library(lib_name)
+		if lib == null:
+			continue
+		for a in lib.get_animation_list():
+			var anim := lib.get_animation(a)
+			var full := String(a)
+			if String(lib_name) != "":
+				full = String(lib_name) + "/" + String(a)
+			out.append({
+				"name": full,
+				"library": String(lib_name),
+				"animation": String(a),
+				"length": anim.length,
+				"loop_mode": _anim_loop_name(anim.loop_mode),
+				"track_count": anim.get_track_count(),
+			})
+	return _ok({"player": _path_of(root, player), "animations": out})

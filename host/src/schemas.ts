@@ -173,6 +173,18 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   filesystem_move: { moved: z.string(), from: z.string(), moved_import: z.boolean() },
   filesystem_create_dir: { created: z.string(), existed: z.boolean() },
 
+  // ---- Group C: animation (tools/editor.ts -> operations.gd _anim_*) ----
+  anim_player_create: { path: z.string(), name: z.string(), type: z.string() },
+  anim_create: { player: z.string(), library: z.string(), name: z.string() },
+  anim_delete: { player: z.string(), library: z.string(), deleted: z.string() },
+  anim_add_track: { track: z.number(), type: z.string(), path: z.string() },
+  anim_insert_key: { track: z.number(), time: z.number(), key_count: z.number() },
+  anim_remove_key: { track: z.number(), removed_key: z.number(), time: z.number() },
+  anim_set_length: { length: z.number(), previous: z.number() },
+  anim_set_loop: { mode: z.string(), previous: z.string() },
+  anim_get_track_keys: { track: z.number(), type: z.string(), path: z.string(), keys: z.array(z.object({ index: z.number(), time: z.number(), value: encodedValue, transition: z.number() })) },
+  anim_list: { player: z.string(), animations: z.array(z.object({ name: z.string(), library: z.string(), animation: z.string(), length: z.number(), loop_mode: z.string(), track_count: z.number() })) },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

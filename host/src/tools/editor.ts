@@ -835,4 +835,173 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
     },
     async ({ path }) => call("filesystem.create_dir", { path }),
   );
+
+  // ---- Group C: animation authoring (undoable in-scene mutations) ----
+  server.registerTool(
+    "anim_player_create",
+    {
+      title: "Create AnimationPlayer",
+      description:
+        "Add an AnimationPlayer node under a parent (undoable). Seeds an empty default animation library so anim_create works immediately.",
+      inputSchema: {
+        parent_path: z.string().describe("Parent node path relative to the scene root; \".\" for the root"),
+        name: z.string().optional().describe("Node name (default \"AnimationPlayer\")"),
+      },
+    },
+    async ({ parent_path, name }) => call("anim.player_create", { parent_path, name }),
+  );
+
+  server.registerTool(
+    "anim_create",
+    {
+      title: "Create animation",
+      description:
+        "Create an empty Animation in an AnimationPlayer's library (undoable). Creates the library if it does not exist yet.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path relative to the scene root"),
+        name: z.string().describe("Animation name (unique within its library)"),
+        library: z.string().optional().describe("Animation library name (default \"\", the player's default library)"),
+      },
+    },
+    async ({ player_path, name, library }) => call("anim.create", { player_path, name, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_delete",
+    {
+      title: "Delete animation",
+      description:
+        "Delete an Animation from an AnimationPlayer's library (undoable). DESTRUCTIVE — gated by confirmation.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path relative to the scene root"),
+        name: z.string().describe("Animation name"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async ({ player_path, name, library, confirm }) => {
+      const blocked = await gate(server, confirm, `Delete animation "${name}"`);
+      if (blocked) return blocked;
+      return call("anim.delete", { player_path, name, library: library ?? "" });
+    },
+  );
+
+  server.registerTool(
+    "anim_add_track",
+    {
+      title: "Add animation track",
+      description:
+        "Add a track to an Animation and set its target path (undoable). Returns the new track index.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        path: z.string().describe("Track target: a node path, or \"Node:property\" for value tracks (e.g. \"Sprite2D:position\")"),
+        type: z
+          .string()
+          .optional()
+          .describe("Track type: value (default), position_3d, rotation_3d, scale_3d, blend_shape, method, bezier, audio, animation"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, path, type, library }) =>
+      call("anim.add_track", { player_path, name, path, type: type ?? "value", library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_insert_key",
+    {
+      title: "Insert animation key",
+      description:
+        "Insert a keyframe on a track at a given time (undoable). A key already at that exact time is overwritten.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        track: z.number().int().describe("Track index"),
+        time: z.number().describe("Key time in seconds"),
+        value: z.any().describe("Key value (JSON scalar, array, object, or a __type__-tagged Variant matching the track type)"),
+        transition: z.number().optional().describe("Transition curve exponent (default 1.0)"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, track, time, value, transition, library }) =>
+      call("anim.insert_key", { player_path, name, track, time, value, transition: transition ?? 1.0, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_remove_key",
+    {
+      title: "Remove animation key",
+      description: "Remove a keyframe by index from a track (undoable).",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        track: z.number().int().describe("Track index"),
+        key: z.number().int().describe("Key index within the track"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, track, key, library }) =>
+      call("anim.remove_key", { player_path, name, track, key, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_set_length",
+    {
+      title: "Set animation length",
+      description: "Set an Animation's length in seconds (undoable).",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        length: z.number().describe("New length in seconds (> 0)"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, length, library }) =>
+      call("anim.set_length", { player_path, name, length, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_set_loop",
+    {
+      title: "Set animation loop mode",
+      description: "Set an Animation's loop mode (undoable).",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        mode: z.string().describe("Loop mode: none, linear, or pingpong"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, mode, library }) =>
+      call("anim.set_loop", { player_path, name, mode, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_get_track_keys",
+    {
+      title: "Get animation track keys",
+      description: "List all keyframes on a track (index, time, value, transition). Read-only.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+        name: z.string().describe("Animation name"),
+        track: z.number().int().describe("Track index"),
+        library: z.string().optional().describe("Animation library name (default \"\")"),
+      },
+    },
+    async ({ player_path, name, track, library }) =>
+      call("anim.get_track_keys", { player_path, name, track, library: library ?? "" }),
+  );
+
+  server.registerTool(
+    "anim_list",
+    {
+      title: "List animations",
+      description:
+        "List all animations in an AnimationPlayer across its libraries, with length, loop mode, and track count. Read-only.",
+      inputSchema: {
+        player_path: z.string().describe("AnimationPlayer node path"),
+      },
+    },
+    async ({ player_path }) => call("anim.list", { player_path }),
+  );
 }

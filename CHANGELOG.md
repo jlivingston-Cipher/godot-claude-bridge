@@ -6,6 +6,25 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group C (batch 1): animation authoring — AnimationPlayer + Animation (10 tools, 130 → 140)
+- First family of **Group C (Animation)** from the breadth-superset plan (unblocked by Group B — animations
+  are Resources). Ten C/Editor `anim_*` tools over the editor bridge, schema-enforced, authoring an in-scene
+  `AnimationPlayer` (animations live in its `AnimationLibrary` resources, addressed as `animation` within a
+  `library`, default `""`):
+  - **`anim_player_create`** — add an `AnimationPlayer` node (undoable); seeds an empty default library so `anim_create` works immediately.
+  - **`anim_create`** / **`anim_delete`** — create / remove a named `Animation` in a library (undoable; delete is elicitation-gated).
+  - **`anim_add_track`** — add a track (value / position_3d / rotation_3d / scale_3d / blend_shape / method / bezier / audio / animation) and set its target path; returns the new track index.
+  - **`anim_insert_key`** / **`anim_remove_key`** — insert / remove keyframes (Variant values through the JSON codec).
+  - **`anim_set_length`** / **`anim_set_loop`** — set an animation's length and loop mode (none / linear / pingpong).
+  - **`anim_get_track_keys`** / **`anim_list`** — read a track's keyframes / list a player's animations across libraries. Read-only.
+- Every mutation goes through `EditorUndoRedoManager` (undoable; nothing written to disk) — the `node_*`
+  precedent, not the disk-writing `resource_*` / `filesystem_*` gating. Only `anim_delete` is elicitation-gated
+  (it discards an animation, like `node_delete`). Handlers in both `addons/claude_bridge/operations.gd` copies
+  (dispatch + `_anim_*`), statically parse-checked against local Godot 4.7; host registrations in
+  `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`; `registration.test.ts`
+  `EXPECTED_TOOL_COUNT` 130 → 140; `docs/TOOL_CATALOG.md` (detail + index). `contract_check` 140; host tests
+  173. First of Group C; the `AnimationTree` / state-machine family follows, then a release cut after Group D.
+
 ### Fixed
 - **Editor bridge loads on Godot 4.3 again.** `_scene_list_open` and `_scene_close` (added in #33) called
   `EditorInterface.get_unsaved_scenes()` and `EditorInterface.close_scene()` — both Godot 4.4+ APIs. Because a

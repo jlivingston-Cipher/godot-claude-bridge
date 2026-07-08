@@ -530,6 +530,50 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }`
 - **Output** `{ "type": "object", "required": ["created", "existed"], "properties": { "created": { "type": "string" }, "existed": { "type": "boolean" } } }`
 
+## Group C — Animation (Plane A / Editor)
+
+Authoring over an in-scene `AnimationPlayer`; animations live in its `AnimationLibrary` resources. Every mutation goes through `EditorUndoRedoManager` (undoable, nothing written to disk). Names are addressed as `animation` within a `library` (default `""`).
+
+### `anim_player_create` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
+
+### `anim_create` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["player", "library", "name"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "name": { "type": "string" } } }`
+
+### `anim_delete` ✅ · destructive (removes an animation; gated)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["player", "library", "deleted"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "deleted": { "type": "string" } } }`
+
+### `anim_add_track` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "path"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string", "description": "node path or Node:property" }, "type": { "type": "string", "enum": ["value", "position_3d", "rotation_3d", "scale_3d", "blend_shape", "method", "bezier", "audio", "animation"] }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["track", "type", "path"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" } } }`
+
+### `anim_insert_key` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "time", "value"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "time": { "type": "number" }, "value": { "description": "Variant matching the track type" }, "transition": { "type": "number" }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["track", "time", "key_count"], "properties": { "track": { "type": "integer" }, "time": { "type": "number" }, "key_count": { "type": "integer" } } }`
+
+### `anim_remove_key` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "key"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "key": { "type": "integer" }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["track", "removed_key", "time"], "properties": { "track": { "type": "integer" }, "removed_key": { "type": "integer" }, "time": { "type": "number" } } }`
+
+### `anim_set_length` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "length"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "length": { "type": "number" }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["length", "previous"], "properties": { "length": { "type": "number" }, "previous": { "type": "number" } } }`
+
+### `anim_set_loop` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "mode"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "mode": { "type": "string", "enum": ["none", "linear", "pingpong"] }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["mode", "previous"], "properties": { "mode": { "type": "string" }, "previous": { "type": "string" } } }`
+
+### `anim_get_track_keys` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "library": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["track", "type", "path", "keys"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" }, "keys": { "type": "array", "items": { "type": "object", "properties": { "index": { "type": "integer" }, "time": { "type": "number" }, "value": {}, "transition": { "type": "number" } } } } } }`
+
+### `anim_list` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path"], "properties": { "player_path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["player", "animations"], "properties": { "player": { "type": "string" }, "animations": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "library": { "type": "string" }, "animation": { "type": "string" }, "length": { "type": "number" }, "loop_mode": { "type": "string" }, "track_count": { "type": "integer" } } } } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1161,6 +1205,16 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `filesystem_scan` | A / Editor | ✅ | – |
 | `filesystem_move` | A / Editor | ✅ | ✔ moves file |
 | `filesystem_create_dir` | A / Editor | ✅ | writes dir |
+| `anim_player_create` | C / Editor | ✅ | – |
+| `anim_create` | C / Editor | ✅ | – |
+| `anim_delete` | C / Editor | ✅ | ✔ gated |
+| `anim_add_track` | C / Editor | ✅ | – |
+| `anim_insert_key` | C / Editor | ✅ | – |
+| `anim_remove_key` | C / Editor | ✅ | – |
+| `anim_set_length` | C / Editor | ✅ | – |
+| `anim_set_loop` | C / Editor | ✅ | – |
+| `anim_get_track_keys` | C / Editor | ✅ | – |
+| `anim_list` | C / Editor | ✅ | – |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |
