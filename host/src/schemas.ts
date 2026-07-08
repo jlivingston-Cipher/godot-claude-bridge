@@ -132,6 +132,15 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     path: z.string(),
     properties: z.array(z.object({ name: z.string(), type: z.number(), class_name: z.string(), usage: z.number() })),
   },
+  signal_list: { path: z.string(), signals: z.array(z.object({ name: z.string(), args: z.array(z.string()) })) },
+  signal_list_connections: {
+    path: z.string(),
+    connections: z.array(z.object({ signal: z.string(), target: z.string().nullable(), method: z.string(), flags: z.number() })),
+  },
+  signal_connect: { signal: z.string(), source: z.string(), target: z.string(), method: z.string(), flags: z.number(), connected: z.boolean() },
+  signal_disconnect: { signal: z.string(), source: z.string(), target: z.string(), method: z.string(), disconnected: z.boolean() },
+  signal_add_user_signal: { path: z.string(), signal: z.string(), added: z.boolean() },
+  signal_emit: { path: z.string(), signal: z.string(), emitted: z.boolean() },
   selection_get: { selection: z.array(z.string()) },
   selection_set: { selection: z.array(z.string()) },
   classdb_get_class: {

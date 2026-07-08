@@ -87,6 +87,18 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _node_get_path(params)
 		"node.list_properties":
 			return _node_list_properties(params)
+		"signal.list":
+			return _signal_list(params)
+		"signal.list_connections":
+			return _signal_list_connections(params)
+		"signal.connect":
+			return _signal_connect(params)
+		"signal.disconnect":
+			return _signal_disconnect(params)
+		"signal.add_user_signal":
+			return _signal_add_user_signal(params)
+		"signal.emit":
+			return _signal_emit(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -849,3 +861,157 @@ func _scene_save_as(params: Dictionary) -> Dictionary:
 		return _err("bad_params", "'path' must be a res:// path")
 	EditorInterface.save_scene_as(to_path)
 	return _ok({"saved_as": to_path})
+
+
+# ---------------------------------------------------- Group A: signals -------
+
+func _signal_list(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var sigs: Array = []
+	for s in node.get_signal_list():
+		var arg_names: Array = []
+		for a in s.get("args", []):
+			arg_names.append(String(a.get("name", "")))
+		sigs.append({"name": String(s.get("name", "")), "args": arg_names})
+	return _ok({"path": _path_of(root, node), "signals": sigs})
+
+
+func _signal_list_connections(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var only := String(params.get("signal", ""))
+	var conns: Array = []
+	for s in node.get_signal_list():
+		var sname := String(s.get("name", ""))
+		if only != "" and sname != only:
+			continue
+		for c in node.get_signal_connection_list(sname):
+			var cb: Callable = c.get("callable")
+			var target: Object = cb.get_object()
+			var tpath: Variant = null
+			if target is Node:
+				var tnode := target as Node
+				if tnode == root or root.is_ancestor_of(tnode):
+					tpath = _path_of(root, tnode)
+				else:
+					tpath = String(tnode.name)
+			conns.append({
+				"signal": sname,
+				"target": tpath,
+				"method": String(cb.get_method()),
+				"flags": int(c.get("flags", 0)),
+			})
+	return _ok({"path": _path_of(root, node), "connections": conns})
+
+
+func _signal_connect(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var sig := String(params.get("signal", ""))
+	if sig == "" or not node.has_signal(sig):
+		return _err("no_signal", "%s has no signal %s" % [node.get_class(), sig])
+	var target := _resolve(root, String(params.get("target_path", "")))
+	if target == null:
+		return _err("bad_path", "Target not found: %s" % params.get("target_path", ""))
+	var method := String(params.get("method", ""))
+	if method == "":
+		return _err("bad_params", "Missing 'method'")
+	if not target.has_method(method):
+		return _err("no_method", "%s has no method %s" % [target.get_class(), method])
+	var flags := int(params.get("flags", 2))
+	var cb := Callable(target, method)
+	if node.is_connected(sig, cb):
+		return _ok({"signal": sig, "source": _path_of(root, node), "target": _path_of(root, target), "method": method, "flags": flags, "connected": false})
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: connect %s.%s -> %s.%s" % [node.name, sig, target.name, method])
+	ur.add_do_method(node, "connect", sig, cb, flags)
+	ur.add_undo_method(node, "disconnect", sig, cb)
+	ur.commit_action()
+	return _ok({"signal": sig, "source": _path_of(root, node), "target": _path_of(root, target), "method": method, "flags": flags, "connected": true})
+
+
+func _signal_disconnect(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var sig := String(params.get("signal", ""))
+	if sig == "" or not node.has_signal(sig):
+		return _err("no_signal", "%s has no signal %s" % [node.get_class(), sig])
+	var target := _resolve(root, String(params.get("target_path", "")))
+	if target == null:
+		return _err("bad_path", "Target not found: %s" % params.get("target_path", ""))
+	var method := String(params.get("method", ""))
+	var cb := Callable(target, method)
+	if not node.is_connected(sig, cb):
+		return _ok({"signal": sig, "source": _path_of(root, node), "target": _path_of(root, target), "method": method, "disconnected": false})
+	var flags := 2
+	for c in node.get_signal_connection_list(sig):
+		var ecb: Callable = c.get("callable")
+		if ecb == cb:
+			flags = int(c.get("flags", 2))
+			break
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: disconnect %s.%s -> %s.%s" % [node.name, sig, target.name, method])
+	ur.add_do_method(node, "disconnect", sig, cb)
+	ur.add_undo_method(node, "connect", sig, cb, flags)
+	ur.commit_action()
+	return _ok({"signal": sig, "source": _path_of(root, node), "target": _path_of(root, target), "method": method, "disconnected": true})
+
+
+func _signal_add_user_signal(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var sig := String(params.get("signal", ""))
+	if sig == "":
+		return _err("bad_params", "Missing 'signal'")
+	if node.has_signal(sig) or node.has_user_signal(sig):
+		return _err("exists", "Signal already exists: %s" % sig)
+	var arguments: Array = []
+	for a in params.get("args", []):
+		if typeof(a) == TYPE_DICTIONARY:
+			arguments.append({"name": String(a.get("name", "arg")), "type": int(a.get("type", TYPE_NIL))})
+		else:
+			arguments.append({"name": String(a), "type": TYPE_NIL})
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add user signal %s.%s" % [node.name, sig])
+	ur.add_do_method(node, "add_user_signal", sig, arguments)
+	ur.add_undo_method(node, "remove_user_signal", sig)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "signal": sig, "added": true})
+
+
+func _signal_emit(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var sig := String(params.get("signal", ""))
+	if sig == "" or (not node.has_signal(sig) and not node.has_user_signal(sig)):
+		return _err("no_signal", "%s has no signal %s" % [node.get_class(), sig])
+	var call_args: Array = [sig]
+	for a in params.get("args", []):
+		call_args.append(Codec.decode(a))
+	node.callv("emit_signal", call_args)
+	return _ok({"path": _path_of(root, node), "signal": sig, "emitted": true})

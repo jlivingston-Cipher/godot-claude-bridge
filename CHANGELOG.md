@@ -6,6 +6,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group A (batch 4): signals (6 tools, 112 → 118)
+- New `signal_*` family from the breadth-superset plan — completing Group A's authoring surface. Six
+  A/Editor tools, schema-enforced and (where they mutate) undoable via `EditorUndoRedoManager`, in
+  lockstep with `scripts/contract_check.py` (118), `registration.test.ts` (`EXPECTED_TOOL_COUNT`
+  112 → 118), and `docs/TOOL_CATALOG.md`:
+  - **`signal_list`** / **`signal_list_connections`** — enumerate a node's signals (names + argument names), or its outgoing connections (signal, target path, method, flags). Read-only.
+  - **`signal_connect`** / **`signal_disconnect`** — wire a source signal to a target method, or unwire it (undoable). Connections default to `CONNECT_PERSIST` (flags=2) so they save into the scene; disconnect restores the original flags on undo.
+  - **`signal_add_user_signal`** — declare a new user signal with optional typed arguments (undoable via `remove_user_signal`); errors if it already exists.
+  - **`signal_emit`** — emit a signal at edit-time, firing connected callables now; **destructive** (edit-time side effects), elicitation-gated.
+- Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_signal_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. Built on Godot 4.7 `Object` signal APIs (`get_signal_list`, `get_signal_connection_list`, `connect`/`disconnect`, `add_user_signal`/`remove_user_signal`, `emit_signal`). This lands the last of Group A; a minor release cut follows.
+
 ### Added — Group A (batch 3): scene depth (6 tools, 106 → 112)
 - Extends the `scene_*` family from the breadth-superset plan. Six A/Editor tools, schema-enforced,
   in lockstep with `scripts/contract_check.py` (112), `registration.test.ts` (`EXPECTED_TOOL_COUNT`

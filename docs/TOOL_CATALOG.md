@@ -414,6 +414,30 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
 - **Output** `{ "type": "object", "required": ["path", "properties"], "properties": { "path": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }`
 
+### `signal_list` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "signals"], "properties": { "path": { "type": "string" }, "signals": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } } } } }`
+
+### `signal_list_connections` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "connections"], "properties": { "path": { "type": "string" }, "connections": { "type": "array", "items": { "type": "object", "properties": { "signal": { "type": "string" }, "target": { "type": ["string", "null"] }, "method": { "type": "string" }, "flags": { "type": "integer" } } } } } }`
+
+### `signal_connect` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer", "default": 2 } } }`
+- **Output** `{ "type": "object", "required": ["signal", "source", "target", "method", "flags", "connected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer" }, "connected": { "type": "boolean" } } }`
+
+### `signal_disconnect` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["signal", "source", "target", "method", "disconnected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "disconnected": { "type": "boolean" } } }`
+
+### `signal_add_user_signal` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" } } } } } }`
+- **Output** `{ "type": "object", "required": ["path", "signal", "added"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "added": { "type": "boolean" } } }`
+
+### `signal_emit` ✅ · destructive (edit-time side effects)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }`
+- **Output** `{ "type": "object", "required": ["path", "signal", "emitted"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "emitted": { "type": "boolean" } } }`
+
 ### `selection_get` ✅
 - **Input** `{ "type": "object", "properties": {} }`
 - **Output** `{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }`
@@ -1065,6 +1089,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `node_call_method` | A / Editor | ✅ | ✔ |
 | `node_get_path` | A / Editor | ✅ | – |
 | `node_list_properties` | A / Editor | ✅ | – |
+| `signal_list` | A / Editor | ✅ | – |
+| `signal_list_connections` | A / Editor | ✅ | – |
+| `signal_connect` | A / Editor | ✅ | undoable |
+| `signal_disconnect` | A / Editor | ✅ | undoable |
+| `signal_add_user_signal` | A / Editor | ✅ | undoable |
+| `signal_emit` | A / Editor | ✅ | ✔ |
 | `selection_get` | A / Editor | ✅ | – |
 | `selection_set` | A / Editor | ✅ | – |
 | `classdb_get_class` | A / Editor | ✅ | – |
