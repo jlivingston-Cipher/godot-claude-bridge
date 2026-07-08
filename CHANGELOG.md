@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed — `csharp-plane` pins OmniSharp / netcoredbg to known-good releases (CI hardening, no tool change)
+- The required `csharp-plane` gate installed OmniSharp and netcoredbg from `releases/latest/download/…`.
+  As a **required** gate that left the job hostage to upstream: an asset rename — or a bad `latest` —
+  would block **every** merge. Both are now pinned via job-level env vars to the tags green on the gate
+  as of the 0.9.0 cut — **OmniSharp `v1.39.15`** and **netcoredbg `3.2.0-1092`** — which is exactly what
+  `releases/latest` resolved to, so behavior is unchanged today while merges are insulated from upstream
+  churn. Bump the pins deliberately after a green run. The binaries still resolve via `find`, so a rename
+  even at a pinned tag still fails loudly (empty-var) rather than silently. CI-only; no tool/host change,
+  `scripts/contract_check.py` unaffected at 93.
+
 ## [0.9.0] — 2026-07-07
 
 Folds the two C#/.NET-plane surfaces cut since 0.8.0 into a release: the **C# LSP mutators** (`cs_rename`

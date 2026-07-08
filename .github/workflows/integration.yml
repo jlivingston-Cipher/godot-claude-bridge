@@ -296,6 +296,13 @@ jobs:
       # MUST match the Godot.NET.Sdk pinned in example-csharp/ExampleCsharp.csproj (4.7.0) and the
       # net8.0 target — see docs/D4_CSHARP_PLAN.md §"Version alignment".
       GODOT_VERSION: "4.7-stable"
+      # Tool releases are PINNED, not `releases/latest`: csharp-plane is a REQUIRED gate (session 25),
+      # so an upstream asset rename — or a bad `latest` — would block every merge. These tags are the
+      # known-good releases green on this gate as of the 0.9.0 cut; bump them deliberately after a green
+      # run rather than tracking `latest`. The asset names below still resolve via `find`, so a rename
+      # at a pinned tag still surfaces as an explicit empty-var failure. See docs/D4_CSHARP_PLAN.md.
+      OMNISHARP_VERSION: "v1.39.15"      # OmniSharp/omnisharp-roslyn — published 2025-11-14
+      NETCOREDBG_VERSION: "3.2.0-1092"   # Samsung/netcoredbg — published 2026-06-25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -339,8 +346,9 @@ jobs:
           set -eux
           # OmniSharp is the C# language server the cs_* tools drive (spawned over stdio by the host).
           # The net6.0 build is a native executable; resolve it with find so a naming change surfaces
-          # as an empty-var failure. continue-on-error keeps an install hiccup from ever blocking.
-          curl -fL -o omnisharp.tar.gz "https://github.com/OmniSharp/omnisharp-roslyn/releases/latest/download/omnisharp-linux-x64-net6.0.tar.gz"
+          # as an empty-var failure. Version PINNED via $OMNISHARP_VERSION (job env) — a required gate
+          # must not ride `releases/latest`, whose asset can be renamed out from under the job.
+          curl -fL -o omnisharp.tar.gz "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/${OMNISHARP_VERSION}/omnisharp-linux-x64-net6.0.tar.gz"
           mkdir -p "$PWD/omnisharp" && tar -xzf omnisharp.tar.gz -C "$PWD/omnisharp"
           OMNISHARP_BIN="$(find "$PWD/omnisharp" -maxdepth 2 -type f -name 'OmniSharp' | head -1)"
           test -n "$OMNISHARP_BIN"
@@ -355,8 +363,9 @@ jobs:
           set -eux
           # netcoredbg (Samsung, MIT) is the .NET debug adapter the cs_dbg_* tools drive (spawned over
           # stdio by the host). Resolve the binary with find so a naming change surfaces as an empty-var
-          # failure; continue-on-error keeps an install hiccup from ever blocking a merge.
-          curl -fL -o netcoredbg.tar.gz "https://github.com/Samsung/netcoredbg/releases/latest/download/netcoredbg-linux-amd64.tar.gz"
+          # failure. Version PINNED via $NETCOREDBG_VERSION (job env) — a required gate must not ride
+          # `releases/latest`, whose asset can be renamed out from under the job.
+          curl -fL -o netcoredbg.tar.gz "https://github.com/Samsung/netcoredbg/releases/download/${NETCOREDBG_VERSION}/netcoredbg-linux-amd64.tar.gz"
           mkdir -p "$PWD/netcoredbg-dist" && tar -xzf netcoredbg.tar.gz -C "$PWD/netcoredbg-dist"
           NETCOREDBG_BIN="$(find "$PWD/netcoredbg-dist" -maxdepth 2 -type f -name 'netcoredbg' | head -1)"
           test -n "$NETCOREDBG_BIN"
