@@ -796,13 +796,19 @@ func _scene_list_open() -> Dictionary:
 	for p in EditorInterface.get_open_scenes():
 		scenes.append(String(p))
 	var unsaved: Array = []
-	for p in EditorInterface.get_unsaved_scenes():
-		unsaved.append(String(p))
+	# EditorInterface.get_unsaved_scenes() is Godot 4.4+; a literal call is resolved at PARSE
+	# time and fails to compile the whole addon on 4.3. Guard with has_method + a dynamic
+	# call() defers the lookup to runtime. On <4.4 the unsaved set can't be enumerated, so we
+	# report that via unsaved_supported instead of implying "nothing is unsaved".
+	var unsaved_supported := EditorInterface.has_method("get_unsaved_scenes")
+	if unsaved_supported:
+		for p in EditorInterface.call("get_unsaved_scenes"):
+			unsaved.append(String(p))
 	var root := _edited_root()
 	var current: Variant = null
 	if root and root.scene_file_path != "":
 		current = root.scene_file_path
-	return {"scenes": scenes, "current": current, "unsaved": unsaved}
+	return {"scenes": scenes, "current": current, "unsaved": unsaved, "unsaved_supported": unsaved_supported}
 
 
 func _scene_reload(params: Dictionary) -> Dictionary:
@@ -821,6 +827,11 @@ func _scene_reload(params: Dictionary) -> Dictionary:
 
 
 func _scene_close(params: Dictionary) -> Dictionary:
+	# EditorInterface.close_scene() is Godot 4.4+; a literal call is resolved at PARSE time and
+	# fails to compile the whole addon on 4.3. Guard with has_method + a dynamic call() defers
+	# the lookup to runtime, so the addon still loads (this tool just reports unsupported).
+	if not EditorInterface.has_method("close_scene"):
+		return _err("unsupported", "scene_close requires Godot 4.4+ (EditorInterface.close_scene is unavailable on this Godot version)")
 	var root := _edited_root()
 	if root == null:
 		return _err("no_scene", "No scene is open")
@@ -828,7 +839,7 @@ func _scene_close(params: Dictionary) -> Dictionary:
 	var target := String(params.get("path", ""))
 	if target != "" and target != current:
 		return _err("not_current", "Only the current scene (%s) can be closed; open %s first" % [current, target])
-	EditorInterface.close_scene()
+	EditorInterface.call("close_scene")
 	return _ok({"closed": current})
 
 

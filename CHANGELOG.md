@@ -6,6 +6,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Editor bridge loads on Godot 4.3 again.** `_scene_list_open` and `_scene_close` (added in #33) called
+  `EditorInterface.get_unsaved_scenes()` and `EditorInterface.close_scene()` — both Godot 4.4+ APIs. Because a
+  literal call is resolved at *parse* time, their presence made the entire `operations.gd` addon fail to compile
+  on Godot 4.3, taking the whole editor plane down (not just those two tools). Both call sites are now
+  feature-detected via `EditorInterface.has_method(...)` and invoked dynamically via `EditorInterface.call(...)`
+  — the same idiom `runtime_bridge.gd` already uses for the 4.5+ logger APIs. On Godot 4.3: `scene_list_open`
+  returns `unsaved: []` plus a new `unsaved_supported: false` flag; `scene_close` returns an `unsupported`
+  error. Godot 4.4+ behavior is unchanged and no tools were added or removed (still 130). Un-reds the
+  experimental `editor-plane` Godot 4.3 job.
+
 ## [0.11.0] — 2026-07-08
 
 Lands **Group B of the breadth-superset plan** — the Resources & FileSystem layer that unblocks Groups

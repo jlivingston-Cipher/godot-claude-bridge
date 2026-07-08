@@ -101,7 +101,7 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   scene_open: { opened: z.string() },
   scene_save: { saved: z.string() },
   scene_new: { created: z.string(), root_type: z.string() },
-  scene_list_open: { scenes: z.array(z.string()), current: z.string().nullable(), unsaved: z.array(z.string()) },
+  scene_list_open: { scenes: z.array(z.string()), current: z.string().nullable(), unsaved: z.array(z.string()), unsaved_supported: z.boolean() },
   scene_reload: { reloaded: z.string() },
   scene_close: { closed: z.string() },
   scene_pack: { packed: z.string(), branch: z.string() },

@@ -284,7 +284,8 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 
 ### `scene_list_open` ✅
 - **Input** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["scenes", "current", "unsaved"], "properties": { "scenes": { "type": "array", "items": { "type": "string" } }, "current": { "type": ["string", "null"] }, "unsaved": { "type": "array", "items": { "type": "string" } } } }`
+- **Output** `{ "type": "object", "required": ["scenes", "current", "unsaved", "unsaved_supported"], "properties": { "scenes": { "type": "array", "items": { "type": "string" } }, "current": { "type": ["string", "null"] }, "unsaved": { "type": "array", "items": { "type": "string" } }, "unsaved_supported": { "type": "boolean" } } }`
+- **Note** `unsaved` enumeration uses `EditorInterface.get_unsaved_scenes()` (Godot 4.4+). On Godot 4.3 that API is absent, so `unsaved` comes back empty and `unsaved_supported` is `false`; `scenes` and `current` are unaffected.
 
 ### `scene_reload` ✅ · destructive (discards unsaved changes)
 - **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }`
@@ -293,6 +294,7 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ### `scene_close` ✅ · destructive (discards unsaved changes)
 - **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "optional assertion of the current scene path" } } }`
 - **Output** `{ "type": "object", "required": ["closed"], "properties": { "closed": { "type": "string" } } }`
+- **Note** Requires Godot 4.4+ (`EditorInterface.close_scene()`); on Godot 4.3 the tool returns an `unsupported` error instead of closing.
 
 ### `scene_pack` ✅ · destructive (writes a new file)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" } } }`
