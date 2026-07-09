@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-07-09
+
 ### Added — Group M (second half): backend-SDK integration scaffolding (5 tools, 237 → 242)
 - Completes Group M with the plugin-detected backend-SDK family (new `host/src/tools/backend.ts`, `registerBackendTools`), carrying the count to **242**. Same "host nothing, scaffold everything" stance as the `mp_*` half: running a leaderboard DB, a save-store or an auth service is a SaaS, but generating the integration against the game's *installed* SDK — SilentWolf / Nakama / PlayFab / Photon — is squarely our lane. **We host nothing.**
   - **One detection tool** (Plane A / Editor, read-only): **`backend_detect`** reports which of the four known SDKs are installed and how each was found — an enabled autoload, an addon directory under `res://addons`, or a global `class_name` (a new `backend.detect` bridge handler).

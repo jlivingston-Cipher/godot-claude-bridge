@@ -7,7 +7,7 @@ extends RefCounted
 ## wrapped in the EditorUndoRedoManager so a human can Ctrl-Z anything Claude did.
 
 const Codec := preload("res://addons/breakpoint_mcp/variant_json.gd")
-const ADDON_VERSION := "0.16.0"
+const ADDON_VERSION := "0.17.0"
 
 var _plugin: EditorPlugin
 
