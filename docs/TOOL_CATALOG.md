@@ -848,6 +848,50 @@ The user-interface authoring surface (now **195**), reaching the breadth superse
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "integer" }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "number" } } }`
 
+## Group H — 3D & navigation (Plane A / Editor)
+
+The 3D authoring surface (now **205**). `meshinstance_create` adds a **MeshInstance3D** — optionally assigning a Mesh loaded from a `res://` path (e.g. a `primitive_mesh_create` output); `mesh_set_surface_material` assigns a `Material` (res:// path) to a MeshInstance3D, either the whole-instance `material_override` (default surface `-1`) or a specific surface's override slot, refusing a non-MeshInstance3D node or a non-`Material` resource; `light_create` adds a `DirectionalLight3D` / `OmniLight3D` / `SpotLight3D` (`kind` = dir/omni/spot); `camera_create` adds a `Camera3D` (optionally made `current`); `csg_create` adds a CSG primitive (`CSGBox3D` / `CSGSphere3D` / `CSGCylinder3D` / `CSGTorus3D` / `CSGPolygon3D` / `CSGMesh3D` / `CSGCombiner3D`); `navregion_create` adds a `NavigationRegion3D`, seeding a fresh empty `NavigationMesh` by default; `navagent_configure` adds a `NavigationAgent3D` and sets its steering/avoidance properties (radius, height, max_speed, path/target desired distances, avoidance_enabled). All seven mutate the edited scene and are **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Two families author a **resource on disk**: `primitive_mesh_create` writes a `PrimitiveMesh` (box/sphere/cylinder/plane/capsule/prism/torus/quad), and `environment_create` / `environment_set_sky` write and update an `Environment` (background mode + ambient light; attach a `Sky` with a Procedural / Physical / Panorama material and switch the background to SKY) — so, like the `resource_*` / `theme_*` writers, they are **gated** by confirmation. `navmesh_bake` is intentionally **deferred** — a real geometry bake is async and non-deterministic under a headless CI editor and awaits a maintainer semantics decision (like `scene_set_root`). The `MeshInstance3D` / `Light3D` / `Camera3D` / CSG / `NavigationRegion3D` / `NavigationAgent3D` and the `PrimitiveMesh` / `Environment` / `Sky` APIs were probed live on Godot 4.7 before design, and a `MeshInstance3D` carrying a primitive mesh + a `material_override` survives a `.tscn` save + fresh reload.
+
+### `meshinstance_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "mesh_path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "mesh_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "mesh_path": { "type": "string" } } }`
+
+### `mesh_set_surface_material` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "material_path"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "integer" } } }`
+- **Output** `{ "type": "object", "required": ["path", "material_path", "surface"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "number" } } }`
+
+### `primitive_mesh_create` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "shape": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["created", "type", "shape"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }`
+
+### `light_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "kind": { "type": "string", "enum": ["dir", "directional", "omni", "spot"] }, "name": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "kind"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "kind": { "type": "string" } } }`
+
+### `camera_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "current": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "current"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "current": { "type": "boolean" } } }`
+
+### `csg_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string" }, "name": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "shape"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }`
+
+### `navregion_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "with_navmesh": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "has_navmesh"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "has_navmesh": { "type": "boolean" } } }`
+
+### `navagent_configure` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "config"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "config": { "type": "object", "required": ["radius", "height", "max_speed", "path_desired_distance", "target_desired_distance", "avoidance_enabled"], "properties": { "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } } } }`
+
+### `environment_create` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "background": { "type": "string" }, "ambient_color": { "type": "array", "items": { "type": "number" } }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["created", "type", "background_mode"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "background_mode": { "type": "string" } } }`
+
+### `environment_set_sky` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "sky_material": { "type": "string", "enum": ["procedural", "physical", "panorama"] }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "background_mode", "sky_material"], "properties": { "path": { "type": "string" }, "background_mode": { "type": "string" }, "sky_material": { "type": "string" } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1544,6 +1588,16 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `theme_set_font` | G / Editor | ✅ | ✔ writes file |
 | `theme_set_stylebox` | G / Editor | ✅ | ✔ writes file |
 | `theme_set_constant` | G / Editor | ✅ | ✔ writes file |
+| `meshinstance_create` | H / Editor | ✅ | undoable |
+| `mesh_set_surface_material` | H / Editor | ✅ | undoable |
+| `primitive_mesh_create` | H / Editor | ✅ | ✔ writes file |
+| `light_create` | H / Editor | ✅ | undoable |
+| `camera_create` | H / Editor | ✅ | undoable |
+| `csg_create` | H / Editor | ✅ | undoable |
+| `navregion_create` | H / Editor | ✅ | undoable |
+| `navagent_configure` | H / Editor | ✅ | undoable |
+| `environment_create` | H / Editor | ✅ | ✔ writes file |
+| `environment_set_sky` | H / Editor | ✅ | ✔ writes file |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

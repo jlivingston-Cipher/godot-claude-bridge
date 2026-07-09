@@ -253,6 +253,26 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _theme_set_stylebox(params)
 		"theme.set_constant":
 			return _theme_set_constant(params)
+		"meshinstance.create":
+			return _meshinstance_create(params)
+		"mesh.set_surface_material":
+			return _mesh_set_surface_material(params)
+		"primitive_mesh.create":
+			return _primitive_mesh_create(params)
+		"light.create":
+			return _light_create(params)
+		"camera.create":
+			return _camera_create(params)
+		"environment.create":
+			return _environment_create(params)
+		"environment.set_sky":
+			return _environment_set_sky(params)
+		"csg.create":
+			return _csg_create(params)
+		"navregion.create":
+			return _navregion_create(params)
+		"navagent.configure":
+			return _navagent_configure(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -3442,3 +3462,265 @@ func _layout_preset_name(preset: int) -> String:
 		if int(names[k]) == preset:
 			return k
 	return str(preset)
+
+
+# ---------------------------------------------------------------- Group H: 3D & navigation ----
+# meshinstance / mesh / light / camera / csg / navregion / navagent tools mutate the edited scene
+# (3D nodes), undoable via EditorUndoRedoManager and ungated (the node_* model). primitive_mesh /
+# environment author a resource on disk via ResourceSaver and are host-gated file-writers like
+# resource_* / theme_create. Mesh / Light3D / Camera3D / CSG / NavigationRegion3D /
+# NavigationAgent3D and the PrimitiveMesh / Environment / Sky APIs were probed live on Godot 4.7.
+
+func _meshinstance_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var mesh_path := String(params.get("mesh_path", ""))
+	var mesh_res: Mesh = null
+	if mesh_path != "":
+		if not ResourceLoader.exists(mesh_path):
+			return _err("not_found", "Mesh not found: %s" % mesh_path)
+		var res = ResourceLoader.load(mesh_path)
+		if not (res is Mesh):
+			return _err("bad_type", "%s is not a Mesh" % mesh_path)
+		mesh_res = res as Mesh
+	var node := MeshInstance3D.new()
+	node.name = String(params.get("name", "MeshInstance3D"))
+	if mesh_res != null:
+		node.mesh = mesh_res
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "MeshInstance3D", "mesh_path": mesh_path})
+
+
+func _mesh_set_surface_material(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is MeshInstance3D):
+		return _err("bad_type", "%s is not a MeshInstance3D" % node.name)
+	var mi := node as MeshInstance3D
+	var material_path := String(params.get("material_path", ""))
+	if material_path == "":
+		return _err("bad_params", "Missing 'material_path'")
+	if not ResourceLoader.exists(material_path):
+		return _err("not_found", "Material not found: %s" % material_path)
+	var mres = ResourceLoader.load(material_path)
+	if not (mres is Material):
+		return _err("bad_type", "%s is not a Material" % material_path)
+	var mat := mres as Material
+	var surface := int(params.get("surface", -1))
+	if surface >= 0:
+		var count := mi.get_surface_override_material_count()
+		if surface >= count:
+			return _err("bad_params", "surface %d out of range (0..%d)" % [surface, count - 1])
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s material" % mi.name)
+	if surface < 0:
+		var old_mat = mi.material_override
+		ur.add_do_property(mi, "material_override", mat)
+		ur.add_undo_property(mi, "material_override", old_mat)
+	else:
+		var old_sm = mi.get_surface_override_material(surface)
+		ur.add_do_method(mi, "set_surface_override_material", surface, mat)
+		ur.add_undo_method(mi, "set_surface_override_material", surface, old_sm)
+	ur.add_do_reference(mat)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, mi), "material_path": material_path, "surface": surface})
+
+
+func _primitive_mesh_create(params: Dictionary) -> Dictionary:
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var shape := String(params.get("shape", "box")).to_lower()
+	var classes := {"box": "BoxMesh", "sphere": "SphereMesh", "cylinder": "CylinderMesh", "plane": "PlaneMesh", "capsule": "CapsuleMesh", "prism": "PrismMesh", "torus": "TorusMesh", "quad": "QuadMesh"}
+	if not classes.has(shape):
+		return _err("bad_params", "Unknown primitive shape: %s (box/sphere/cylinder/plane/capsule/prism/torus/quad)" % shape)
+	var cls := String(classes[shape])
+	var mesh: Mesh = ClassDB.instantiate(cls)
+	if mesh == null:
+		return _err("create_failed", "Could not instantiate %s" % cls)
+	var e := ResourceSaver.save(mesh, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"created": to_path, "type": cls, "shape": shape})
+
+
+func _light_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var kind := String(params.get("kind", "omni")).to_lower()
+	var classes := {"dir": "DirectionalLight3D", "directional": "DirectionalLight3D", "omni": "OmniLight3D", "spot": "SpotLight3D"}
+	if not classes.has(kind):
+		return _err("bad_params", "Unknown light kind: %s (use dir/omni/spot)" % kind)
+	var cls := String(classes[kind])
+	var node: Node = ClassDB.instantiate(cls)
+	node.name = String(params.get("name", cls))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": cls, "kind": kind})
+
+
+func _camera_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var node := Camera3D.new()
+	node.name = String(params.get("name", "Camera3D"))
+	if bool(params.get("current", false)):
+		node.current = true
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "Camera3D", "current": node.current})
+
+
+func _environment_create(params: Dictionary) -> Dictionary:
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var bg := String(params.get("background", "clear_color")).to_lower()
+	var modes := {"clear_color": Environment.BG_CLEAR_COLOR, "color": Environment.BG_COLOR, "sky": Environment.BG_SKY, "canvas": Environment.BG_CANVAS}
+	if not modes.has(bg):
+		return _err("bad_params", "Unknown background: %s (clear_color/color/sky/canvas)" % bg)
+	var env := Environment.new()
+	env.background_mode = int(modes[bg])
+	if params.has("ambient_color"):
+		env.ambient_light_color = _to_color(params.get("ambient_color"))
+	var e := ResourceSaver.save(env, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"created": to_path, "type": "Environment", "background_mode": bg})
+
+
+func _environment_set_sky(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if not ResourceLoader.exists(path):
+		return _err("not_found", "Environment not found: %s" % path)
+	var res = ResourceLoader.load(path)
+	if not (res is Environment):
+		return _err("bad_type", "%s is not an Environment" % path)
+	var env := res as Environment
+	var mat_kind := String(params.get("sky_material", "procedural")).to_lower()
+	var sky := Sky.new()
+	match mat_kind:
+		"procedural":
+			sky.sky_material = ProceduralSkyMaterial.new()
+		"physical":
+			sky.sky_material = PhysicalSkyMaterial.new()
+		"panorama":
+			sky.sky_material = PanoramaSkyMaterial.new()
+		_:
+			return _err("bad_params", "Unknown sky_material: %s (procedural/physical/panorama)" % mat_kind)
+	env.sky = sky
+	env.background_mode = Environment.BG_SKY
+	var e := ResourceSaver.save(env, path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"path": path, "background_mode": "sky", "sky_material": mat_kind})
+
+
+func _csg_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var shape := String(params.get("shape", "box")).to_lower()
+	var classes := {"box": "CSGBox3D", "sphere": "CSGSphere3D", "cylinder": "CSGCylinder3D", "torus": "CSGTorus3D", "polygon": "CSGPolygon3D", "mesh": "CSGMesh3D", "combiner": "CSGCombiner3D"}
+	if not classes.has(shape):
+		return _err("bad_params", "Unknown CSG shape: %s (box/sphere/cylinder/torus/polygon/mesh/combiner)" % shape)
+	var cls := String(classes[shape])
+	if not ClassDB.can_instantiate(cls):
+		return _err("bad_type", "Cannot instantiate class: %s" % cls)
+	var node: Node = ClassDB.instantiate(cls)
+	node.name = String(params.get("name", cls))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": cls, "shape": shape})
+
+
+func _navregion_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var node := NavigationRegion3D.new()
+	node.name = String(params.get("name", "NavigationRegion3D"))
+	if bool(params.get("with_navmesh", true)):
+		node.navigation_mesh = NavigationMesh.new()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "NavigationRegion3D", "has_navmesh": node.navigation_mesh != null})
+
+
+func _navagent_configure(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var node := NavigationAgent3D.new()
+	node.name = String(params.get("name", "NavigationAgent3D"))
+	if params.has("radius"):
+		node.radius = float(params.get("radius"))
+	if params.has("height"):
+		node.height = float(params.get("height"))
+	if params.has("max_speed"):
+		node.max_speed = float(params.get("max_speed"))
+	if params.has("path_desired_distance"):
+		node.path_desired_distance = float(params.get("path_desired_distance"))
+	if params.has("target_desired_distance"):
+		node.target_desired_distance = float(params.get("target_desired_distance"))
+	if params.has("avoidance_enabled"):
+		node.avoidance_enabled = bool(params.get("avoidance_enabled"))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "NavigationAgent3D", "config": {"radius": node.radius, "height": node.height, "max_speed": node.max_speed, "path_desired_distance": node.path_desired_distance, "target_desired_distance": node.target_desired_distance, "avoidance_enabled": node.avoidance_enabled}})

@@ -274,6 +274,30 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   theme_set_stylebox: { path: z.string(), name: z.string(), theme_type: z.string(), stylebox_path: z.string() },
   theme_set_constant: { path: z.string(), name: z.string(), theme_type: z.string(), value: z.number() },
 
+  // ---- Group H: 3D & navigation (tools/editor.ts -> operations.gd _meshinstance_* / _mesh_* / _primitive_mesh_* / _light_* / _camera_* / _csg_* / _navregion_* / _navagent_* / _environment_*) ----
+  meshinstance_create: { path: z.string(), name: z.string(), type: z.string(), mesh_path: z.string() },
+  mesh_set_surface_material: { path: z.string(), material_path: z.string(), surface: z.number() },
+  primitive_mesh_create: { created: z.string(), type: z.string(), shape: z.string() },
+  light_create: { path: z.string(), name: z.string(), type: z.string(), kind: z.string() },
+  camera_create: { path: z.string(), name: z.string(), type: z.string(), current: z.boolean() },
+  csg_create: { path: z.string(), name: z.string(), type: z.string(), shape: z.string() },
+  navregion_create: { path: z.string(), name: z.string(), type: z.string(), has_navmesh: z.boolean() },
+  navagent_configure: {
+    path: z.string(),
+    name: z.string(),
+    type: z.string(),
+    config: z.object({
+      radius: z.number(),
+      height: z.number(),
+      max_speed: z.number(),
+      path_desired_distance: z.number(),
+      target_desired_distance: z.number(),
+      avoidance_enabled: z.boolean(),
+    }),
+  },
+  environment_create: { created: z.string(), type: z.string(), background_mode: z.string() },
+  environment_set_sky: { path: z.string(), background_mode: z.string(), sky_material: z.string() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

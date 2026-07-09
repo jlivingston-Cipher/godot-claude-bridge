@@ -59,7 +59,7 @@
 //
 // Markers (grep-able): AUTH_NODE_* / AUTH_SCENE_* / AUTH_SIGNAL_* / AUTH_RESOURCE_* /
 // AUTH_ANIM_* / AUTH_TILESET_* / AUTH_TILEMAP_* / AUTH_PHYS_* / AUTH_VFX_PARTICLES_* /
-// AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
+// AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UI_* / AUTH_3D_* / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
 // "OK" or "FAIL"; a trailing AUTH_SUMMARY line reports the tally and the process exits
 // non-zero if any assertion failed. The reachability check is the gate (exit 1 if the
 // addon is unreachable).
@@ -69,7 +69,10 @@
 //   * written files under res://_auth_probe_* : _auth_probe_tex.tres,
 //     _auth_probe_audio.tres, _auth_probe_a.gdshader, _auth_probe_b.gdshader,
 //     _auth_probe_bus_layout.tres, _auth_probe_branch.tscn, _auth_probe_style*.tres,
-//     _auth_probe_tiletex.tres, _auth_probe_tileset.tres, and the _auth_probe_dir/
+//     _auth_probe_tiletex.tres, _auth_probe_tileset.tres, the Group G theme files
+//     (_auth_probe.theme.tres, _auth_probe_sbox.tres, _auth_probe_font.tres), the Group H
+//     3D resources (_auth_probe_box.mesh.tres, _auth_probe_mat3d.tres, _auth_probe_env.tres),
+//     and the _auth_probe_dir/
 //     directory (with moved.tres) — plus their .uid/.import siblings;
 //   * two extra AudioServer buses on the running editor (global, reset on restart).
 //   Local cleanup (narrow — do NOT `rm example/*.uid`, that deletes tracked sidecars):
@@ -103,6 +106,8 @@ const GATED = new Set([
   "tileset_create", "tileset_add_source", "tileset_add_tile", "tileset_set_tile_collision",
   // Group G theme file-writers (Theme .tres on disk):
   "theme_create", "theme_set_color", "theme_set_font", "theme_set_stylebox", "theme_set_constant",
+  // Group H resource file-writers (PrimitiveMesh / Environment .tres on disk):
+  "primitive_mesh_create", "environment_create", "environment_set_sky",
 ]);
 
 const results = { pass: [], fail: [] };
@@ -676,6 +681,71 @@ async function main() {
     const pr = await call("editor_redo");
     (pr.performed === true && (await hasChild(uiroot, panel, "Panel")))
       ? pass("AUTH_UI_REDO_CREATE") : fail("AUTH_UI_REDO_CREATE", `performed=${pr.performed}`);
+  });
+
+  // ---------------------------------------------------------------- Group H: 3D & navigation ----
+  // meshinstance/mesh/light/camera/csg/navregion/navagent mutate the edited scene (undoable, ungated);
+  // primitive_mesh_create + environment_* write a resource .tres on disk (gated, asserted via the
+  // mutator echo + an independent resource_load). A creator undo/redo round-trip proves reversibility.
+  const BOXMESH = "res://_auth_probe_box.mesh.tres";
+  const MAT3D = "res://_auth_probe_mat3d.tres";
+  const ENV = "res://_auth_probe_env.tres";
+  await family("AUTH_3D", async () => {
+    const d3root = (await call("meshinstance_create", { parent_path: ".", name: "Auth3DRoot" })).path;
+    (await hasChild(".", d3root, "MeshInstance3D"))
+      ? pass("AUTH_3D_MESHINSTANCE_CREATE", d3root) : fail("AUTH_3D_MESHINSTANCE_CREATE", d3root);
+
+    const pm = await call("primitive_mesh_create", { to_path: BOXMESH, shape: "box" });
+    (pm.type === "BoxMesh" && (await call("resource_load", { path: BOXMESH })).type === "BoxMesh")
+      ? pass("AUTH_3D_PRIMITIVE_MESH_CREATE", pm.type) : fail("AUTH_3D_PRIMITIVE_MESH_CREATE", JSON.stringify(pm));
+
+    const boxmi = (await call("meshinstance_create", { parent_path: d3root, name: "AuthBox", mesh_path: BOXMESH })).path;
+    (await propResClass(boxmi, "mesh")) === "BoxMesh"
+      ? pass("AUTH_3D_MESHINSTANCE_WITH_MESH", boxmi) : fail("AUTH_3D_MESHINSTANCE_WITH_MESH", `class=${await propResClass(boxmi, "mesh")}`);
+
+    await call("resource_create", { class_name: "StandardMaterial3D", to_path: MAT3D });
+    const sm = await call("mesh_set_surface_material", { path: boxmi, material_path: MAT3D });
+    (sm.material_path === MAT3D && (await propResClass(boxmi, "material_override")) === "StandardMaterial3D")
+      ? pass("AUTH_3D_MESH_SET_SURFACE_MATERIAL", `surface=${sm.surface}`) : fail("AUTH_3D_MESH_SET_SURFACE_MATERIAL", JSON.stringify(sm));
+
+    const light = (await call("light_create", { parent_path: d3root, kind: "spot", name: "AuthSpot" })).path;
+    (await hasChild(d3root, light, "SpotLight3D"))
+      ? pass("AUTH_3D_LIGHT_CREATE", light) : fail("AUTH_3D_LIGHT_CREATE", light);
+
+    const cam = await call("camera_create", { parent_path: d3root, name: "AuthCam", current: true });
+    ((await hasChild(d3root, cam.path, "Camera3D")) && (await propVal(cam.path, "current")) === true)
+      ? pass("AUTH_3D_CAMERA_CREATE", cam.path) : fail("AUTH_3D_CAMERA_CREATE", `current=${await propVal(cam.path, "current")}`);
+
+    const csg = (await call("csg_create", { parent_path: d3root, shape: "sphere", name: "AuthCSG" })).path;
+    (await hasChild(d3root, csg, "CSGSphere3D"))
+      ? pass("AUTH_3D_CSG_CREATE", csg) : fail("AUTH_3D_CSG_CREATE", csg);
+
+    const nav = await call("navregion_create", { parent_path: d3root, name: "AuthNavRegion" });
+    ((await hasChild(d3root, nav.path, "NavigationRegion3D")) && nav.has_navmesh === true)
+      ? pass("AUTH_3D_NAVREGION_CREATE", nav.path) : fail("AUTH_3D_NAVREGION_CREATE", JSON.stringify(nav));
+
+    const agent = await call("navagent_configure", { parent_path: boxmi, name: "AuthAgent", radius: 1.5, max_speed: 8 });
+    ((await hasChild(boxmi, agent.path, "NavigationAgent3D")) && near(await propVal(agent.path, "radius"), 1.5) && near(await propVal(agent.path, "max_speed"), 8))
+      ? pass("AUTH_3D_NAVAGENT_CONFIGURE", `r=${agent.config.radius} v=${agent.config.max_speed}`) : fail("AUTH_3D_NAVAGENT_CONFIGURE", JSON.stringify(agent.config));
+
+    const env = await call("environment_create", { to_path: ENV, background: "clear_color" });
+    (env.type === "Environment" && (await call("resource_load", { path: ENV })).type === "Environment")
+      ? pass("AUTH_3D_ENVIRONMENT_CREATE", env.background_mode) : fail("AUTH_3D_ENVIRONMENT_CREATE", JSON.stringify(env));
+
+    const sky = await call("environment_set_sky", { path: ENV, sky_material: "procedural" });
+    (sky.sky_material === "procedural" && sky.background_mode === "sky" && (await call("resource_load", { path: ENV })).type === "Environment")
+      ? pass("AUTH_3D_ENVIRONMENT_SET_SKY") : fail("AUTH_3D_ENVIRONMENT_SET_SKY", JSON.stringify(sky));
+
+    // Creator undo/redo round-trip proves the 3D scene mutators push a reversible action.
+    const tmp = (await call("light_create", { parent_path: d3root, kind: "omni", name: "AuthUndoLight" })).path;
+    const lmade = await hasChild(d3root, tmp, "OmniLight3D");
+    const lu = await call("editor_undo");
+    const lgone = !(await hasChild(d3root, tmp, "OmniLight3D"));
+    (lmade && lu.performed === true && lgone)
+      ? pass("AUTH_3D_UNDO_CREATE") : fail("AUTH_3D_UNDO_CREATE", `made=${lmade} performed=${lu.performed} gone=${lgone}`);
+    const lr = await call("editor_redo");
+    (lr.performed === true && (await hasChild(d3root, tmp, "OmniLight3D")))
+      ? pass("AUTH_3D_REDO_CREATE") : fail("AUTH_3D_REDO_CREATE", `performed=${lr.performed}`);
   });
 
   // ---------------------------------------------------------------- undo / redo ----
