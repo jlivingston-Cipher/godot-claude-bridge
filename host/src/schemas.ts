@@ -298,6 +298,20 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   environment_create: { created: z.string(), type: z.string(), background_mode: z.string() },
   environment_set_sky: { path: z.string(), background_mode: z.string(), sky_material: z.string() },
 
+  // ---- Group I: input / project config / testing (tools/editor.ts -> operations.gd _inputmap_* / _project_add_autoload / _project_remove_autoload / _project_add_export_preset / _project_set_main_scene / _project_list_settings / _editorsettings_get_set / _test_detect / _test_list) ----
+  inputmap_add_action: { action: z.string(), deadzone: z.number(), saved: z.boolean() },
+  inputmap_add_event: { action: z.string(), event_count: z.number(), event_class: z.string(), saved: z.boolean() },
+  inputmap_list: { count: z.number(), actions: z.array(z.object({ name: z.string(), deadzone: z.number(), events: z.array(z.object({ class: z.string(), text: z.string() })) })) },
+  inputmap_erase_action: { erased: z.boolean(), action: z.string(), saved: z.boolean() },
+  project_add_autoload: { autoload: z.string(), path: z.string(), enabled: z.boolean(), saved: z.boolean() },
+  project_remove_autoload: { removed: z.boolean(), autoload: z.string(), saved: z.boolean() },
+  project_add_export_preset: { preset: z.string(), platform: z.string(), index: z.number(), path: z.string() },
+  project_set_main_scene: { main_scene: z.string(), saved: z.boolean() },
+  project_list_settings: { prefix: z.string(), count: z.number(), settings: z.array(z.object({ name: z.string(), value: z.any() })) },
+  editorsettings_get_set: { name: z.string(), value: z.any(), mode: z.string() },
+  test_detect: { framework: z.string(), path: z.string(), version: z.string() },
+  test_list: { dir: z.string(), count: z.number(), tests: z.array(z.string()) },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },

@@ -75,8 +75,10 @@
 //     and the _auth_probe_dir/
 //     directory (with moved.tres) — plus their .uid/.import siblings;
 //   * two extra AudioServer buses on the running editor (global, reset on restart).
+//   * Group I: in-memory ProjectSettings edits (input/autoload/main_scene, save:false ->
+//     vanish on close), a net-zero EditorSettings write, and res://export_presets.cfg on disk.
 //   Local cleanup (narrow — do NOT `rm example/*.uid`, that deletes tracked sidecars):
-//     rm -rf example/_auth_probe_* example/default_bus_layout.tres
+//     rm -rf example/_auth_probe_* example/default_bus_layout.tres example/export_presets.cfg
 //     git checkout -- example/project.godot
 //
 // Requires the editor up (booted under Xvfb by the workflow) with GODOT_PROJECT set.
@@ -108,6 +110,11 @@ const GATED = new Set([
   "theme_create", "theme_set_color", "theme_set_font", "theme_set_stylebox", "theme_set_constant",
   // Group H resource file-writers (PrimitiveMesh / Environment .tres on disk):
   "primitive_mesh_create", "environment_create", "environment_set_sky",
+  // Group I ProjectSettings / editor-config writers (in-memory input/autoload/main-scene
+  // with save:false, export_presets.cfg on disk, EditorSettings on set):
+  "inputmap_add_action", "inputmap_add_event", "inputmap_erase_action",
+  "project_add_autoload", "project_remove_autoload", "project_add_export_preset",
+  "project_set_main_scene", "editorsettings_get_set",
 ]);
 
 const results = { pass: [], fail: [] };
@@ -746,6 +753,71 @@ async function main() {
     const lr = await call("editor_redo");
     (lr.performed === true && (await hasChild(d3root, tmp, "OmniLight3D")))
       ? pass("AUTH_3D_REDO_CREATE") : fail("AUTH_3D_REDO_CREATE", `performed=${lr.performed}`);
+  });
+
+  // ---------------------------------------------------------------- Group I: input / project config / testing ----
+  // inputmap_* / project_* / editorsettings_* mutate ProjectSettings or the editor config
+  // (gated, NOT the scene undo history) — asserted forward-only via a read-back tool
+  // (inputmap_list / project_get_setting / project_list_settings / project_get_info) or the
+  // mutator echo. ProjectSettings writers run with save:false (in-memory, vanish on close);
+  // project_add_export_preset writes res://export_presets.cfg (cleaned up out-of-band);
+  // editorsettings_get_set is exercised get-then-set-to-the-same-value (net-zero on disk).
+  await family("AUTH_GROUPI", async () => {
+    const ACT = "auth_probe_action";
+
+    const iaa = await call("inputmap_add_action", { name: ACT, deadzone: 0.3 });
+    (iaa.action === ACT && near(iaa.deadzone, 0.3))
+      ? pass("AUTH_GROUPI_INPUTMAP_ADD_ACTION", `deadzone=${iaa.deadzone}`) : fail("AUTH_GROUPI_INPUTMAP_ADD_ACTION", JSON.stringify(iaa));
+
+    const iae = await call("inputmap_add_event", { name: ACT, event: { type: "key", keycode: "A" } });
+    (iae.event_count === 1 && iae.event_class === "InputEventKey")
+      ? pass("AUTH_GROUPI_INPUTMAP_ADD_EVENT", `class=${iae.event_class}`) : fail("AUTH_GROUPI_INPUTMAP_ADD_EVENT", JSON.stringify(iae));
+
+    const listed = ((await call("inputmap_list")).actions || []).find((a) => a.name === ACT);
+    (listed && listed.events.length === 1 && listed.events[0].class === "InputEventKey")
+      ? pass("AUTH_GROUPI_INPUTMAP_LIST", `events=${listed ? listed.events.length : "?"}`) : fail("AUTH_GROUPI_INPUTMAP_LIST", JSON.stringify(listed));
+
+    const era = await call("inputmap_erase_action", { name: ACT });
+    const actGone = !((await call("inputmap_list")).actions || []).some((a) => a.name === ACT);
+    (era.erased === true && actGone)
+      ? pass("AUTH_GROUPI_INPUTMAP_ERASE_ACTION") : fail("AUTH_GROUPI_INPUTMAP_ERASE_ACTION", `erased=${era.erased} gone=${actGone}`);
+
+    const ala = await call("project_add_autoload", { name: "AuthProbeAuto", path: "res://gcb_smoke.gd" });
+    (ala.autoload === "AuthProbeAuto" && ala.enabled === true && (await settingVal("autoload/AuthProbeAuto")) === "*res://gcb_smoke.gd")
+      ? pass("AUTH_GROUPI_PROJECT_ADD_AUTOLOAD", ala.path) : fail("AUTH_GROUPI_PROJECT_ADD_AUTOLOAD", JSON.stringify(ala));
+
+    const alr = await call("project_remove_autoload", { name: "AuthProbeAuto" });
+    const autoGone = !((await call("project_list_settings", { prefix: "autoload/" })).settings || []).some((s) => s.name === "autoload/AuthProbeAuto");
+    (alr.removed === true && autoGone)
+      ? pass("AUTH_GROUPI_PROJECT_REMOVE_AUTOLOAD") : fail("AUTH_GROUPI_PROJECT_REMOVE_AUTOLOAD", `removed=${alr.removed} gone=${autoGone}`);
+
+    const sms = await call("project_set_main_scene", { path: "res://main.tscn" });
+    (sms.main_scene === "res://main.tscn" && (await call("project_get_info")).main_scene === "res://main.tscn")
+      ? pass("AUTH_GROUPI_PROJECT_SET_MAIN_SCENE", sms.main_scene) : fail("AUTH_GROUPI_PROJECT_SET_MAIN_SCENE", JSON.stringify(sms));
+
+    const pep = await call("project_add_export_preset", { name: "AuthProbePreset", platform: "Windows Desktop" });
+    (pep.preset === "AuthProbePreset" && typeof pep.index === "number" && pep.path === "res://export_presets.cfg")
+      ? pass("AUTH_GROUPI_PROJECT_ADD_EXPORT_PRESET", `index=${pep.index}`) : fail("AUTH_GROUPI_PROJECT_ADD_EXPORT_PRESET", JSON.stringify(pep));
+
+    const pls = await call("project_list_settings", { prefix: "application/config/" });
+    (pls.count > 0 && (pls.settings || []).some((s) => s.name === "application/config/name"))
+      ? pass("AUTH_GROUPI_PROJECT_LIST_SETTINGS", `count=${pls.count}`) : fail("AUTH_GROUPI_PROJECT_LIST_SETTINGS", JSON.stringify(pls).slice(0, 120));
+
+    const esg = await call("editorsettings_get_set", { name: "interface/editor/code_font_size" });
+    (esg.mode === "get" && typeof esg.value === "number")
+      ? pass("AUTH_GROUPI_EDITORSETTINGS_GET", `v=${esg.value}`) : fail("AUTH_GROUPI_EDITORSETTINGS_GET", JSON.stringify(esg));
+    // set the same value back (net-zero) to exercise the write path without changing config.
+    const ess = await call("editorsettings_get_set", { name: "interface/editor/code_font_size", value: esg.value });
+    (ess.mode === "set" && ess.value === esg.value)
+      ? pass("AUTH_GROUPI_EDITORSETTINGS_SET") : fail("AUTH_GROUPI_EDITORSETTINGS_SET", JSON.stringify(ess));
+
+    const td = await call("test_detect");
+    (td.framework === "none")
+      ? pass("AUTH_GROUPI_TEST_DETECT", td.framework) : fail("AUTH_GROUPI_TEST_DETECT", JSON.stringify(td));
+
+    const tl = await call("test_list");
+    (tl.count === 0 && Array.isArray(tl.tests))
+      ? pass("AUTH_GROUPI_TEST_LIST", `count=${tl.count}`) : fail("AUTH_GROUPI_TEST_LIST", JSON.stringify(tl));
   });
 
   // ---------------------------------------------------------------- undo / redo ----

@@ -892,6 +892,58 @@ The 3D authoring surface (now **205**). `meshinstance_create` adds a **MeshInsta
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "sky_material": { "type": "string", "enum": ["procedural", "physical", "panorama"] }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["path", "background_mode", "sky_material"], "properties": { "path": { "type": "string" }, "background_mode": { "type": "string" }, "sky_material": { "type": "string" } } }`
 
+## Group I — Input, project config & testing (Plane A / Editor)
+
+The project-authoring surface (now **217**). Four `inputmap_*` tools author the project's input actions in `ProjectSettings` (`input/<name>`): `inputmap_add_action` defines an action (deadzone + empty event list), `inputmap_add_event` appends an `InputEventKey` / `InputEventMouseButton` / `InputEventJoypadButton` / `InputEventJoypadMotion` built from a descriptor (`keycode`/`physical_keycode` accept a name like `"A"` via `OS.find_keycode_from_string` or an int), `inputmap_erase_action` removes one, and `inputmap_list` reads them all back (deadzone + each event's class and `as_text()`). Six project/editor-config tools follow: `project_add_autoload` / `project_remove_autoload` write `autoload/<name>` (a leading `*` marks an enabled global singleton) after checking the target `res://` path exists; `project_set_main_scene` writes `application/run/main_scene` (validated to be an existing `.tscn`/`.scn`); `project_list_settings` reads `ProjectSettings` keys+values filtered by a dotted prefix; `project_add_export_preset` appends a preset to `res://export_presets.cfg` via `ConfigFile`; and `editorsettings_get_set` reads an `EditorSettings` value, or writes it when a `value` is supplied. Two testing tools round out the family: `test_detect` reports an installed GUT / GdUnit4 framework (or `none`), and `test_list` enumerates `test_*.gd` / `*_test.gd` scripts under a directory. Every mutator that touches `ProjectSettings` or the editor config is **confirmation-gated** (the `project_set_setting` model, not the scene `EditorUndoRedoManager` history) and takes an optional `save` flag to persist to `project.godot`; the read-only `inputmap_list` / `project_list_settings` / `test_detect` / `test_list` are ungated. `test_run` and `test_result` are intentionally **deferred** — actually executing a framework's suite is async and non-deterministic under a headless CI editor and awaits a framework-bearing fixture project + a maintainer semantics decision (the same posture as `navmesh_bake` / `scene_set_root`). The `ProjectSettings` input/autoload/main-scene round-trips, `ConfigFile` export-preset write, and `EditorSettings` get/set were probed live on Godot 4.7.
+
+### `inputmap_add_action` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["action", "deadzone", "saved"], "properties": { "action": { "type": "string" }, "deadzone": { "type": "number" }, "saved": { "type": "boolean" } } }`
+
+### `inputmap_add_event` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "event"], "properties": { "name": { "type": "string" }, "event": { "type": "object", "required": ["type"], "properties": { "type": { "type": "string", "enum": ["key", "mouse_button", "joy_button", "joy_motion"] }, "keycode": { "type": ["string", "number"] }, "physical_keycode": { "type": ["string", "number"] }, "button_index": { "type": "number" }, "axis": { "type": "number" }, "axis_value": { "type": "number" } } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["action", "event_count", "event_class", "saved"], "properties": { "action": { "type": "string" }, "event_count": { "type": "number" }, "event_class": { "type": "string" }, "saved": { "type": "boolean" } } }`
+
+### `inputmap_list` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": {} }`
+- **Output** `{ "type": "object", "required": ["count", "actions"], "properties": { "count": { "type": "number" }, "actions": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "events": { "type": "array", "items": { "type": "object", "properties": { "class": { "type": "string" }, "text": { "type": "string" } } } } } } } } }`
+
+### `inputmap_erase_action` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["erased", "action", "saved"], "properties": { "erased": { "type": "boolean" }, "action": { "type": "string" }, "saved": { "type": "boolean" } } }`
+
+### `project_add_autoload` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "path"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["autoload", "path", "enabled", "saved"], "properties": { "autoload": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "saved": { "type": "boolean" } } }`
+
+### `project_remove_autoload` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["removed", "autoload", "saved"], "properties": { "removed": { "type": "boolean" }, "autoload": { "type": "string" }, "saved": { "type": "boolean" } } }`
+
+### `project_add_export_preset` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "platform"], "properties": { "name": { "type": "string" }, "platform": { "type": "string" }, "runnable": { "type": "boolean" }, "export_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["preset", "platform", "index", "path"], "properties": { "preset": { "type": "string" }, "platform": { "type": "string" }, "index": { "type": "number" }, "path": { "type": "string" } } }`
+
+### `project_set_main_scene` ✅ · destructive
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["main_scene", "saved"], "properties": { "main_scene": { "type": "string" }, "saved": { "type": "boolean" } } }`
+
+### `project_list_settings` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "prefix": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["prefix", "count", "settings"], "properties": { "prefix": { "type": "string" }, "count": { "type": "number" }, "settings": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": {} } } } } }`
+
+### `editorsettings_get_set` ✅ · destructive (on set)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["name", "value", "mode"], "properties": { "name": { "type": "string" }, "value": {}, "mode": { "type": "string" } } }`
+
+### `test_detect` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": {} }`
+- **Output** `{ "type": "object", "required": ["framework", "path", "version"], "properties": { "framework": { "type": "string" }, "path": { "type": "string" }, "version": { "type": "string" } } }`
+
+### `test_list` ✅
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "dir": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["dir", "count", "tests"], "properties": { "dir": { "type": "string" }, "count": { "type": "number" }, "tests": { "type": "array", "items": { "type": "string" } } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1598,6 +1650,18 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `navagent_configure` | H / Editor | ✅ | undoable |
 | `environment_create` | H / Editor | ✅ | ✔ writes file |
 | `environment_set_sky` | H / Editor | ✅ | ✔ writes file |
+| `inputmap_add_action` | I / Editor | ✅ | ✔ writes setting |
+| `inputmap_add_event` | I / Editor | ✅ | ✔ writes setting |
+| `inputmap_list` | I / Editor | ✅ | – |
+| `inputmap_erase_action` | I / Editor | ✅ | ✔ writes setting |
+| `project_add_autoload` | I / Editor | ✅ | ✔ writes setting |
+| `project_remove_autoload` | I / Editor | ✅ | ✔ writes setting |
+| `project_add_export_preset` | I / Editor | ✅ | ✔ writes file |
+| `project_set_main_scene` | I / Editor | ✅ | ✔ writes setting |
+| `project_list_settings` | I / Editor | ✅ | – |
+| `editorsettings_get_set` | I / Editor | ✅ | ✔ on set |
+| `test_detect` | I / Editor | ✅ | – |
+| `test_list` | I / Editor | ✅ | – |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

@@ -273,6 +273,30 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _navregion_create(params)
 		"navagent.configure":
 			return _navagent_configure(params)
+		"inputmap.add_action":
+			return _inputmap_add_action(params)
+		"inputmap.add_event":
+			return _inputmap_add_event(params)
+		"inputmap.list":
+			return _inputmap_list(params)
+		"inputmap.erase_action":
+			return _inputmap_erase_action(params)
+		"project.add_autoload":
+			return _project_add_autoload(params)
+		"project.remove_autoload":
+			return _project_remove_autoload(params)
+		"project.add_export_preset":
+			return _project_add_export_preset(params)
+		"project.set_main_scene":
+			return _project_set_main_scene(params)
+		"project.list_settings":
+			return _project_list_settings(params)
+		"editorsettings.get_set":
+			return _editorsettings_get_set(params)
+		"test.detect":
+			return _test_detect(params)
+		"test.list":
+			return _test_list(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -3724,3 +3748,285 @@ func _navagent_configure(params: Dictionary) -> Dictionary:
 	ur.add_undo_method(parent, "remove_child", node)
 	ur.commit_action()
 	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": "NavigationAgent3D", "config": {"radius": node.radius, "height": node.height, "max_speed": node.max_speed, "path_desired_distance": node.path_desired_distance, "target_desired_distance": node.target_desired_distance, "avoidance_enabled": node.avoidance_enabled}})
+
+
+# ------------------------------------------------ Group I: input/config/testing ----
+
+func _keycode_of(v) -> int:
+	if v is String:
+		return OS.find_keycode_from_string(String(v))
+	return int(v)
+
+
+func _make_input_event(spec: Dictionary) -> InputEvent:
+	var t := String(spec.get("type", "")).to_lower()
+	match t:
+		"key":
+			var ek := InputEventKey.new()
+			if spec.has("physical_keycode"):
+				ek.physical_keycode = _keycode_of(spec.get("physical_keycode"))
+			else:
+				ek.keycode = _keycode_of(spec.get("keycode"))
+			return ek
+		"mouse_button":
+			var emb := InputEventMouseButton.new()
+			emb.button_index = int(spec.get("button_index", 1))
+			return emb
+		"joy_button":
+			var ejb := InputEventJoypadButton.new()
+			ejb.button_index = int(spec.get("button_index", 0))
+			return ejb
+		"joy_motion":
+			var ejm := InputEventJoypadMotion.new()
+			ejm.axis = int(spec.get("axis", 0))
+			ejm.axis_value = float(spec.get("axis_value", 1.0))
+			return ejm
+	return null
+
+
+func _inputmap_add_action(params: Dictionary) -> Dictionary:
+	var aname := String(params.get("name", ""))
+	if aname == "":
+		return _err("bad_params", "Missing 'name'")
+	var key := "input/" + aname
+	var deadzone := float(params.get("deadzone", 0.5))
+	ProjectSettings.set_setting(key, {"deadzone": deadzone, "events": []})
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"action": aname, "deadzone": deadzone, "saved": saved})
+
+
+func _inputmap_add_event(params: Dictionary) -> Dictionary:
+	var aname := String(params.get("name", ""))
+	if aname == "":
+		return _err("bad_params", "Missing 'name'")
+	var key := "input/" + aname
+	if not ProjectSettings.has_setting(key):
+		return _err("not_found", "Input action not found: %s" % aname)
+	var spec = params.get("event")
+	if not (spec is Dictionary):
+		return _err("bad_params", "Missing or invalid 'event' object")
+	var ev := _make_input_event(spec)
+	if ev == null:
+		return _err("bad_params", "Unsupported event (use type key/mouse_button/joy_button/joy_motion)")
+	var action = ProjectSettings.get_setting(key)
+	if not (action is Dictionary):
+		return _err("bad_type", "Input action %s is malformed" % aname)
+	var events: Array = action.get("events", [])
+	events.append(ev)
+	action["events"] = events
+	ProjectSettings.set_setting(key, action)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"action": aname, "event_count": events.size(), "event_class": ev.get_class(), "saved": saved})
+
+
+func _inputmap_list(_params: Dictionary) -> Dictionary:
+	var actions: Array = []
+	for prop in ProjectSettings.get_property_list():
+		var pn := String(prop.get("name", ""))
+		if not pn.begins_with("input/"):
+			continue
+		var an := pn.substr(6)
+		if an == "":
+			continue
+		var action = ProjectSettings.get_setting(pn)
+		var deadzone := 0.5
+		var evlist: Array = []
+		if action is Dictionary:
+			deadzone = float(action.get("deadzone", 0.5))
+			for ev in action.get("events", []):
+				if ev is InputEvent:
+					evlist.append({"class": ev.get_class(), "text": ev.as_text()})
+				else:
+					evlist.append({"class": "unknown", "text": str(ev)})
+		actions.append({"name": an, "deadzone": deadzone, "events": evlist})
+	return _ok({"count": actions.size(), "actions": actions})
+
+
+func _inputmap_erase_action(params: Dictionary) -> Dictionary:
+	var aname := String(params.get("name", ""))
+	if aname == "":
+		return _err("bad_params", "Missing 'name'")
+	var key := "input/" + aname
+	var existed := ProjectSettings.has_setting(key)
+	if existed:
+		ProjectSettings.set_setting(key, null)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"erased": existed, "action": aname, "saved": saved})
+
+
+func _project_add_autoload(params: Dictionary) -> Dictionary:
+	var aname := String(params.get("name", ""))
+	var apath := String(params.get("path", ""))
+	if aname == "" or apath == "":
+		return _err("bad_params", "Missing 'name' or 'path'")
+	if not (ResourceLoader.exists(apath) or FileAccess.file_exists(apath)):
+		return _err("not_found", "Autoload path not found: %s" % apath)
+	var enabled := bool(params.get("enabled", true))
+	var value := ("*" if enabled else "") + apath
+	ProjectSettings.set_setting("autoload/" + aname, value)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"autoload": aname, "path": apath, "enabled": enabled, "saved": saved})
+
+
+func _project_remove_autoload(params: Dictionary) -> Dictionary:
+	var aname := String(params.get("name", ""))
+	if aname == "":
+		return _err("bad_params", "Missing 'name'")
+	var key := "autoload/" + aname
+	var existed := ProjectSettings.has_setting(key)
+	if existed:
+		ProjectSettings.set_setting(key, null)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"removed": existed, "autoload": aname, "saved": saved})
+
+
+func _project_add_export_preset(params: Dictionary) -> Dictionary:
+	var pname := String(params.get("name", ""))
+	var platform := String(params.get("platform", ""))
+	if pname == "" or platform == "":
+		return _err("bad_params", "Missing 'name' or 'platform'")
+	var cfg_path := "res://export_presets.cfg"
+	var cfg := ConfigFile.new()
+	cfg.load(cfg_path)
+	var idx := 0
+	while cfg.has_section("preset." + str(idx)):
+		idx += 1
+	var section := "preset." + str(idx)
+	cfg.set_value(section, "name", pname)
+	cfg.set_value(section, "platform", platform)
+	cfg.set_value(section, "runnable", bool(params.get("runnable", true)))
+	cfg.set_value(section, "dedicated_server", false)
+	cfg.set_value(section, "custom_features", "")
+	cfg.set_value(section, "export_filter", "all_resources")
+	cfg.set_value(section, "include_filter", "")
+	cfg.set_value(section, "exclude_filter", "")
+	cfg.set_value(section, "export_path", String(params.get("export_path", "")))
+	cfg.set_value(section, "encryption_include_filters", "")
+	cfg.set_value(section, "encryption_exclude_filters", "")
+	cfg.set_value(section, "encrypt_pck", false)
+	cfg.set_value(section, "encrypt_directory", false)
+	cfg.set_value(section + ".options", "custom_template/debug", "")
+	cfg.set_value(section + ".options", "custom_template/release", "")
+	var e := cfg.save(cfg_path)
+	if e != OK:
+		return _err("save_failed", "ConfigFile.save() returned %d" % e)
+	return _ok({"preset": pname, "platform": platform, "index": idx, "path": cfg_path})
+
+
+func _project_set_main_scene(params: Dictionary) -> Dictionary:
+	var spath := String(params.get("path", ""))
+	if spath == "":
+		return _err("bad_params", "Missing 'path'")
+	if not ResourceLoader.exists(spath):
+		return _err("not_found", "Scene not found: %s" % spath)
+	if not (spath.ends_with(".tscn") or spath.ends_with(".scn")):
+		return _err("bad_params", "Main scene must be a .tscn/.scn: %s" % spath)
+	ProjectSettings.set_setting("application/run/main_scene", spath)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	return _ok({"main_scene": spath, "saved": saved})
+
+
+func _project_list_settings(params: Dictionary) -> Dictionary:
+	var prefix := String(params.get("prefix", ""))
+	var out: Array = []
+	for prop in ProjectSettings.get_property_list():
+		var pn := String(prop.get("name", ""))
+		if pn == "":
+			continue
+		if prefix != "" and not pn.begins_with(prefix):
+			continue
+		if not ProjectSettings.has_setting(pn):
+			continue
+		out.append({"name": pn, "value": Codec.encode(ProjectSettings.get_setting(pn))})
+	return _ok({"prefix": prefix, "count": out.size(), "settings": out})
+
+
+func _editorsettings_get_set(params: Dictionary) -> Dictionary:
+	var sname := String(params.get("name", ""))
+	if sname == "":
+		return _err("bad_params", "Missing 'name'")
+	var es := EditorInterface.get_editor_settings()
+	if es == null:
+		return _err("unsupported", "EditorSettings unavailable")
+	if params.has("value"):
+		es.set_setting(sname, Codec.decode(params.get("value")))
+		return _ok({"name": sname, "value": Codec.encode(es.get_setting(sname)), "mode": "set"})
+	if not es.has_setting(sname):
+		return _err("not_found", "Editor setting not found: %s" % sname)
+	return _ok({"name": sname, "value": Codec.encode(es.get_setting(sname)), "mode": "get"})
+
+
+func _test_detect(_params: Dictionary) -> Dictionary:
+	var frameworks := [
+		{"name": "gut", "dir": "res://addons/gut", "cfg": "res://addons/gut/plugin.cfg"},
+		{"name": "gdunit4", "dir": "res://addons/gdUnit4", "cfg": "res://addons/gdUnit4/plugin.cfg"},
+	]
+	for fw in frameworks:
+		if DirAccess.dir_exists_absolute(fw["dir"]):
+			var version := ""
+			var cfg := ConfigFile.new()
+			if cfg.load(fw["cfg"]) == OK:
+				version = String(cfg.get_value("plugin", "version", ""))
+			return _ok({"framework": fw["name"], "path": fw["dir"], "version": version})
+	return _ok({"framework": "none", "path": "", "version": ""})
+
+
+func _is_test_script(fname: String) -> bool:
+	if not fname.ends_with(".gd"):
+		return false
+	return fname.begins_with("test_") or fname.ends_with("_test.gd")
+
+
+func _collect_tests(dir_path: String, out: Array) -> void:
+	var d := DirAccess.open(dir_path)
+	if d == null:
+		return
+	d.list_dir_begin()
+	var entry := d.get_next()
+	while entry != "":
+		if entry != "." and entry != "..":
+			var full := dir_path.path_join(entry)
+			if d.current_is_dir():
+				_collect_tests(full, out)
+			elif _is_test_script(entry):
+				out.append(full)
+		entry = d.get_next()
+	d.list_dir_end()
+
+
+func _test_list(params: Dictionary) -> Dictionary:
+	var dir_path := String(params.get("dir", "res://test"))
+	var tests: Array = []
+	if DirAccess.dir_exists_absolute(dir_path):
+		_collect_tests(dir_path, tests)
+	return _ok({"dir": dir_path, "count": tests.size(), "tests": tests})
