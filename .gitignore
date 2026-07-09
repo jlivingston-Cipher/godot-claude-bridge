@@ -20,5 +20,20 @@ npm-debug.log*
 .vscode/
 .idea/
 
+# Internal design / development artifacts — keep these out of the public repo.
+# (Kept in a local working folder outside the repo; use `git add -f` to override.)
+HANDOFF*.md
+BACKLOG*.md
+COMPETITIVE_*.md
+BREADTH_*.md
+DEFERRED_*.md
+NEXT_STEPS*.md
+GO_NO_GO*.md
+*_SIGNOFF.md
+*_ASSESSMENT.md
+PRE_DISTRIBUTION*.md
+VALIDATION_REPORT.md
+/internal/
+
 # transient / undeletable-via-bridge scratch (delete manually)
 _to_delete/

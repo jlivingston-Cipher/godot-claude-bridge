@@ -5,8 +5,8 @@
 // breakpoint flow (launch the C# game under the debugger, arm breakpoints on
 // Player.cs, continue, and dump stack/vars if it stops). Markers are grep-able
 // (C#_DAP_REACHED / C#_DAP_CAPS / C#_DAP …). netcoredbg + Godot native-host
-// launch/attach semantics under headless CI are the least-certain piece of D4
-// (see docs/D4_CSHARP_PLAN.md), so ONLY the initialize gate is fatal; every
+// launch/attach semantics under headless CI are the least-certain piece of the
+// C# debugging plane, so ONLY the initialize gate is fatal; every
 // live-flow probe failure is logged and swallowed, exactly like the GDScript
 // dap-plane probe began.
 //

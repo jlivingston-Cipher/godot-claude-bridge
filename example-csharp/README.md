@@ -19,9 +19,9 @@ editor/runtime bridge — and leaving the addon out avoids adding a third `ADDON
 `scripts/contract_check.py` would have to track.
 
 ## Requirements (not yet installed by this scaffold)
-A **Mono/.NET Godot** build (not the standard build) + the **.NET 8 SDK**. See
-[`../docs/D4_CSHARP_PLAN.md`](../docs/D4_CSHARP_PLAN.md) for the full C1→C3 plan and the exact
-version-alignment rules.
+A **Mono/.NET Godot** build (not the standard build) + the **.NET 8 SDK**. The
+`Godot.NET.Sdk` version must match the Godot Mono build you open the project with
+(currently 4.7).
 
 ## Quick local smoke (once the toolchain is installed)
 ```bash

@@ -69,8 +69,7 @@ Without it, only the headless-CLI (`godot_*`) plane works.
 
 This bridge is a **local** co-development tool: all four planes talk to `127.0.0.1`, and
 screenshots render real frames, so run the host on the same machine as Godot. A remote
-deployment can't see a local editor and is limited to the headless subset. See
-[`docs/DISTRIBUTION.md`](https://github.com/jlivingston-Cipher/godot-claude-bridge/blob/main/docs/DISTRIBUTION.md).
+deployment can't see a local editor and is limited to the headless subset.
 
 ## Security
 

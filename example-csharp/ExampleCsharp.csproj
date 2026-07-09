@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Godot C# moved to .NET 8 (godotengine.org/article/godotsharp-packages-net8).
          The Godot.NET.Sdk version MUST match the Godot Mono build used to open/build
-         this project (currently 4.7). See docs/D4_CSHARP_PLAN.md §"Version alignment". -->
+         this project (currently 4.7). -->
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
