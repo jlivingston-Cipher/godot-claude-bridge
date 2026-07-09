@@ -636,7 +636,7 @@ Batch 2 (`tilemaplayer_create`, `tilemap_*`) is the other half: it authors a `Ti
 
 ## Group E — Physics & collision (Plane A / Editor)
 
-In-scene physics authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model. `body_create` adds a `StaticBody`/`RigidBody`/`CharacterBody`/`Area` node; `collisionshape_add` adds a `CollisionShape2D`/`CollisionShape3D` carrying a shape resource (`rect`→Rectangle/Box, `circle`→Circle/Sphere, `capsule`→Capsule 2D/3D, `polygon`→ConvexPolygon 2D/3D); `body_set_collision_layer` / `body_set_collision_mask` set the bitmasks on any body or area (`CollisionObject2D/3D`). `dim` selects 2D (default) or 3D. The API surface (bodies + `CollisionShape2D/3D` + the six shape resources) was probed live on Godot 4.7, and a `StaticBody2D → CollisionShape2D(RectangleShape2D)` scene was packed to a `.tscn`, saved, and reloaded — body `collision_layer` and the shape (type + `size`) survive the round-trip. This is the group that crosses godot-mcp-pro's 162-tool ceiling (batch 1 here; group completes at ~166).
+In-scene physics authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model. `body_create` adds a `StaticBody`/`RigidBody`/`CharacterBody`/`Area` node; `collisionshape_add` adds a `CollisionShape2D`/`CollisionShape3D` carrying a shape resource (`rect`→Rectangle/Box, `circle`→Circle/Sphere, `capsule`→Capsule 2D/3D, `polygon`→ConvexPolygon 2D/3D); `body_set_collision_layer` / `body_set_collision_mask` set the bitmasks on any body or area (`CollisionObject2D/3D`). `dim` selects 2D (default) or 3D. The API surface (bodies + `CollisionShape2D/3D` + the six shape resources) was probed live on Godot 4.7, and a `StaticBody2D → CollisionShape2D(RectangleShape2D)` scene was packed to a `.tscn`, saved, and reloaded — body `collision_layer` and the shape (type + `size`) survive the round-trip. This is the group that crosses godot-mcp-pro's 162-tool ceiling. Batch 1 added bodies, collision shapes, and layer/mask; **batch 2 completes the group** (now **165**): `area_set_monitoring` / `area_set_gravity` (Area monitoring + gravity zones), `joint_create` / `joint_set_bodies` (2D `PinJoint2D`/`GrooveJoint2D`/`DampedSpringJoint2D`, 3D `PinJoint3D`/`HingeJoint3D`/`SliderJoint3D`/`ConeTwistJoint3D`/`Generic6DOFJoint3D`), `collisionpolygon_add` (`CollisionPolygon2D/3D`), `rigidbody_set_properties`, `body_set_physics_material` (a `PhysicsMaterial` override), and the gated `physics_set_gravity` (project `default_gravity`). All node/property mutators are undoable and ungated; `physics_set_gravity` writes ProjectSettings and is gated like `project_set_setting`. Every joint/area/rigidbody/polygon/material API was probed live on Godot 4.7 before design.
 
 ### `body_create` ✅  (undoable)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["static", "rigid", "character", "area"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" } } }`
@@ -653,6 +653,38 @@ In-scene physics authoring. Every tool mutates the **edited scene** and is **und
 ### `body_set_collision_mask` ✅  (undoable)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "mask"], "properties": { "path": { "type": "string" }, "mask": { "type": "integer" } } }`
 - **Output** `{ "type": "object", "required": ["path", "collision_mask"], "properties": { "path": { "type": "string" }, "collision_mask": { "type": "integer" } } }`
+
+### `area_set_monitoring` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "monitoring", "monitorable"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }`
+
+### `area_set_gravity` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string", "enum": ["disabled", "combine", "combine_replace", "replace", "replace_combine"] }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "point": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "space_override", "gravity", "direction", "gravity_point", "dim"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string" }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "gravity_point": { "type": "boolean" }, "dim": { "type": "string" } } }`
+
+### `joint_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["pin", "groove", "spring", "hinge", "slider", "cone_twist", "generic6dof"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "joint", "dim", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "joint": { "type": "string" }, "dim": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+
+### `joint_set_bodies` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+
+### `collisionpolygon_add` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "points"], "properties": { "parent_path": { "type": "string" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "build_mode": { "type": "string", "enum": ["solids", "segments"] }, "depth": { "type": "number" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "points"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "points": { "type": "integer" } } }`
+
+### `rigidbody_set_properties` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }`
+- **Output** `{ "type": "object", "required": ["path", "mass", "gravity_scale", "linear_damp", "angular_damp"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }`
+
+### `body_set_physics_material` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "friction", "bounce", "rough", "absorbent"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }`
+
+### `physics_set_gravity` ✅  (gated)
+- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "dim": { "type": "string", "enum": ["2d", "3d"] }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["dim", "magnitude", "direction", "saved"], "properties": { "dim": { "type": "string" }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "saved": { "type": "boolean" } } }`
 
 ---
 
@@ -1312,6 +1344,14 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `collisionshape_add` | E / Editor | ✅ | undoable |
 | `body_set_collision_layer` | E / Editor | ✅ | undoable |
 | `body_set_collision_mask` | E / Editor | ✅ | undoable |
+| `area_set_monitoring` | E / Editor | ✅ | undoable |
+| `area_set_gravity` | E / Editor | ✅ | undoable |
+| `joint_create` | E / Editor | ✅ | undoable |
+| `joint_set_bodies` | E / Editor | ✅ | undoable |
+| `collisionpolygon_add` | E / Editor | ✅ | undoable |
+| `rigidbody_set_properties` | E / Editor | ✅ | undoable |
+| `body_set_physics_material` | E / Editor | ✅ | undoable |
+| `physics_set_gravity` | E / Editor | ✅ | ✔ writes setting |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

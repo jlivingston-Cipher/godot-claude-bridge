@@ -208,6 +208,16 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   body_set_collision_layer: { path: z.string(), collision_layer: z.number() },
   body_set_collision_mask: { path: z.string(), collision_mask: z.number() },
 
+  // ---- Group E batch 2: areas, joints, collision polygons, rigidbody tuning, physics material, project gravity ----
+  area_set_monitoring: { path: z.string(), monitoring: z.boolean(), monitorable: z.boolean() },
+  area_set_gravity: { path: z.string(), space_override: z.string(), gravity: z.number(), direction: z.array(z.number()), gravity_point: z.boolean(), dim: z.string() },
+  joint_create: { path: z.string(), name: z.string(), type: z.string(), joint: z.string(), dim: z.string(), node_a: z.string(), node_b: z.string() },
+  joint_set_bodies: { path: z.string(), node_a: z.string(), node_b: z.string() },
+  collisionpolygon_add: { path: z.string(), name: z.string(), type: z.string(), dim: z.string(), points: z.number() },
+  rigidbody_set_properties: { path: z.string(), mass: z.number(), gravity_scale: z.number(), linear_damp: z.number(), angular_damp: z.number() },
+  body_set_physics_material: { path: z.string(), friction: z.number(), bounce: z.number(), rough: z.boolean(), absorbent: z.boolean() },
+  physics_set_gravity: { dim: z.string(), magnitude: z.number(), direction: z.array(z.number()), saved: z.boolean() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },
