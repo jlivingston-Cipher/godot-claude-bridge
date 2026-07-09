@@ -215,6 +215,18 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _shadermaterial_set_shader(params)
 		"shadermaterial.set_param":
 			return _shadermaterial_set_param(params)
+		"audio.player_create":
+			return _audio_player_create(params)
+		"audio.set_stream":
+			return _audio_set_stream(params)
+		"audio.bus_add":
+			return _audio_bus_add(params)
+		"audio.bus_add_effect":
+			return _audio_bus_add_effect(params)
+		"audio.bus_set_volume":
+			return _audio_bus_set_volume(params)
+		"audio.set_bus_layout":
+			return _audio_set_bus_layout(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -2888,3 +2900,128 @@ func _shadermaterial_set_param(params: Dictionary) -> Dictionary:
 	ur.add_undo_property(mat, key, old_value)
 	ur.commit_action()
 	return _ok({"path": _path_of(root, node), "param": pname, "value": Codec.encode(mat.get(key))})
+
+# ---------------------------------------------------------------- Group F batch 3 ----
+# Audio. Two models. audio_player_create / audio_set_stream mutate the edited scene
+# (AudioStreamPlayer / AudioStreamPlayer2D / AudioStreamPlayer3D), undoable via
+# EditorUndoRedoManager and ungated (the node_* model). The four bus tools drive the
+# global AudioServer (project-wide, not scene-undoable) and are gated host-side like
+# physics_set_gravity; audio_set_bus_layout writes a .tres, a file-writer too.
+# AudioServer bus API + player stream/autoplay/volume_db/bus props probed live on Godot 4.7.
+
+func _is_audio_player(node) -> bool:
+	return node is AudioStreamPlayer or node is AudioStreamPlayer2D or node is AudioStreamPlayer3D
+
+
+func _audio_player_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var dim := String(params.get("dim", "none"))
+	var node: Node
+	if dim == "2d":
+		node = AudioStreamPlayer2D.new()
+	elif dim == "3d":
+		node = AudioStreamPlayer3D.new()
+	else:
+		node = AudioStreamPlayer.new()
+	node.name = String(params.get("name", node.get_class()))
+	if params.has("autoplay"):
+		node.set("autoplay", bool(params.get("autoplay")))
+	if params.has("volume_db"):
+		node.set("volume_db", float(params.get("volume_db")))
+	if params.has("bus"):
+		node.set("bus", String(params.get("bus")))
+	var stream_path := String(params.get("stream_path", ""))
+	if stream_path != "":
+		if not ResourceLoader.exists(stream_path):
+			return _err("not_found", "Stream not found: %s" % stream_path)
+		var sres = ResourceLoader.load(stream_path)
+		if not (sres is AudioStream):
+			return _err("bad_type", "%s is not an AudioStream" % stream_path)
+		node.set("stream", sres as AudioStream)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": node.get_class(), "dim": dim, "autoplay": bool(node.get("autoplay")), "volume_db": float(node.get("volume_db")), "bus": String(node.get("bus")), "stream_path": stream_path})
+
+
+func _audio_set_stream(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not _is_audio_player(node):
+		return _err("bad_type", "%s is not an AudioStreamPlayer/2D/3D" % node.name)
+	var stream_path := String(params.get("stream_path", ""))
+	if stream_path == "" or not ResourceLoader.exists(stream_path):
+		return _err("not_found", "Stream not found: %s" % stream_path)
+	var res = ResourceLoader.load(stream_path)
+	if not (res is AudioStream):
+		return _err("bad_type", "%s is not an AudioStream" % stream_path)
+	var stream := res as AudioStream
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s stream" % node.name)
+	ur.add_do_property(node, "stream", stream)
+	ur.add_undo_property(node, "stream", node.get("stream"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "stream_path": stream_path})
+
+
+func _audio_bus_add(params: Dictionary) -> Dictionary:
+	var at := int(params.get("at_position", -1))
+	AudioServer.add_bus(at)
+	var count := AudioServer.get_bus_count()
+	var idx: int = (count - 1) if at < 0 or at >= count else at
+	if params.has("name"):
+		AudioServer.set_bus_name(idx, String(params.get("name")))
+	if params.has("send"):
+		AudioServer.set_bus_send(idx, String(params.get("send")))
+	return _ok({"index": idx, "name": String(AudioServer.get_bus_name(idx)), "send": String(AudioServer.get_bus_send(idx)), "count": AudioServer.get_bus_count()})
+
+
+func _audio_bus_add_effect(params: Dictionary) -> Dictionary:
+	var bus := String(params.get("bus", ""))
+	var idx: int = AudioServer.get_bus_index(bus)
+	if idx < 0:
+		return _err("not_found", "Bus not found: %s" % bus)
+	var cls := String(params.get("effect", ""))
+	if cls == "" or not ClassDB.can_instantiate(cls) or not ClassDB.is_parent_class(cls, "AudioEffect"):
+		return _err("bad_params", "'effect' must be an instantiable AudioEffect class: %s" % cls)
+	var fx = ClassDB.instantiate(cls)
+	if not (fx is AudioEffect):
+		return _err("bad_type", "%s is not an AudioEffect" % cls)
+	var at := int(params.get("at_position", -1))
+	AudioServer.add_bus_effect(idx, fx, at)
+	return _ok({"bus": bus, "bus_index": idx, "effect": cls, "effect_count": AudioServer.get_bus_effect_count(idx)})
+
+
+func _audio_bus_set_volume(params: Dictionary) -> Dictionary:
+	var bus := String(params.get("bus", ""))
+	var idx: int = AudioServer.get_bus_index(bus)
+	if idx < 0:
+		return _err("not_found", "Bus not found: %s" % bus)
+	if not params.has("volume_db"):
+		return _err("bad_params", "Missing 'volume_db'")
+	AudioServer.set_bus_volume_db(idx, float(params.get("volume_db")))
+	return _ok({"bus": bus, "bus_index": idx, "volume_db": AudioServer.get_bus_volume_db(idx)})
+
+
+func _audio_set_bus_layout(params: Dictionary) -> Dictionary:
+	var to_path := String(params.get("to_path", "res://default_bus_layout.tres"))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var layout = AudioServer.generate_bus_layout()
+	var e := ResourceSaver.save(layout, to_path)
+	if e != OK:
+		return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+	return _ok({"saved": to_path, "bus_count": AudioServer.get_bus_count()})

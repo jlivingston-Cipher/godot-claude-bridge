@@ -688,7 +688,7 @@ In-scene physics authoring. Every tool mutates the **edited scene** and is **und
 
 ## Group F — VFX & audio (Plane A / Editor)
 
-In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Batch 1 covers **GPU particles**: `particles_create` adds a `GPUParticles2D`/`GPUParticles3D` (`dim` selects 2D default or 3D), optionally seeding `amount`/`lifetime`/`emitting`; `particles_set_process_material` creates a `ParticleProcessMaterial` and assigns it as `process_material` (GPU particles need one to emit), exposing `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, and `color`; `particles_set_amount` / `particles_set_lifetime` / `particles_set_emitting` tune the headline knobs individually; `particles_set_texture` loads a `Texture2D` from a `res://` path onto a `GPUParticles2D` — GPUParticles3D draws meshes and has no texture, so it degrades to a clear `unsupported`. The particle + `ParticleProcessMaterial` API surface (properties present per dim, the 2D-only `texture`) was probed live on Godot 4.7 before design. **Batch 2 adds shaders** (now **176**): `shader_create` and `shader_set_code` author a `Shader` (`.gdshader`) resource on disk — initial or replacement GDShader source — and, because they write files, are **gated** by confirmation like the `resource_*` / `tileset_*` writers (not the in-scene model); `shadermaterial_create` creates a `ShaderMaterial` and assigns it to a node's material slot — `CanvasItem.material` (2D / Control) or `GeometryInstance3D.material_override` (3D), degrading to a clear `unsupported` for a node with neither — optionally binding a `Shader` loaded from a `res://` path; `shadermaterial_set_shader` swaps the shader on an existing `ShaderMaterial`; `shadermaterial_set_param` sets a uniform through the `shader_parameter/<name>` property path (values use the tagged-Variant convention). The three `shadermaterial_*` tools mutate the edited scene and are **undoable** and **ungated**. `Shader` / `ShaderMaterial` / `set_shader_parameter` and the `shader_parameter/<name>` property-path form were probed live on Godot 4.7, and a `Sprite2D` carrying a `ShaderMaterial` (external `.gdshader` + a `shader_parameter` override) survives a `.tscn` save + fresh reload. Audio lands in a later Group F batch.
+In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Batch 1 covers **GPU particles**: `particles_create` adds a `GPUParticles2D`/`GPUParticles3D` (`dim` selects 2D default or 3D), optionally seeding `amount`/`lifetime`/`emitting`; `particles_set_process_material` creates a `ParticleProcessMaterial` and assigns it as `process_material` (GPU particles need one to emit), exposing `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, and `color`; `particles_set_amount` / `particles_set_lifetime` / `particles_set_emitting` tune the headline knobs individually; `particles_set_texture` loads a `Texture2D` from a `res://` path onto a `GPUParticles2D` — GPUParticles3D draws meshes and has no texture, so it degrades to a clear `unsupported`. The particle + `ParticleProcessMaterial` API surface (properties present per dim, the 2D-only `texture`) was probed live on Godot 4.7 before design. **Batch 2 adds shaders** (now **176**): `shader_create` and `shader_set_code` author a `Shader` (`.gdshader`) resource on disk — initial or replacement GDShader source — and, because they write files, are **gated** by confirmation like the `resource_*` / `tileset_*` writers (not the in-scene model); `shadermaterial_create` creates a `ShaderMaterial` and assigns it to a node's material slot — `CanvasItem.material` (2D / Control) or `GeometryInstance3D.material_override` (3D), degrading to a clear `unsupported` for a node with neither — optionally binding a `Shader` loaded from a `res://` path; `shadermaterial_set_shader` swaps the shader on an existing `ShaderMaterial`; `shadermaterial_set_param` sets a uniform through the `shader_parameter/<name>` property path (values use the tagged-Variant convention). The three `shadermaterial_*` tools mutate the edited scene and are **undoable** and **ungated**. `Shader` / `ShaderMaterial` / `set_shader_parameter` and the `shader_parameter/<name>` property-path form were probed live on Godot 4.7, and a `Sprite2D` carrying a `ShaderMaterial` (external `.gdshader` + a `shader_parameter` override) survives a `.tscn` save + fresh reload. **Batch 3 completes Group F with audio** (now **182**): `audio_player_create` adds an `AudioStreamPlayer` / `AudioStreamPlayer2D` / `AudioStreamPlayer3D` (`dim` selects `none` default / `2d` / `3d`), optionally seeding `stream_path` (a `res://` `AudioStream`), `autoplay`, `volume_db`, `bus`; `audio_set_stream` loads an `AudioStream` from a `res://` path onto a player — both mutate the edited scene and are **undoable** / **ungated** (the `node_*` model). The remaining four drive the **global `AudioServer`** (project-wide, not scene-undoable) and are **gated** like `physics_set_gravity`: `audio_bus_add` adds a bus (optional name / position / send), `audio_bus_add_effect` instantiates an `AudioEffect` subclass by name onto a named bus, `audio_bus_set_volume` sets a bus's `volume_db`, and `audio_set_bus_layout` persists the current layout to a `.tres` on disk (`generate_bus_layout` + `ResourceSaver.save`; a file-writer). The `AudioServer` bus API and the player `stream` / `autoplay` / `volume_db` / `bus` props were probed live on Godot 4.7, and an `AudioStreamPlayer` carrying an external stream survives a `.tscn` save + fresh reload.
 
 ### `particles_create` ✅  (undoable)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }`
@@ -733,6 +733,30 @@ In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoabl
 ### `shadermaterial_set_param` ✅  (undoable)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }`
 - **Output** `{ "type": "object", "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }`
+
+### `audio_player_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["none", "2d", "3d"] }, "name": { "type": "string" }, "stream_path": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "autoplay", "volume_db", "bus", "stream_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" }, "stream_path": { "type": "string" } } }`
+
+### `audio_set_stream` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }`
+
+### `audio_bus_add` ✅ · destructive (project-wide audio state)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": [], "properties": { "name": { "type": "string" }, "at_position": { "type": "number" }, "send": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["index", "name", "send", "count"], "properties": { "index": { "type": "number" }, "name": { "type": "string" }, "send": { "type": "string" }, "count": { "type": "number" } } }`
+
+### `audio_bus_add_effect` ✅ · destructive (project-wide audio state)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["bus", "effect"], "properties": { "bus": { "type": "string" }, "effect": { "type": "string" }, "at_position": { "type": "number" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["bus", "bus_index", "effect", "effect_count"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "effect": { "type": "string" }, "effect_count": { "type": "number" } } }`
+
+### `audio_bus_set_volume` ✅ · destructive (project-wide audio state)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["bus", "volume_db"], "properties": { "bus": { "type": "string" }, "volume_db": { "type": "number" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["bus", "bus_index", "volume_db"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "volume_db": { "type": "number" } } }`
+
+### `audio_set_bus_layout` ✅ · destructive (writes a file)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": [], "properties": { "to_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["saved", "bus_count"], "properties": { "saved": { "type": "string" }, "bus_count": { "type": "number" } } }`
 
 ---
 
@@ -1411,6 +1435,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `shadermaterial_create` | F / Editor | ✅ | undoable |
 | `shadermaterial_set_shader` | F / Editor | ✅ | undoable |
 | `shadermaterial_set_param` | F / Editor | ✅ | undoable |
+| `audio_player_create` | F / Editor | ✅ | undoable |
+| `audio_set_stream` | F / Editor | ✅ | undoable |
+| `audio_bus_add` | F / Editor | ✅ | ✔ project-wide |
+| `audio_bus_add_effect` | F / Editor | ✅ | ✔ project-wide |
+| `audio_bus_set_volume` | F / Editor | ✅ | ✔ project-wide |
+| `audio_set_bus_layout` | F / Editor | ✅ | ✔ writes file |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |
