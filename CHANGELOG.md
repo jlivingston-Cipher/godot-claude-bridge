@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-07-09
+
 ### Changed — Renamed to Breakpoint MCP
 - Rebrands the project from "godot-claude-bridge" / "Claude Bridge" to **Breakpoint MCP** (tagline: *Now Godot waits for you.*) across the host, the addon, and the docs. **No behaviour change** — every tool, schema, bridge method and CI probe is byte-for-byte the same; the surface stays at **223** tools and the version stamps stay `0.14.0` (rename PR, not a release).
   - **Host / npm:** package name `godot-claude-bridge` → `breakpoint-mcp` (+ the `bin` name), MCP `serverInfo.name` → `breakpoint-mcp`, the LSP/DAP `clientInfo`/`clientID` and the stderr log tag `[godot-claude-bridge]` → `[breakpoint-mcp]`.
