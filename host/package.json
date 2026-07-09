@@ -8,14 +8,14 @@
     "name": "James Livingston",
     "url": "https://github.com/jlivingston-Cipher"
   },
-  "homepage": "https://github.com/jlivingston-Cipher/godot-claude-bridge#readme",
+  "homepage": "https://github.com/jlivingston-Cipher/godot-breakpoint-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jlivingston-Cipher/godot-claude-bridge.git",
+    "url": "git+https://github.com/jlivingston-Cipher/godot-breakpoint-mcp.git",
     "directory": "host"
   },
   "bugs": {
-    "url": "https://github.com/jlivingston-Cipher/godot-claude-bridge/issues"
+    "url": "https://github.com/jlivingston-Cipher/godot-breakpoint-mcp/issues"
   },
   "keywords": [
     "godot",

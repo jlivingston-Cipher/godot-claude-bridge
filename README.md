@@ -178,7 +178,7 @@ Code and Claude Desktop) — that's the supported path today. Other clients such
 Cursor, VS Code (Copilot agent mode), and Windsurf should work with the same command and
 environment variables, but they are **not yet tested** with this server. If you try
 Breakpoint MCP with another client — or a different model behind it — we'd genuinely love
-to hear how it goes: please [open an issue](https://github.com/jlivingston-Cipher/godot-claude-bridge/issues)
+to hear how it goes: please [open an issue](https://github.com/jlivingston-Cipher/godot-breakpoint-mcp/issues)
 describing your client and what worked or didn't.
 
 Every client launches the host the same way: the command `npx -y breakpoint-mcp` with the
