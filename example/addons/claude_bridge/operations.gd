@@ -193,6 +193,18 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _body_set_physics_material(params)
 		"physics.set_gravity":
 			return _physics_set_gravity(params)
+		"particles.create":
+			return _particles_create(params)
+		"particles.set_process_material":
+			return _particles_set_process_material(params)
+		"particles.set_amount":
+			return _particles_set_amount(params)
+		"particles.set_lifetime":
+			return _particles_set_lifetime(params)
+		"particles.set_emitting":
+			return _particles_set_emitting(params)
+		"particles.set_texture":
+			return _particles_set_texture(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -2559,3 +2571,179 @@ func _physics_set_gravity(params: Dictionary) -> Dictionary:
 	var dv = ProjectSettings.get_setting(prefix + "default_gravity_vector", null)
 	var dir_out: Array = ([dv.x, dv.y, dv.z] if dim3 else [dv.x, dv.y])
 	return _ok({"dim": ("3d" if dim3 else "2d"), "magnitude": float(ProjectSettings.get_setting(prefix + "default_gravity", 0.0)), "direction": dir_out, "saved": saved})
+
+
+# ---------------------------------------------------------------- Group F batch 1 ----
+# VFX: GPU particles (2D/3D). All in-scene node/resource mutators, undoable via
+# EditorUndoRedoManager and ungated (the node_* model). particles_set_texture is
+# GPUParticles2D-only (3D has no texture; it draws meshes) and feature-detects.
+
+func _is_particles(node) -> bool:
+	return node is GPUParticles2D or node is GPUParticles3D
+
+
+func _to_color(v) -> Color:
+	if v is Array and v.size() >= 3:
+		var a: float = float(v[3]) if v.size() >= 4 else 1.0
+		return Color(float(v[0]), float(v[1]), float(v[2]), a)
+	return Color(1, 1, 1, 1)
+
+
+func _particles_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	if params.has("amount") and int(params.get("amount")) <= 0:
+		return _err("bad_params", "'amount' must be > 0")
+	if params.has("lifetime") and float(params.get("lifetime")) <= 0.0:
+		return _err("bad_params", "'lifetime' must be > 0")
+	var node: Node
+	if dim3:
+		node = GPUParticles3D.new()
+	else:
+		node = GPUParticles2D.new()
+	node.name = String(params.get("name", node.get_class()))
+	if params.has("amount"):
+		node.set("amount", int(params.get("amount")))
+	if params.has("lifetime"):
+		node.set("lifetime", float(params.get("lifetime")))
+	if params.has("emitting"):
+		node.set("emitting", bool(params.get("emitting")))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": node.get_class(), "dim": ("3d" if dim3 else "2d"), "amount": int(node.get("amount")), "lifetime": float(node.get("lifetime")), "emitting": bool(node.get("emitting"))})
+
+
+func _particles_set_process_material(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not _is_particles(node):
+		return _err("bad_type", "%s is not a GPUParticles2D/3D" % node.name)
+	var mat := ParticleProcessMaterial.new()
+	if params.has("gravity"):
+		mat.gravity = _to_vec3(params.get("gravity"))
+	if params.has("direction"):
+		mat.direction = _to_vec3(params.get("direction"))
+	if params.has("spread"):
+		mat.spread = float(params.get("spread"))
+	if params.has("initial_velocity_min"):
+		mat.initial_velocity_min = float(params.get("initial_velocity_min"))
+	if params.has("initial_velocity_max"):
+		mat.initial_velocity_max = float(params.get("initial_velocity_max"))
+	if params.has("scale_min"):
+		mat.scale_min = float(params.get("scale_min"))
+	if params.has("scale_max"):
+		mat.scale_max = float(params.get("scale_max"))
+	if params.has("color"):
+		mat.color = _to_color(params.get("color"))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s process material" % node.name)
+	ur.add_do_property(node, "process_material", mat)
+	ur.add_undo_property(node, "process_material", node.get("process_material"))
+	ur.add_do_reference(mat)
+	ur.commit_action()
+	var g = mat.gravity
+	var d = mat.direction
+	var c = mat.color
+	return _ok({"path": _path_of(root, node), "gravity": [g.x, g.y, g.z], "direction": [d.x, d.y, d.z], "spread": mat.spread, "initial_velocity_min": mat.initial_velocity_min, "initial_velocity_max": mat.initial_velocity_max, "scale_min": mat.scale_min, "scale_max": mat.scale_max, "color": [c.r, c.g, c.b, c.a]})
+
+
+func _particles_set_amount(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not _is_particles(node):
+		return _err("bad_type", "%s is not a GPUParticles2D/3D" % node.name)
+	if not params.has("amount"):
+		return _err("bad_params", "Missing 'amount'")
+	var v := int(params.get("amount"))
+	if v <= 0:
+		return _err("bad_params", "'amount' must be > 0")
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s amount" % node.name)
+	ur.add_do_property(node, "amount", v)
+	ur.add_undo_property(node, "amount", node.get("amount"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "amount": int(node.get("amount"))})
+
+
+func _particles_set_lifetime(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not _is_particles(node):
+		return _err("bad_type", "%s is not a GPUParticles2D/3D" % node.name)
+	if not params.has("lifetime"):
+		return _err("bad_params", "Missing 'lifetime'")
+	var v := float(params.get("lifetime"))
+	if v <= 0.0:
+		return _err("bad_params", "'lifetime' must be > 0")
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s lifetime" % node.name)
+	ur.add_do_property(node, "lifetime", v)
+	ur.add_undo_property(node, "lifetime", node.get("lifetime"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "lifetime": float(node.get("lifetime"))})
+
+
+func _particles_set_emitting(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not _is_particles(node):
+		return _err("bad_type", "%s is not a GPUParticles2D/3D" % node.name)
+	if not params.has("emitting"):
+		return _err("bad_params", "Missing 'emitting'")
+	var v := bool(params.get("emitting"))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s emitting" % node.name)
+	ur.add_do_property(node, "emitting", v)
+	ur.add_undo_property(node, "emitting", node.get("emitting"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "emitting": bool(node.get("emitting"))})
+
+
+func _particles_set_texture(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is GPUParticles2D):
+		return _err("unsupported", "%s has no texture (GPUParticles3D draws meshes; texture is GPUParticles2D-only)" % node.name)
+	var tex_path := String(params.get("texture_path", ""))
+	if tex_path == "" or not ResourceLoader.exists(tex_path):
+		return _err("not_found", "Texture not found: %s" % tex_path)
+	var res = ResourceLoader.load(tex_path)
+	if not (res is Texture2D):
+		return _err("bad_type", "%s is not a Texture2D" % tex_path)
+	var tex := res as Texture2D
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s texture" % node.name)
+	ur.add_do_property(node, "texture", tex)
+	ur.add_undo_property(node, "texture", node.get("texture"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "texture_path": tex_path})

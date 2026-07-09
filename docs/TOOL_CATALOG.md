@@ -686,6 +686,34 @@ In-scene physics authoring. Every tool mutates the **edited scene** and is **und
 - **Input** `{ "type": "object", "additionalProperties": false, "properties": { "dim": { "type": "string", "enum": ["2d", "3d"] }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
 - **Output** `{ "type": "object", "required": ["dim", "magnitude", "direction", "saved"], "properties": { "dim": { "type": "string" }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "saved": { "type": "boolean" } } }`
 
+## Group F — VFX & audio (Plane A / Editor)
+
+In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Batch 1 covers **GPU particles**: `particles_create` adds a `GPUParticles2D`/`GPUParticles3D` (`dim` selects 2D default or 3D), optionally seeding `amount`/`lifetime`/`emitting`; `particles_set_process_material` creates a `ParticleProcessMaterial` and assigns it as `process_material` (GPU particles need one to emit), exposing `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, and `color`; `particles_set_amount` / `particles_set_lifetime` / `particles_set_emitting` tune the headline knobs individually; `particles_set_texture` loads a `Texture2D` from a `res://` path onto a `GPUParticles2D` — GPUParticles3D draws meshes and has no texture, so it degrades to a clear `unsupported`. The particle + `ParticleProcessMaterial` API surface (properties present per dim, the 2D-only `texture`) was probed live on Godot 4.7 before design. Shaders and audio land in later Group F batches.
+
+### `particles_create` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "amount", "lifetime", "emitting"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }`
+
+### `particles_set_process_material` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }`
+- **Output** `{ "type": "object", "required": ["path", "gravity", "direction", "spread", "initial_velocity_min", "initial_velocity_max", "scale_min", "scale_max", "color"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }`
+
+### `particles_set_amount` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }`
+- **Output** `{ "type": "object", "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }`
+
+### `particles_set_lifetime` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }`
+- **Output** `{ "type": "object", "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }`
+
+### `particles_set_emitting` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }`
+- **Output** `{ "type": "object", "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }`
+
+### `particles_set_texture` ✅  (undoable)
+- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }`
+- **Output** `{ "type": "object", "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }`
+
 ---
 
 # Plane D — Semantic (LSP)  (✅ implemented — Phase 2; raw TCP + LSP `Content-Length` framing to Godot's GDScript language server, default `127.0.0.1:6005`)
@@ -1352,6 +1380,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `rigidbody_set_properties` | E / Editor | ✅ | undoable |
 | `body_set_physics_material` | E / Editor | ✅ | undoable |
 | `physics_set_gravity` | E / Editor | ✅ | ✔ writes setting |
+| `particles_create` | F / Editor | ✅ | undoable |
+| `particles_set_process_material` | F / Editor | ✅ | undoable |
+| `particles_set_amount` | F / Editor | ✅ | undoable |
+| `particles_set_lifetime` | F / Editor | ✅ | undoable |
+| `particles_set_emitting` | F / Editor | ✅ | undoable |
+| `particles_set_texture` | F / Editor | ✅ | undoable |
 | `gd_completion` | D / LSP | ✅ | – |
 | `gd_hover` | D / LSP | ✅ | – |
 | `gd_definition` | D / LSP | ✅ | – |

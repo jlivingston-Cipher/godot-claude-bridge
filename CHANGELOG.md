@@ -6,6 +6,26 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group F (batch 1): GPU particles (6 tools, 165 → 171)
+- Starts **Group F (VFX & audio)** from the breadth-superset plan with the **GPU particles** subgroup. Six A/Editor
+  tools, all mutating the edited scene, undoable via `EditorUndoRedoManager`, and **ungated** (the `node_*` model):
+  - **`particles_create`** — add a `GPUParticles2D`/`GPUParticles3D` node (`dim` 2d default / 3d), optionally seeding `amount` (> 0), `lifetime` (> 0), `emitting`.
+  - **`particles_set_process_material`** — create a `ParticleProcessMaterial` and assign it as `process_material` (GPU particles need one to emit): `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, `color`.
+  - **`particles_set_amount`** — set `amount` (> 0).
+  - **`particles_set_lifetime`** — set `lifetime` in seconds (> 0).
+  - **`particles_set_emitting`** — toggle `emitting`.
+  - **`particles_set_texture`** — load a `Texture2D` from a `res://` path onto a `GPUParticles2D`'s `texture`. Feature-detects: `GPUParticles3D` has no `texture` (it draws meshes) and degrades to a clear `unsupported`.
+- Same rigor bar as the earlier groups: node authoring uses the `node_add` do/undo-reference pattern; the new
+  `ParticleProcessMaterial` rides along via `add_do_reference`; property mutators use `add_do_property` /
+  `add_undo_property`. The `GPUParticles2D/3D` property surface (`amount`/`lifetime`/`emitting`/`process_material`, and
+  the **2D-only** `texture`) and the `ParticleProcessMaterial` knobs were probed live on Godot 4.7 before design.
+  Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_particles_create` /
+  `_particles_set_process_material` / `_particles_set_amount` / `_particles_set_lifetime` / `_particles_set_emitting` /
+  `_particles_set_texture`, plus `_is_particles` / `_to_color` helpers), statically parse-checked against local Godot
+  4.7; host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`;
+  `registration.test.ts` `EXPECTED_TOOL_COUNT` 165 → 171; `docs/TOOL_CATALOG.md` (new Group F section + index). No
+  version bump — the E+F release cut re-stamps all five version stamps together.
+
 ### Added — Group E (batch 2): Areas, joints, collision polygons, rigidbody & material tuning (8 tools, 157 → 165)
 - Completes **Group E (Physics & collision)** from the breadth-superset plan — batch 2 carries the tool count past
   godot-mcp-pro's 162-tool ceiling to **165**. Eight A/Editor tools: seven mutate the edited scene, are undoable via
