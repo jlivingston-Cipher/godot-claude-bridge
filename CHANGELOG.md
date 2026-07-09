@@ -6,6 +6,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — `authoring-plane` live CI probe for Groups E+F (no tool change)
+- Delivers the first installment of the long-tracked **`authoring-plane`** live-verification job (referenced as a follow-up since the Group A batches; rigor-bar item #6 in `BREADTH_SUPERSET_PLAN.md`). Two files, no tool/schema/addon change — the surface stays **182/173**:
+  - **`host/test-integration/authoring-plane.integration.mjs`** — spawns the MCP host over stdio, connects to a live editor's addon bridge (`:9080`), opens `res://main.tscn`, and drives all **29 Group E+F mutators** (physics/collision + VFX/audio). Each mutation is asserted **independently** by reading the edited scene back through *separate* read tools — `node_get_children` (creators), `node_get_property` (scalar props, and resource props via `Codec.encode`'s `{__type__:"Resource",class}` tag), `project_get_setting` (`physics_set_gravity`), `resource_load` (the `.gdshader` / `.tres` file writers) — rather than trusting the mutator's own post-commit echo. Grep markers `AUTH_PHYS_*` / `AUTH_VFX_PARTICLES_*` / `AUTH_VFX_SHADER_*` / `AUTH_AUDIO_*`; a trailing `AUTH_SUMMARY pass=N/N` line and non-zero exit on any failure. The probe **mints its own fixtures** — `PlaceholderTexture2D` + `AudioStreamWAV` via `resource_create`, two `.gdshader` via `shader_create` — so no binary fixtures are committed (`.tres` native resources sidestep the import pipeline).
+  - **`authoring-plane` job in `.github/workflows/integration.yml`** — mirrors `editor-plane` (Ubuntu + Xvfb + software OpenGL, Godot 4.7-stable): boots the editor, waits for `:9080`, runs the probe. Single newest-stable arm (E+F are version-stable engine features, unlike the LSP/DAP planes that matrix 4.3/4.7 for capability divergence). `continue-on-error: true` while GUI-boot timing is proven on real runners; promote to a required gate once green across a few runs (the `runtime-plane` / `csharp-plane` pattern).
+- Live-validated **32/32** against a real Godot 4.7 editor and **green on the CI runner** on merge. **Undo-stack assertion is deferred**: no bridge action triggers an editor undo over `:9080` (and `contract_check`'s orphan scan forbids a caller-less bridge method), so the probe asserts **forward mutation only** (`AUTH_UNDO_DEFERRED` marker). An `editor_undo` capability that would let the probe assert mutate → undo → revert is the tracked follow-up. (#47)
+
 ## [0.13.0] — 2026-07-09
 
 ### Added — Group F (batch 3): Audio (6 tools, 176 → 182)
