@@ -127,6 +127,10 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _filesystem_move(params)
 		"filesystem.create_dir":
 			return _filesystem_create_dir(params)
+		"asset.gen_placeholder":
+			return _asset_gen_placeholder(params)
+		"asset.import":
+			return _asset_import(params)
 		"anim.player_create":
 			return _anim_player_create(params)
 		"anim.create":
@@ -1675,6 +1679,190 @@ func _filesystem_create_dir(params: Dictionary) -> Dictionary:
 		return _err("mkdir_failed", "make_dir_recursive_absolute() returned %d" % e)
 	EditorInterface.get_resource_filesystem().scan()
 	return _ok({"created": path, "existed": false})
+
+
+# ---------------------------------------------- Group J: asset generation ----
+## The editor-side of Group J. The host owns backend selection + the degrade /
+## command-delegation logic; the addon owns two jobs the host cannot do:
+##   * asset.gen_placeholder — mint a DETERMINISTIC in-engine procedural asset
+##     (a hashed-colour PNG, an AudioStreamWAV blip, a BoxMesh) and import it.
+##   * asset.import — register + (re)import a file a configured command backend
+##     just wrote, and report its imported class.
+## No model is ever called here; placeholders are pure functions of the prompt
+## hash, so a CI probe can assert them byte-stably.
+
+func _asset_import(params: Dictionary) -> Dictionary:
+	var path := String(params.get("path", ""))
+	if not path.begins_with("res://"):
+		return _err("bad_params", "'path' must be a res:// path")
+	if not FileAccess.file_exists(path):
+		return _err("not_found", "No file at %s" % path)
+	return _ok(_import_and_describe(path))
+
+
+## Make the editor aware of a just-written file, (re)import it when its format
+## goes through the import pipeline (image/audio/scene formats), and describe it.
+## Native resources (.tres/.res) load directly and are not reimported.
+func _import_and_describe(path: String) -> Dictionary:
+	var efs := EditorInterface.get_resource_filesystem()
+	efs.update_file(path)
+	var ext := path.get_extension().to_lower()
+	var importable := ["png", "jpg", "jpeg", "webp", "svg", "bmp", "tga", "exr", "hdr",
+		"wav", "ogg", "mp3", "obj", "gltf", "glb", "fbx", "dae"]
+	if importable.has(ext):
+		efs.reimport_files(PackedStringArray([path]))
+	var bytes := 0
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f != null:
+		bytes = int(f.get_length())
+		f.close()
+	var imported_type := ""
+	if ResourceLoader.exists(path):
+		var res := ResourceLoader.load(path)
+		if res != null:
+			imported_type = res.get_class()
+	return {"path": path, "imported_type": imported_type, "bytes": bytes}
+
+
+func _asset_gen_placeholder(params: Dictionary) -> Dictionary:
+	var kind := String(params.get("kind", ""))
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://"):
+		return _err("bad_params", "'to_path' must be a res:// path")
+	var prompt := String(params.get("prompt", ""))
+	var seed_str := prompt if prompt != "" else kind
+	var seed_hash: int = abs(hash(seed_str))
+	var base_dir := to_path.get_base_dir()
+	if base_dir != "" and base_dir != "res://" and not DirAccess.dir_exists_absolute(base_dir):
+		DirAccess.make_dir_recursive_absolute(base_dir)
+	match kind:
+		"sprite", "texture", "icon":
+			var w := int(params.get("width", 0))
+			var h := int(params.get("height", 0))
+			if w <= 0:
+				w = 64 if kind == "sprite" else 128
+			if h <= 0:
+				h = w
+			w = clampi(w, 1, 1024)
+			h = clampi(h, 1, 1024)
+			var img := _gen_image(kind, seed_hash, w, h)
+			# Save a NATIVE ImageTexture resource (loads directly, no async import
+			# pipeline) — the placeholder must be usable synchronously. External
+			# formats (a real backend's .png) go through asset.import instead.
+			var tex := ImageTexture.create_from_image(img)
+			var e := ResourceSaver.save(tex, to_path)
+			if e != OK:
+				return _err("save_failed", "ResourceSaver.save() returned %d" % e)
+			var desc := _import_and_describe(to_path)
+			desc["kind"] = kind
+			desc["width"] = w
+			desc["height"] = h
+			desc["format"] = "ImageTexture"
+			return _ok(desc)
+		"audio_sfx":
+			var dur := clampi(int(params.get("duration_ms", 300)), 20, 5000)
+			var stream := _gen_audio(seed_hash, dur)
+			var e2 := ResourceSaver.save(stream, to_path)
+			if e2 != OK:
+				return _err("save_failed", "ResourceSaver.save() returned %d" % e2)
+			var desc2 := _import_and_describe(to_path)
+			desc2["kind"] = kind
+			desc2["duration_ms"] = dur
+			desc2["format"] = "AudioStreamWAV"
+			return _ok(desc2)
+		"model":
+			var shape := String(params.get("shape", "box"))
+			var mesh := _gen_mesh(shape, seed_hash)
+			var e3 := ResourceSaver.save(mesh, to_path)
+			if e3 != OK:
+				return _err("save_failed", "ResourceSaver.save() returned %d" % e3)
+			var desc3 := _import_and_describe(to_path)
+			desc3["kind"] = kind
+			desc3["shape"] = shape
+			desc3["format"] = mesh.get_class()
+			return _ok(desc3)
+		_:
+			return _err("bad_params", "Unknown kind '%s' (sprite|texture|icon|audio_sfx|model)" % kind)
+
+
+## Deterministic procedural image — colours derive from the prompt hash so the
+## same prompt always yields the same pixels (CI-assertable).
+func _gen_image(kind: String, seed_hash: int, w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var hue := float(seed_hash % 360) / 360.0
+	var base := Color.from_hsv(hue, 0.55, 0.9, 1.0)
+	var accent := Color.from_hsv(fmod(hue + 0.5, 1.0), 0.6, 0.95, 1.0)
+	match kind:
+		"texture":
+			var cell := maxi(4, w / 8)
+			for y in h:
+				for x in w:
+					var checker: Color = base if ((x / cell) + (y / cell)) % 2 == 0 else accent
+					img.set_pixel(x, y, checker)
+		"icon":
+			img.fill(Color(0, 0, 0, 0))
+			var cx := w / 2.0
+			var cy := h / 2.0
+			var rad := minf(cx, cy) - 1.0
+			for y in h:
+				for x in w:
+					var dist := Vector2(x + 0.5 - cx, y + 0.5 - cy).length()
+					if dist <= rad:
+						img.set_pixel(x, y, accent if dist > rad * 0.72 else base)
+		_:
+			img.fill(base)
+			var margin := maxi(1, w / 4)
+			for y in range(margin, h - margin):
+				for x in range(margin, w - margin):
+					img.set_pixel(x, y, accent)
+	return img
+
+
+## Deterministic decaying sine blip; frequency derives from the prompt hash.
+func _gen_audio(seed_hash: int, dur_ms: int) -> AudioStreamWAV:
+	var rate := 22050
+	var n := int(rate * dur_ms / 1000.0)
+	if n < 1:
+		n = 1
+	var freq := 220.0 + float(seed_hash % 660)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / float(rate)
+		var env := clampf(1.0 - float(i) / float(n), 0.0, 1.0)
+		var sample := sin(TAU * freq * t) * env * 0.6
+		data.encode_s16(i * 2, int(clampf(sample, -1.0, 1.0) * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.data = data
+	return stream
+
+
+## Deterministic primitive mesh; size derives from the prompt hash.
+func _gen_mesh(shape: String, seed_hash: int) -> Mesh:
+	var s := 0.5 + float(seed_hash % 100) / 100.0
+	match shape:
+		"sphere":
+			var sm := SphereMesh.new()
+			sm.radius = s * 0.5
+			sm.height = s
+			return sm
+		"cylinder":
+			var cm := CylinderMesh.new()
+			cm.top_radius = s * 0.5
+			cm.bottom_radius = s * 0.5
+			cm.height = s
+			return cm
+		"prism":
+			var pm := PrismMesh.new()
+			pm.size = Vector3(s, s, s)
+			return pm
+		_:
+			var bm := BoxMesh.new()
+			bm.size = Vector3(s, s, s)
+			return bm
 
 
 # ------------------------------------------------------ Group C: Animation ----

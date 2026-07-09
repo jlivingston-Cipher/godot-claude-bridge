@@ -1581,6 +1581,123 @@ Read-only "where / what / how" tools. Four are **host-side** (Plane B — they r
 
 ---
 
+## Group J — AI asset generation
+
+MCP-native asset generation: the server never bundles or calls a model. Each generator writes an asset to a `res://` path, imports it through the editor bridge, and returns a schema'd result — but the pixels / samples are **delegated**. `asset_gen_configure` picks the session backend (the feature flag): **`none`** (default) makes the five typed generators **degrade** to a clear "no generation backend configured" result carrying a `request` spec the connected multimodal client can fulfil (no file written; not an error); **`placeholder`** writes deterministic, in-engine procedural stand-ins as native Godot resources (`.tres`) that load synchronously — a hashed-colour `ImageTexture` (sprite / texture / icon), an `AudioStreamWAV` blip, a `BoxMesh` / primitive; **`command`** delegates to a configured local command (an argv template with `{kind} {prompt} {output} {width} {height} {format}` tokens substituted per-argument, no shell — the command writes the file, in any format, and the host imports it through the editor). `asset_gen_placeholder` always mints a deterministic stand-in regardless of the backend, and any typed generator accepts `placeholder: true` to force one. The file-writing paths are **destructive** (elicitation-gated); the degrade path writes nothing. The five typed generators share one result envelope (below), which validates all three outcomes — `placeholder` / `generated` / `no_backend`. Markers `AUTH_ASSETGEN_*` in the authoring-plane probe.
+
+The shared generator result envelope (`asset_gen_placeholder` and the five typed generators):
+```json
+{ "type": "object", "required": ["status", "kind", "backend", "path", "prompt", "message"],
+  "properties": {
+    "status": { "enum": ["placeholder", "generated", "no_backend"] },
+    "kind": { "type": "string" },
+    "backend": { "type": "string" },
+    "path": { "type": ["string", "null"] },
+    "prompt": { "type": ["string", "null"] },
+    "imported_type": { "type": ["string", "null"] },
+    "width": { "type": "integer" },
+    "height": { "type": "integer" },
+    "bytes": { "type": "integer" },
+    "format": { "type": "string" },
+    "provider": { "type": ["string", "null"] },
+    "request": { "type": "object" },
+    "message": { "type": "string" }
+  } }
+```
+
+### `asset_gen_configure` ✅  (Plane B / host)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false,
+  "properties": {
+    "backend": { "enum": ["none", "placeholder", "command"] },
+    "command": { "type": "string" },
+    "provider": { "type": "string" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["backend", "provider", "command", "configured", "supported_kinds", "note"],
+  "properties": {
+    "backend": { "type": "string" },
+    "provider": { "type": ["string", "null"] },
+    "command": { "type": ["string", "null"] },
+    "configured": { "type": "boolean" },
+    "supported_kinds": { "type": "array", "items": { "type": "string" } },
+    "note": { "type": "string" }
+  } }
+```
+
+### `asset_gen_placeholder` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["kind", "to_path"],
+  "properties": {
+    "kind": { "enum": ["sprite", "texture", "icon", "audio_sfx", "model"] },
+    "to_path": { "type": "string" },
+    "prompt": { "type": "string" },
+    "width": { "type": "integer", "minimum": 1 },
+    "height": { "type": "integer", "minimum": 1 },
+    "duration_ms": { "type": "integer", "minimum": 1 },
+    "shape": { "enum": ["box", "sphere", "cylinder", "prism"] },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared generator result envelope above (`status: "placeholder"`).
+
+### `asset_gen_sprite` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["prompt", "to_path"],
+  "properties": {
+    "prompt": { "type": "string" },
+    "to_path": { "type": "string" },
+    "width": { "type": "integer", "minimum": 1 },
+    "height": { "type": "integer", "minimum": 1 },
+    "placeholder": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared generator result envelope above.
+
+### `asset_gen_texture` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input** — same as `asset_gen_sprite`.
+- **Output** — the shared generator result envelope above.
+
+### `asset_gen_icon` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input** — same as `asset_gen_sprite`.
+- **Output** — the shared generator result envelope above.
+
+### `asset_gen_audio_sfx` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["prompt", "to_path"],
+  "properties": {
+    "prompt": { "type": "string" },
+    "to_path": { "type": "string" },
+    "duration_ms": { "type": "integer", "minimum": 1 },
+    "placeholder": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared generator result envelope above.
+
+### `asset_gen_model` ✅  (Plane A / Editor)  · writes file (gated)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["prompt", "to_path"],
+  "properties": {
+    "prompt": { "type": "string" },
+    "to_path": { "type": "string" },
+    "shape": { "enum": ["box", "sphere", "cylinder", "prism"] },
+    "placeholder": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared generator result envelope above.
+
+---
+
 ## Destructive-action gating (elicitation) — Phase 4
 
 Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `cs_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
@@ -1893,5 +2010,13 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `example_snippet` | K / Host | ✅ | – |
 | `class_reference` | K / Editor | ✅ | – |
 | `docs_search` | K / Editor | ✅ | – |
+
+| `asset_gen_configure` | J / Host | ✅ | – |
+| `asset_gen_placeholder` | J / Editor | ✅ | ✔ writes file |
+| `asset_gen_sprite` | J / Editor | ✅ | ✔ writes file |
+| `asset_gen_texture` | J / Editor | ✅ | ✔ writes file |
+| `asset_gen_icon` | J / Editor | ✅ | ✔ writes file |
+| `asset_gen_audio_sfx` | J / Editor | ✅ | ✔ writes file |
+| `asset_gen_model` | J / Editor | ✅ | ✔ writes file |
 
 **70 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 18 LSP, 15 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**
