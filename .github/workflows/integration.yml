@@ -42,17 +42,17 @@ name: integration
 #                     probe and the netcoredbg initialize gate must pass — the launch-to-breakpoint
 #                     flow past C#_DAP_REACHED stays log-only. Promoted from experimental the way
 #                     runtime-plane was in session 20. See docs/D4_CSHARP_PLAN.md.
-#   * authoring-plane — boots the editor GUI under Xvfb (like editor-plane) and drives the Group E
-#                     (physics/collision) + Group F (VFX/audio) authoring mutators against the addon
-#                     bridge (:9080), asserting each mutation by reading the live edited scene back
-#                     through separate read tools — node_get_children / node_get_property /
-#                     project_get_setting / resource_load (markers AUTH_PHYS_* / AUTH_VFX_* /
-#                     AUTH_AUDIO_*). Single newest-stable arm — E+F are version-stable engine
-#                     features, unlike the LSP/DAP planes that matrix 4.3/4.7 for capability
-#                     divergence. EXPERIMENTAL / continue-on-error while GUI-boot timing is tuned;
-#                     promote to a required gate once green across a few runs (the
-#                     runtime-plane/csharp-plane pattern). Undo-stack assertion is deferred (no
-#                     bridge action triggers an editor undo yet).
+#   * authoring-plane — boots the editor GUI under Xvfb (like editor-plane) and drives the Groups A-F
+#                     authoring mutators against the addon bridge (:9080), asserting each mutation by
+#                     reading the live edited scene back through separate read tools — plus forward +
+#                     undo/redo round-trips wherever the mutation is scene-undoable (markers AUTH_NODE_* /
+#                     AUTH_SCENE_* / AUTH_SIGNAL_* / AUTH_RESOURCE_* / AUTH_ANIM_* / AUTH_TILESET_* /
+#                     AUTH_TILEMAP_* / AUTH_PHYS_* / AUTH_VFX_* / AUTH_AUDIO_* / AUTH_UNDO_* / AUTH_REDO_*;
+#                     AUTH_SUMMARY pass=99/99). Single newest-stable arm — the A-F authoring surface is
+#                     version-stable, unlike the LSP/DAP planes that matrix 4.3/4.7 for capability
+#                     divergence. A REQUIRED gate as of session 42 (promoted the runtime-plane /
+#                     csharp-plane way once green across a few runs); disk-backed resource_* / filesystem_* /
+#                     TileSet .tres writers assert forward-only (not scene-undoable).
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -430,13 +430,18 @@ jobs:
         run: tail -n 80 /tmp/godot-csharp.log || true
 
   authoring-plane:
-    name: authoring plane / E+F mutators vs real editor (experimental)
+    name: authoring plane / A-F mutators vs real editor
     runs-on: ubuntu-latest
-    continue-on-error: true   # GUI-boot timing tuned on real runners; never blocks a merge until promoted
+    # A REQUIRED gate as of session 42: the A-F authoring probe (99/99 forward + undo/redo assertions,
+    # covering Group A nodes/scenes/signals, B resources/filesystem, C animation, D tileset/tilemap,
+    # E physics/collision and F VFX/audio) is green across #47, two main pushes, #48 and #49 — so a
+    # live-engine regression in the authoring plane now blocks a merge, the way runtime-plane was
+    # promoted in session 20 and csharp-plane in session 25. Added to branch protection as the context
+    # "authoring plane / A-F mutators vs real editor".
     env:
-      # Groups E+F (physics/collision + VFX/audio) are version-stable engine features, so a single
-      # newest-stable arm is enough — unlike the LSP/DAP planes, which matrix 4.3/4.7 to reveal
-      # capability divergence. Overrides the workflow-level GODOT_VERSION for this job only.
+      # The Groups A-F authoring mutators are version-stable engine features, so a single newest-stable
+      # arm is enough — unlike the LSP/DAP planes, which matrix 4.3/4.7 to reveal capability divergence.
+      # Overrides the workflow-level GODOT_VERSION for this job only.
       GODOT_VERSION: "4.7-stable"
     steps:
       - uses: actions/checkout@v4
@@ -459,7 +464,7 @@ jobs:
         run: npm ci && npm run build
       - name: Import the example project (headless)
         run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example" --import || true'
-      - name: Boot the editor under Xvfb and run the authoring (E+F) mutator probe
+      - name: Boot the editor under Xvfb and run the authoring (A-F) mutator probe
         working-directory: host
         env:
           GODOT_PROJECT: ${{ github.workspace }}/example
