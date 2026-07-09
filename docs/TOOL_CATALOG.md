@@ -1426,6 +1426,161 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
 
 ---
 
+## Group K — Knowledge & search
+
+Read-only "where / what / how" tools. Four are **host-side** (Plane B — they read the project files directly, no editor or language server needed, so they answer even when nothing is running) and two are **ClassDB-backed** (Plane A — over the editor bridge). None mutate, so none are undoable or gated. `find_symbol` is the project-wide declaration index Godot's language server does not provide (`gd_workspace_symbols` returns *unsupported*); `find_usages` is the build-independent complement to the position-based `gd_references`. Markers `AUTH_K_*` in the authoring-plane probe.
+
+### `project_search` ✅  (Plane B / host)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["query"],
+  "properties": {
+    "query": { "type": "string" },
+    "regex": { "type": "boolean", "default": false },
+    "ignore_case": { "type": "boolean", "default": false },
+    "extensions": { "type": "array", "items": { "type": "string" } },
+    "path": { "type": "string" },
+    "max_results": { "type": "integer", "minimum": 1, "default": 200 }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["query", "regex", "matches", "count", "truncated"],
+  "properties": {
+    "query": { "type": "string" },
+    "regex": { "type": "boolean" },
+    "matches": { "type": "array", "items": { "type": "object", "required": ["file", "line", "column", "text"],
+      "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "column": { "type": "integer" }, "text": { "type": "string" } } } },
+    "count": { "type": "integer" },
+    "truncated": { "type": "boolean" }
+  } }
+```
+
+### `find_symbol` ✅  (Plane B / host)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"],
+  "properties": {
+    "name": { "type": "string" },
+    "exact": { "type": "boolean", "default": false },
+    "kinds": { "type": "array", "items": { "enum": ["class_name", "class", "func", "signal", "enum", "const", "var"] } },
+    "max_results": { "type": "integer", "minimum": 1, "default": 200 }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["name", "matches", "count", "truncated"],
+  "properties": {
+    "name": { "type": "string" },
+    "matches": { "type": "array", "items": { "type": "object", "required": ["file", "line", "kind", "symbol", "text"],
+      "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "kind": { "type": "string" }, "symbol": { "type": "string" }, "text": { "type": "string" } } } },
+    "count": { "type": "integer" },
+    "truncated": { "type": "boolean" }
+  } }
+```
+
+### `find_usages` ✅  (Plane B / host)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"],
+  "properties": {
+    "name": { "type": "string" },
+    "extensions": { "type": "array", "items": { "type": "string" } },
+    "ignore_case": { "type": "boolean", "default": false },
+    "max_results": { "type": "integer", "minimum": 1, "default": 200 }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["name", "usages", "count", "truncated"],
+  "properties": {
+    "name": { "type": "string" },
+    "usages": { "type": "array", "items": { "type": "object", "required": ["file", "line", "column", "text"],
+      "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "column": { "type": "integer" }, "text": { "type": "string" } } } },
+    "count": { "type": "integer" },
+    "truncated": { "type": "boolean" }
+  } }
+```
+
+### `example_snippet` ✅  (Plane B / host)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false,
+  "properties": {
+    "query": { "type": "string" },
+    "limit": { "type": "integer", "minimum": 1, "default": 5 }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["query", "count", "snippets", "available"],
+  "properties": {
+    "query": { "type": ["string", "null"] },
+    "count": { "type": "integer" },
+    "snippets": { "type": "array", "items": { "type": "object", "required": ["id", "title", "tags", "code", "explanation", "docs_url"],
+      "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } },
+        "code": { "type": "string" }, "explanation": { "type": "string" }, "docs_url": { "type": "string" } } } },
+    "available": { "type": "array", "items": { "type": "string" } }
+  } }
+```
+
+### `class_reference` ✅  (Plane A / Editor)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["class_name"],
+  "properties": {
+    "class_name": { "type": "string" },
+    "include_inherited": { "type": "boolean", "default": false },
+    "member": { "type": "string" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["class", "parent", "can_instantiate", "docs_url", "methods", "signals", "properties"],
+  "properties": {
+    "class": { "type": "string" },
+    "parent": { "type": "string" },
+    "can_instantiate": { "type": "boolean" },
+    "docs_url": { "type": "string" },
+    "methods": { "type": "array", "items": { "type": "object", "required": ["name", "return_type", "args"],
+      "properties": { "name": { "type": "string" }, "return_type": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "object", "required": ["name", "type"],
+          "properties": { "name": { "type": "string" }, "type": { "type": "string" } } } } } } },
+    "signals": { "type": "array", "items": { "type": "object", "required": ["name", "args"],
+      "properties": { "name": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "object", "required": ["name", "type"],
+          "properties": { "name": { "type": "string" }, "type": { "type": "string" } } } } } } },
+    "properties": { "type": "array", "items": { "type": "object", "required": ["name", "type", "class_name"],
+      "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "class_name": { "type": "string" } } } }
+  } }
+```
+
+### `docs_search` ✅  (Plane A / Editor)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["query"],
+  "properties": {
+    "query": { "type": "string" },
+    "kind": { "enum": ["any", "class", "method", "property", "signal"], "default": "any" },
+    "class_name": { "type": "string" },
+    "limit": { "type": "integer", "minimum": 1, "default": 40 },
+    "deep": { "type": "boolean", "default": true }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["query", "count", "truncated", "results"],
+  "properties": {
+    "query": { "type": "string" },
+    "count": { "type": "integer" },
+    "truncated": { "type": "boolean" },
+    "results": { "type": "array", "items": { "type": "object", "required": ["class", "member", "kind", "docs_url"],
+      "properties": { "class": { "type": "string" }, "member": { "type": "string" }, "kind": { "type": "string" }, "docs_url": { "type": "string" } } } }
+  } }
+```
+
+---
+
 ## Destructive-action gating (elicitation) — Phase 4
 
 Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `cs_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
@@ -1731,5 +1886,12 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `godot_run_managed` | B / Process | ✅ | – |
 | `godot_output` | B / Process | ✅ | – |
 | `godot_stop` | B / Process | ✅ | – |
+
+| `project_search` | K / Host | ✅ | – |
+| `find_symbol` | K / Host | ✅ | – |
+| `find_usages` | K / Host | ✅ | – |
+| `example_snippet` | K / Host | ✅ | – |
+| `class_reference` | K / Editor | ✅ | – |
+| `docs_search` | K / Editor | ✅ | – |
 
 **70 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 18 LSP, 15 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**

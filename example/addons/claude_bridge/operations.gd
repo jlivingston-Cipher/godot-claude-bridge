@@ -303,6 +303,10 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _selection_set(params)
 		"classdb.get_class":
 			return _classdb_get_class(params)
+		"classdb.reference":
+			return _classdb_reference(params)
+		"docs.search":
+			return _docs_search(params)
 		"screenshot.editor_viewport":
 			return _screenshot(params)
 		_:
@@ -685,6 +689,163 @@ func _classdb_get_class(params: Dictionary) -> Dictionary:
 		"methods": methods,
 		"properties": props,
 		"signals": signals,
+	})
+
+
+# ------------------------------------------------- Group K: knowledge --------
+# ClassDB-backed reference/search. (The project-file index — project_search,
+# find_symbol, find_usages, example_snippet — is host-side in tools/knowledge.ts
+# and needs no bridge method.)
+
+func _type_name(info: Dictionary) -> String:
+	# Readable type for a PropertyInfo/arg dict: the concrete class for objects,
+	# else the Variant type name; untyped (TYPE_NIL, no class) reads as "Variant".
+	var cn := String(info.get("class_name", ""))
+	if cn != "":
+		return cn
+	var t := int(info.get("type", TYPE_NIL))
+	if t == TYPE_NIL:
+		return "Variant"
+	return type_string(t)
+
+
+func _doc_url(cls: String) -> String:
+	return "https://docs.godotengine.org/en/stable/classes/class_%s.html" % cls.to_lower()
+
+
+func _doc_member_url(cls: String, kind: String, member: String) -> String:
+	# Godot online-docs anchors look like #class-node-method-add-child.
+	if member == "":
+		return _doc_url(cls)
+	var anchor := "class-%s-%s-%s" % [cls.to_lower(), kind, member.replace("_", "-")]
+	return "%s#%s" % [_doc_url(cls), anchor]
+
+
+func _classdb_reference(params: Dictionary) -> Dictionary:
+	var cls := String(params.get("class_name", ""))
+	if cls == "" or not ClassDB.class_exists(cls):
+		return _err("not_found", "Class not found: %s" % cls)
+	var inherited := bool(params.get("include_inherited", false))
+	var no_inherit := not inherited
+	var filter := String(params.get("member", "")).strip_edges()
+	var methods: Array = []
+	for m in ClassDB.class_get_method_list(cls, no_inherit):
+		var nm := String(m.get("name", ""))
+		if filter != "" and nm.findn(filter) == -1:
+			continue
+		var margs: Array = []
+		for a in m.get("args", []):
+			margs.append({"name": String(a.get("name", "")), "type": _type_name(a)})
+		var ret: Dictionary = m.get("return", {})
+		var rt := _type_name(ret)
+		if String(ret.get("class_name", "")) == "" and int(ret.get("type", TYPE_NIL)) == TYPE_NIL:
+			rt = "void"
+		methods.append({"name": nm, "return_type": rt, "args": margs})
+	var sigs: Array = []
+	for s in ClassDB.class_get_signal_list(cls, no_inherit):
+		var sn := String(s.get("name", ""))
+		if filter != "" and sn.findn(filter) == -1:
+			continue
+		var sargs: Array = []
+		for a in s.get("args", []):
+			sargs.append({"name": String(a.get("name", "")), "type": _type_name(a)})
+		sigs.append({"name": sn, "args": sargs})
+	var props: Array = []
+	for p in ClassDB.class_get_property_list(cls, no_inherit):
+		var usage := int(p.get("usage", 0))
+		if usage & (PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP):
+			continue
+		var pn := String(p.get("name", ""))
+		if pn == "":
+			continue
+		if filter != "" and pn.findn(filter) == -1:
+			continue
+		props.append({"name": pn, "type": type_string(int(p.get("type", TYPE_NIL))), "class_name": String(p.get("class_name", ""))})
+	return _ok({
+		"class": cls,
+		"parent": ClassDB.get_parent_class(cls),
+		"can_instantiate": ClassDB.can_instantiate(cls),
+		"docs_url": _doc_url(cls),
+		"methods": methods,
+		"signals": sigs,
+		"properties": props,
+	})
+
+
+func _docs_scan_members(cls: String, q: String, kind: String, results: Array, limit: int) -> bool:
+	# Append member matches for one class; return true once `limit` is reached.
+	if kind == "any" or kind == "method":
+		for m in ClassDB.class_get_method_list(cls, true):
+			var nm := String(m.get("name", ""))
+			if nm.to_lower().find(q) != -1:
+				results.append({"class": cls, "member": nm, "kind": "method", "docs_url": _doc_member_url(cls, "method", nm)})
+				if results.size() >= limit:
+					return true
+	if kind == "any" or kind == "property":
+		for p in ClassDB.class_get_property_list(cls, true):
+			var usage := int(p.get("usage", 0))
+			if usage & (PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP):
+				continue
+			var pn := String(p.get("name", ""))
+			if pn != "" and pn.to_lower().find(q) != -1:
+				results.append({"class": cls, "member": pn, "kind": "property", "docs_url": _doc_member_url(cls, "property", pn)})
+				if results.size() >= limit:
+					return true
+	if kind == "any" or kind == "signal":
+		for s in ClassDB.class_get_signal_list(cls, true):
+			var sn := String(s.get("name", ""))
+			if sn.to_lower().find(q) != -1:
+				results.append({"class": cls, "member": sn, "kind": "signal", "docs_url": _doc_member_url(cls, "signal", sn)})
+				if results.size() >= limit:
+					return true
+	return false
+
+
+func _docs_search(params: Dictionary) -> Dictionary:
+	var raw_q := String(params.get("query", ""))
+	var q := raw_q.strip_edges().to_lower()
+	if q == "":
+		return _err("bad_request", "query must not be empty")
+	var kind := String(params.get("kind", "any"))
+	var scope := String(params.get("class_name", "")).strip_edges()
+	var limit := int(params.get("limit", 40))
+	if limit <= 0:
+		limit = 40
+	var deep := bool(params.get("deep", true))
+	var results: Array = []
+	var truncated := false
+
+	var classes: Array = Array(ClassDB.get_class_list())
+	classes.sort()
+
+	# Class-name matches (project-wide over the engine class list).
+	if kind == "any" or kind == "class":
+		for c in classes:
+			var cs := String(c)
+			if cs.to_lower().find(q) != -1:
+				results.append({"class": cs, "member": "", "kind": "class", "docs_url": _doc_url(cs)})
+				if results.size() >= limit:
+					truncated = true
+					break
+
+	# Member matches (bounded by `limit`).
+	if deep and not truncated and kind != "class":
+		var scan: Array = []
+		if scope != "":
+			if ClassDB.class_exists(scope):
+				scan = [scope]
+		else:
+			scan = classes
+		for c in scan:
+			if _docs_scan_members(String(c), q, kind, results, limit):
+				truncated = true
+				break
+
+	return _ok({
+		"query": raw_q,
+		"count": results.size(),
+		"truncated": truncated,
+		"results": results,
 	})
 
 

@@ -16,6 +16,7 @@ import { registerDapTools } from "./tools/dap.js";
 import { registerCsDapTools } from "./tools/csdap.js";
 import { registerRuntimeTools } from "./tools/runtime.js";
 import { registerProcessTools } from "./tools/processes.js";
+import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerResources } from "./tools/resources.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
@@ -92,6 +93,8 @@ async function main(): Promise<void> {
   registerRuntimeTools(server, runtime);
   // Phase 4: managed run + captured console output (transparent print() logs).
   const processes = registerProcessTools(server, config);
+  // Group K: host-side knowledge & search (project grep, symbol/usage index, idiom lookup).
+  registerKnowledgeTools(server, config);
   // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
   registerResources(server, bridge, runtime);
   // D3: resource subscriptions — push notifications/resources/updated when a

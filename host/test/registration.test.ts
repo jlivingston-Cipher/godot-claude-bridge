@@ -8,13 +8,14 @@ import { registerDapTools } from "../src/tools/dap.js";
 import { registerCsDapTools } from "../src/tools/csdap.js";
 import { registerRuntimeTools } from "../src/tools/runtime.js";
 import { registerProcessTools } from "../src/tools/processes.js";
+import { registerKnowledgeTools } from "../src/tools/knowledge.js";
 import { registerResources } from "../src/tools/resources.js";
 import { applyOutputSchemas, outputSchemas } from "../src/schemas.js";
 import { loadConfig } from "../src/config.js";
 
 /** Tools that return image content with no structuredContent — deliberately schema-exempt. */
 const IMAGE_TOOLS = ["screenshot_editor", "runtime_screenshot"];
-const EXPECTED_TOOL_COUNT = 217;
+const EXPECTED_TOOL_COUNT = 223;
 const EXPECTED_RESOURCES = ["scene-tree", "editor-state", "runtime-tree", "runtime-log", "class-doc"];
 
 /**
@@ -51,6 +52,7 @@ function registerAll() {
   registerCsDapTools(mcp, stub, cfg);
   registerRuntimeTools(mcp, stub);
   registerProcessTools(mcp, cfg);
+  registerKnowledgeTools(mcp, cfg);
   registerResources(mcp, stub, stub);
 
   return { calls, resources };

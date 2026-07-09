@@ -646,6 +646,57 @@ export function registerEditorTools(server: McpServer, bridge: BridgeClient): vo
       call("classdb.get_class", { class_name, include_inherited: include_inherited ?? false }),
   );
 
+  // ---- Group K: knowledge & search (ClassDB-backed; the host-side project index
+  //      lives in tools/knowledge.ts) ----
+
+  server.registerTool(
+    "class_reference",
+    {
+      title: "Class reference",
+      description:
+        "Full engine-class reference via ClassDB: method SIGNATURES (return type + typed args), signal " +
+        "signatures, and typed properties — the detailed view classdb_get_class summarises as bare names. " +
+        "Read-only. Includes the canonical online docs URL. Pass member to filter to a single method/property/signal.",
+      inputSchema: {
+        class_name: z.string().describe("Engine class name, e.g. AudioStreamPlayer3D"),
+        include_inherited: z.boolean().optional().describe("Include inherited members (default false)"),
+        member: z.string().optional().describe("Only return members whose name contains this substring"),
+      },
+    },
+    async ({ class_name, include_inherited, member }) =>
+      call("classdb.reference", {
+        class_name,
+        include_inherited: include_inherited ?? false,
+        member: member ?? "",
+      }),
+  );
+
+  server.registerTool(
+    "docs_search",
+    {
+      title: "Search the class reference",
+      description:
+        "Search the Godot class reference (ClassDB) by keyword — matching class names and, unless a scope narrows " +
+        "it, their methods/properties/signals — and return each hit with its canonical docs URL. Read-only. " +
+        "Use kind to restrict to one member type, class_name to scope to a single class, and limit to bound results.",
+      inputSchema: {
+        query: z.string().describe("Case-insensitive substring to match against class / member names"),
+        kind: z.enum(["any", "class", "method", "property", "signal"]).optional().describe("Restrict to one result kind (default any)"),
+        class_name: z.string().optional().describe("Scope the member search to a single class (still returns class-name matches project-wide)"),
+        limit: z.number().int().positive().optional().describe("Max results before truncation (default 40)"),
+        deep: z.boolean().optional().describe("Also scan members, not just class names (default true)"),
+      },
+    },
+    async ({ query, kind, class_name, limit, deep }) =>
+      call("docs.search", {
+        query,
+        kind: kind ?? "any",
+        class_name: class_name ?? "",
+        limit: limit ?? 40,
+        deep: deep ?? true,
+      }),
+  );
+
   server.registerTool(
     "screenshot_editor",
     {

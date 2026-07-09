@@ -465,6 +465,53 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     // capture, no managed parent). Optional so older addons still validate.
     capture: z.boolean().optional(),
   },
+
+  // ---- Group K: knowledge & search ----
+  // Host-side project index (tools/knowledge.ts) — no bridge/LSP; read the project files directly.
+  project_search: {
+    query: z.string(),
+    regex: z.boolean(),
+    matches: z.array(z.object({ file: z.string(), line: z.number(), column: z.number(), text: z.string() })),
+    count: z.number(),
+    truncated: z.boolean(),
+  },
+  find_symbol: {
+    name: z.string(),
+    matches: z.array(z.object({ file: z.string(), line: z.number(), kind: z.string(), symbol: z.string(), text: z.string() })),
+    count: z.number(),
+    truncated: z.boolean(),
+  },
+  find_usages: {
+    name: z.string(),
+    usages: z.array(z.object({ file: z.string(), line: z.number(), column: z.number(), text: z.string() })),
+    count: z.number(),
+    truncated: z.boolean(),
+  },
+  example_snippet: {
+    query: z.string().nullable(),
+    count: z.number(),
+    snippets: z.array(z.object({
+      id: z.string(), title: z.string(), tags: z.array(z.string()),
+      code: z.string(), explanation: z.string(), docs_url: z.string(),
+    })),
+    available: z.array(z.string()),
+  },
+  // ClassDB-backed reference tools (tools/editor.ts -> operations.gd _classdb_reference / _docs_search).
+  class_reference: {
+    class: z.string(),
+    parent: z.string(),
+    can_instantiate: z.boolean(),
+    docs_url: z.string(),
+    methods: z.array(z.object({ name: z.string(), return_type: z.string(), args: z.array(z.object({ name: z.string(), type: z.string() })) })),
+    signals: z.array(z.object({ name: z.string(), args: z.array(z.object({ name: z.string(), type: z.string() })) })),
+    properties: z.array(z.object({ name: z.string(), type: z.string(), class_name: z.string() })),
+  },
+  docs_search: {
+    query: z.string(),
+    count: z.number(),
+    truncated: z.boolean(),
+    results: z.array(z.object({ class: z.string(), member: z.string(), kind: z.string(), docs_url: z.string() })),
+  },
 };
 
 /**

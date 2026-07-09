@@ -59,7 +59,8 @@
 //
 // Markers (grep-able): AUTH_NODE_* / AUTH_SCENE_* / AUTH_SIGNAL_* / AUTH_RESOURCE_* /
 // AUTH_ANIM_* / AUTH_TILESET_* / AUTH_TILEMAP_* / AUTH_PHYS_* / AUTH_VFX_PARTICLES_* /
-// AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UI_* / AUTH_3D_* / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
+// AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UI_* / AUTH_3D_* / AUTH_GROUPI_* / AUTH_K_* (Group K
+// knowledge & search: read-only host-side + ClassDB) / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
 // "OK" or "FAIL"; a trailing AUTH_SUMMARY line reports the tally and the process exits
 // non-zero if any assertion failed. The reachability check is the gate (exit 1 if the
 // addon is unreachable).
@@ -818,6 +819,66 @@ async function main() {
     const tl = await call("test_list");
     (tl.count === 0 && Array.isArray(tl.tests))
       ? pass("AUTH_GROUPI_TEST_LIST", `count=${tl.count}`) : fail("AUTH_GROUPI_TEST_LIST", JSON.stringify(tl));
+  });
+
+  // ---------------------------------------------------------------- Group K: knowledge & search ----
+  // Read-only. Four host-side project-index tools search the example project's files; two
+  // ClassDB-backed tools query the live editor's ClassDB. No mutations, so nothing to undo.
+  await family("AUTH_K", async () => {
+    // project_search: example/player.gd declares take_damage().
+    const ps = await call("project_search", { query: "take_damage" });
+    (Array.isArray(ps.matches) && ps.count >= 1 && ps.matches.some((m) => String(m.file).includes("player.gd") && m.line >= 1 && m.column >= 1))
+      ? pass("AUTH_K_PROJECT_SEARCH", `count=${ps.count}`)
+      : fail("AUTH_K_PROJECT_SEARCH", JSON.stringify(ps).slice(0, 200));
+
+    const psr = await call("project_search", { query: "func\\s+\\w+", regex: true });
+    (psr.regex === true && psr.count >= 1)
+      ? pass("AUTH_K_PROJECT_SEARCH_REGEX", `count=${psr.count}`)
+      : fail("AUTH_K_PROJECT_SEARCH_REGEX", JSON.stringify(psr).slice(0, 200));
+
+    // find_symbol: take_damage is a func declaration.
+    const fsym = await call("find_symbol", { name: "take_damage", kinds: ["func"] });
+    (fsym.count >= 1 && fsym.matches.some((m) => m.symbol === "take_damage" && m.kind === "func"))
+      ? pass("AUTH_K_FIND_SYMBOL", `count=${fsym.count}`)
+      : fail("AUTH_K_FIND_SYMBOL", JSON.stringify(fsym).slice(0, 200));
+
+    // find_usages: counter is referenced several times in player.gd (word-boundary).
+    const fu = await call("find_usages", { name: "counter" });
+    (fu.count >= 2 && fu.usages.every((u) => u.line >= 1 && u.column >= 1))
+      ? pass("AUTH_K_FIND_USAGES", `count=${fu.count}`)
+      : fail("AUTH_K_FIND_USAGES", JSON.stringify(fu).slice(0, 200));
+
+    // example_snippet: keyword match + full topic listing when queried.
+    const es = await call("example_snippet", { query: "connect signal" });
+    (es.count >= 1 && Array.isArray(es.available) && es.available.length >= 10 && es.snippets[0] && typeof es.snippets[0].code === "string")
+      ? pass("AUTH_K_EXAMPLE_SNIPPET", `id=${es.snippets[0] && es.snippets[0].id}`)
+      : fail("AUTH_K_EXAMPLE_SNIPPET", JSON.stringify(es).slice(0, 200));
+
+    // class_reference: Node2D via ClassDB — typed signatures, parent, docs URL.
+    const cr = await call("class_reference", { class_name: "Node2D" });
+    (cr.class === "Node2D" && typeof cr.parent === "string" && cr.parent.length > 0
+      && Array.isArray(cr.methods) && cr.methods.every((m) => typeof m.return_type === "string" && Array.isArray(m.args))
+      && Array.isArray(cr.properties) && (cr.methods.length + cr.properties.length) > 0
+      && String(cr.docs_url).includes("class_node2d"))
+      ? pass("AUTH_K_CLASS_REFERENCE", `parent=${cr.parent} methods=${cr.methods.length} props=${cr.properties.length}`)
+      : fail("AUTH_K_CLASS_REFERENCE", JSON.stringify({ class: cr.class, parent: cr.parent, m: (cr.methods || []).length, p: (cr.properties || []).length }).slice(0, 200));
+
+    // class_reference member filter narrows to a single method.
+    const crm = await call("class_reference", { class_name: "Node", member: "add_child" });
+    (Array.isArray(crm.methods) && crm.methods.some((m) => m.name === "add_child"))
+      ? pass("AUTH_K_CLASS_REFERENCE_MEMBER", `methods=${crm.methods.length}`)
+      : fail("AUTH_K_CLASS_REFERENCE_MEMBER", JSON.stringify((crm.methods || []).map((m) => m.name)).slice(0, 200));
+
+    // docs_search: class-name hit + scoped member hit, each with a canonical docs URL.
+    const dc = await call("docs_search", { query: "Node2D", kind: "class" });
+    (dc.count >= 1 && dc.results.some((r) => r.class === "Node2D" && r.kind === "class" && String(r.docs_url).includes("class_node2d")))
+      ? pass("AUTH_K_DOCS_SEARCH_CLASS", `count=${dc.count}`)
+      : fail("AUTH_K_DOCS_SEARCH_CLASS", JSON.stringify(dc).slice(0, 200));
+
+    const dm = await call("docs_search", { query: "add_child", class_name: "Node", kind: "method" });
+    (dm.results.some((r) => r.member === "add_child" && r.kind === "method" && String(r.docs_url).includes("#class-node-method-add-child")))
+      ? pass("AUTH_K_DOCS_SEARCH_MEMBER", `count=${dm.count}`)
+      : fail("AUTH_K_DOCS_SEARCH_MEMBER", JSON.stringify(dm).slice(0, 200));
   });
 
   // ---------------------------------------------------------------- undo / redo ----

@@ -6,6 +6,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group K: knowledge & search (6 tools, 217 → 223)
+- Adds the read-only "where / what / how" family — the docs-lookup + code-index surface the breadth rivals advertise — carrying the count to **223**.
+  - **Four host-side tools** (Plane B, new `host/src/tools/knowledge.ts` — they read the project files directly, so they answer with nothing running): **`project_search`** (ripgrep-style literal/regex full-text search across the project, res:// paths + 1-based line/column, binary + cache dirs skipped), **`find_symbol`** (project-wide GDScript declaration index — `class_name` / `class` / `func` / `signal` / `enum` / `const` / `var` — the workspace-symbol answer Godot's LSP does not implement, cf. `gd_workspace_symbols` returning *unsupported*), **`find_usages`** (word-boundary identifier occurrences project-wide, the build-independent complement to the position-based `gd_references`), and **`example_snippet`** (curated GDScript idiom lookup — signals, autoload singletons, input, tweens, timers, scene changes, save/load, RNG, groups, state machines, HTTP, `@onready`).
+  - **Two ClassDB-backed tools** (Plane A, over the editor bridge): **`class_reference`** (full class reference — method signatures with typed args + return, signal signatures, typed properties — the detailed view `classdb_get_class` summarises as bare names, plus the canonical docs URL; optional `member` filter), and **`docs_search`** (keyword search over the class reference — class names and, unless a `class_name`/`kind` scope narrows it, their members — each hit carrying its canonical online-docs URL; member scan bounded by `limit`).
+- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts` for all six; read-only, so none are undoable or gated; invalid-regex / not-found / empty-query surface as clear errors; contract-check parity; `EXPECTED_TOOL_COUNT` 217 → 223; `docs/TOOL_CATALOG.md` gains a Group K family section (prose + 6 detail blocks) + 6 index rows. Both `operations.gd` copies byte-identical (new `classdb.reference` / `docs.search` bridge handlers).
+- Unit-tested the four host-side tools against a throwaway project fixture in `host/test/knowledge.test.ts` (res:// paths, cache-dir skipping, regex + word-boundary semantics, exact vs substring). Added a live-engine `AUTH_K` probe family to the authoring-plane integration probe (host-side search over the example project + ClassDB `class_reference` / `docs_search` against a real editor).
+- No version bump — feature PRs leave the version stamps equal (a later release cut re-stamps them together).
+
 ## [0.14.0] — 2026-07-09
 
 ### Added — Group I: input, project config & testing (12 tools, 205 → 217)
