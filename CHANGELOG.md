@@ -6,14 +6,17 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Documentation and repository-readiness pass for the first public release. Rewrote the README with a self-focused overview and no third-party comparisons; added a full **User Guide** (`docs/USER_GUIDE.md`), a **SECURITY.md** trust model with a private disclosure channel, **CONTRIBUTING.md**, **CODE_OF_CONDUCT.md**, GitHub issue/PR templates, and a **Trademarks** notice. Reconciled tool counts and version references across both READMEs, fixed broken links, scrubbed internal shorthand from shipped text, narrowed the npm `files` glob to drop source maps, hardened `.gitignore`, and removed stale internal planning docs. No tool, schema, or version change (still 242 tools at 0.17.0).
+
 ## [0.17.0] — 2026-07-09
 
 ### Added — Group M (second half): backend-SDK integration scaffolding (5 tools, 237 → 242)
-- Completes Group M with the plugin-detected backend-SDK family (new `host/src/tools/backend.ts`, `registerBackendTools`), carrying the count to **242**. Same "host nothing, scaffold everything" stance as the `mp_*` half: running a leaderboard DB, a save-store or an auth service is a SaaS, but generating the integration against the game's *installed* SDK — SilentWolf / Nakama / PlayFab / Photon — is squarely our lane. **We host nothing.**
+- Completes Group M with the plugin-detected backend-SDK family (new `host/src/tools/backend.ts`, `registerBackendTools`), carrying the count to **242**. Same "host nothing, scaffold everything" stance as the `mp_*` half: running a leaderboard DB, a save-store or an auth service is a SaaS, but generating the integration against the game's *installed* SDK — SilentWolf / Nakama / PlayFab / Photon — is in scope. **We host nothing.**
   - **One detection tool** (Plane A / Editor, read-only): **`backend_detect`** reports which of the four known SDKs are installed and how each was found — an enabled autoload, an addon directory under `res://addons`, or a global `class_name` (a new `backend.detect` bridge handler).
   - **Four codegen tools** (Plane A / Editor + host, each writing a `res://…gd`): **`backend_configure`** (an SDK config/bootstrap autoload), **`leaderboard_scaffold`** (submit/fetch), **`cloudsave_scaffold`** (save/load), and **`auth_scaffold`** (login/register/logout). The GDScript is built host-side (so the templates are unit-tested) and written by the editor's `FileAccess` through the existing `mp.write_script` bridge method.
 - Every codegen tool is **feature-detected two ways, and never a dead call**: if the SDK provides no such API (Photon is realtime transport — no leaderboard/cloud-save/auth), it degrades to `status: "unsupported_feature"`; if the SDK is not installed in the project, it degrades to `status: "sdk_missing"` ("install <SDK> first"). Both degrades write nothing and are not errors. Only a capable + installed SDK reaches the (elicitation-**gated**) writer.
-- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts` (a `backend_detect` shape + one shared scaffold envelope validating the `written` / `sdk_missing` / `unsupported_feature` outcomes); contract-check parity (`EXPECTED_TOOL_COUNT` 237 → 242, `contract_check.py` now scans `backend.ts`, `docs/TOOL_CATALOG.md` gains the Group M backend detail blocks + 5 index rows). Both `operations.gd` copies byte-identical (new `backend.detect` handler).
+- Same quality bar: frozen `outputSchema` entries in `host/src/schemas.ts` (a `backend_detect` shape + one shared scaffold envelope validating the `written` / `sdk_missing` / `unsupported_feature` outcomes); contract-check parity (`EXPECTED_TOOL_COUNT` 237 → 242, `contract_check.py` now scans `backend.ts`, `docs/TOOL_CATALOG.md` gains the Group M backend detail blocks + 5 index rows). Both `operations.gd` copies byte-identical (new `backend.detect` handler).
 - Unit-tested the host codegen + capability matrix + detect/degrade forwarding in `host/test/backend.test.ts` (per-SDK config/auth/leaderboard/cloud-save templates, the `unsupported_feature` and `sdk_missing` degrades with their exact bridge-call counts, and the installed-SDK write path). Added a live-engine `AUTH_BACKEND` probe family to the authoring-plane integration probe (detect over the clean example, then an in-memory autoload simulates an installed SDK so the real write path + both degrades are exercised against a real editor, with the autoload removed afterward).
 - No version bump — feature PRs leave the version stamps equal (a later release cut re-stamps them together). A `0.17.0` cut can now roll both Group M halves (`mp_*` + backend) together.
 
@@ -21,18 +24,18 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Adds the first half of Group M — the "game backend" question resolved as **authoring, not hosting**. Godot 4's built-in high-level multiplayer is a first-class engine feature and a top game-dev request, but running a relay / leaderboard-DB / save-store is a SaaS, not editor control. So the `mp_*` family **hosts nothing and scaffolds everything**: it only adds nodes, scripts, and config, carrying the count to **237**. (The plugin-detected backend-SDK integration tools — `backend_configure` / `leaderboard_scaffold` / … — remain a separate follow-up PR.)
   - **Three node-authoring tools** (Plane A / Editor, undoable via `EditorUndoRedoManager` exactly like every `node_*`): **`mp_add_spawner`** (a `MultiplayerSpawner` with an optional `spawn_path` and registered `spawnable_scenes`), **`mp_add_synchronizer`** (a `MultiplayerSynchronizer`, building a `SceneReplicationConfig` from a property list + replication mode), and **`mp_set_authority`** (`set_multiplayer_authority(peer_id, recursive)`, capturing the prior authority for undo).
   - **Four codegen tools** (Plane A / Editor + host, each writing a `res://…gd`): **`mp_setup_enet_peer`** (an `ENetMultiplayerPeer` host/join helper), **`mp_setup_webrtc_peer`** (a `WebRTCMultiplayerPeer` mesh helper), **`mp_wire_rpc`** (insert/replace an `@rpc(...)` annotation on a function in an existing script, appending a stub when absent), and **`mp_scaffold_lobby`** (a lobby controller with host/join + `peer_connected`/`peer_disconnected` tracking and lobby signals). The GDScript is built host-side (so the templates are unit-tested) and written by the editor's `FileAccess` through a new `mp.write_script` bridge method that rescans the filesystem.
-- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts` (three node shapes + one shared codegen envelope validating the `written` / `unsupported` outcomes); the three node mutators are **undoable**; every code-writing tool is confirmation-**gated** (writing a `.gd` is destructive, the `resource_create` model); **feature-detection** is first-class — `mp_setup_webrtc_peer` degrades to a clear `unsupported` result (nothing written) when the WebRTC module is absent, never a dead call; contract-check parity (`EXPECTED_TOOL_COUNT` 230 → 237, `contract_check.py` now scans `netcode.ts`, `docs/TOOL_CATALOG.md` gains a Group M family section + 7 index rows). Both `operations.gd` copies byte-identical (new `mp.add_spawner` / `mp.add_synchronizer` / `mp.set_authority` / `mp.write_script` bridge handlers).
+- Same quality bar: frozen `outputSchema` entries in `host/src/schemas.ts` (three node shapes + one shared codegen envelope validating the `written` / `unsupported` outcomes); the three node mutators are **undoable**; every code-writing tool is confirmation-**gated** (writing a `.gd` is destructive, the `resource_create` model); **feature-detection** is first-class — `mp_setup_webrtc_peer` degrades to a clear `unsupported` result (nothing written) when the WebRTC module is absent, never a dead call; contract-check parity (`EXPECTED_TOOL_COUNT` 230 → 237, `contract_check.py` now scans `netcode.ts`, `docs/TOOL_CATALOG.md` gains a Group M family section + 7 index rows). Both `operations.gd` copies byte-identical (new `mp.add_spawner` / `mp.add_synchronizer` / `mp.set_authority` / `mp.write_script` bridge handlers).
 - Unit-tested the host codegen + `@rpc` transform + node/degrade forwarding in `host/test/netcode.test.ts` (script templates, annotation formatting, insert-above / replace-existing / append-stub, the WebRTC degrade path, and a real on-disk `mp_wire_rpc` round-trip). Added a live-engine `AUTH_MP` probe family to the authoring-plane integration probe (spawner/synchronizer/authority created + undone/redone against a real editor, ENet/lobby scripts written + loaded back, `@rpc` wired into a real script, and the WebRTC feature-detect).
 - No version bump — feature PRs leave the version stamps equal (a later release cut re-stamps them together).
 
 ## [0.16.0] — 2026-07-09
 
 ### Added — Group J: AI asset generation (7 tools, 223 → 230)
-- Adds the asset-generation family — the one axis only Ziva advertises — carrying the count to **230** and making the surface a strict superset. **MCP-native framing: the server never bundles or calls a model.** Each generator writes an asset to a `res://` path, imports it through the editor bridge, and returns a schema'd result; where the bytes come from is delegated.
+- Adds the asset-generation family, carrying the count to **230**. **MCP-native framing: the server never bundles or calls a model.** Each generator writes an asset to a `res://` path, imports it through the editor bridge, and returns a schema'd result; where the bytes come from is delegated.
   - **`asset_gen_configure`** (Plane B / host) selects the session backend — the feature flag: **`none`** (default) makes the generators **degrade** to a clear "no generation backend configured" result carrying a `request` spec the connected multimodal client can fulfil (no file written, not an error); **`placeholder`** writes deterministic, in-engine procedural stand-ins; **`command`** delegates to a configured local command (argv template with `{kind} {prompt} {output} {width} {height} {format}` tokens substituted per-argument, no shell — the command writes the file, the host imports it). Env-seeded via `BREAKPOINT_ASSETGEN_BACKEND` / `_CMD` / `_PROVIDER` / `_TIMEOUT_MS`; off by default.
   - **`asset_gen_placeholder`** (Plane A / Editor) always mints a deterministic stand-in regardless of the backend, as a native Godot resource (`.tres`) that loads synchronously — a hashed-colour `ImageTexture` (`sprite` / `texture` / `icon`), an `AudioStreamWAV` decaying-sine blip (`audio_sfx`), or a `BoxMesh` / primitive (`model`) — colour / frequency / size derived from a hash of the prompt, so the same prompt always yields the same asset (CI-assertable).
   - **`asset_gen_sprite`** / **`asset_gen_texture`** / **`asset_gen_icon`** / **`asset_gen_audio_sfx`** / **`asset_gen_model`** (Plane A / Editor) are the five typed generators. They branch on the backend (degrade / placeholder / command) and accept `placeholder: true` to force an in-engine stand-in even when a real backend is configured. They share one result envelope validating all three outcomes (`placeholder` / `generated` / `no_backend`).
-- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts` (a config shape + one shared generator envelope); every file-writing path is confirmation-**gated** (writing a new asset is destructive/irreversible — the `resource_create` model, not scene-undoable); the degrade path writes nothing and is not an error; feature-detection is the default state (no backend → a clear request spec, never a hang); contract-check parity (`EXPECTED_TOOL_COUNT` 223 → 230, `contract_check.py` now scans `assetgen.ts`, `docs/TOOL_CATALOG.md` gains a Group J family section + 7 index rows). Both `operations.gd` copies byte-identical (new `asset.gen_placeholder` / `asset.import` bridge handlers).
+- Same quality bar: frozen `outputSchema` entries in `host/src/schemas.ts` (a config shape + one shared generator envelope); every file-writing path is confirmation-**gated** (writing a new asset is destructive/irreversible — the `resource_create` model, not scene-undoable); the degrade path writes nothing and is not an error; feature-detection is the default state (no backend → a clear request spec, never a hang); contract-check parity (`EXPECTED_TOOL_COUNT` 223 → 230, `contract_check.py` now scans `assetgen.ts`, `docs/TOOL_CATALOG.md` gains a Group J family section + 7 index rows). Both `operations.gd` copies byte-identical (new `asset.gen_placeholder` / `asset.import` bridge handlers).
 - Unit-tested the host branching in `host/test/assetgen.test.ts` (configure get/set/validation, the no-backend degrade, the placeholder bridge call + extension handling, and the command backend running a real fixture generator + importing its output). Added a live-engine `AUTH_ASSETGEN` probe family to the authoring-plane integration probe (placeholder sprite/texture/icon/audio/model minted + imported/loaded against a real editor, the degrade path, and a command-backend round-trip through a fixture generator).
 - No version bump — feature PRs leave the version stamps equal (a later release cut re-stamps them together).
 
@@ -47,10 +50,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - The GitHub repository slug (`jlivingston-Cipher/godot-claude-bridge`) is intentionally **kept** this pass, so every `repository` / `homepage` / `bugs` URL is unchanged; a repo rename can follow as a separate deliberate step. Historical changelog entries below are left as written (they name the paths/identifiers accurate at the time).
 
 ### Added — Group K: knowledge & search (6 tools, 217 → 223)
-- Adds the read-only "where / what / how" family — the docs-lookup + code-index surface the breadth rivals advertise — carrying the count to **223**.
+- Adds the read-only "where / what / how" docs-lookup + code-index family, carrying the count to **223**.
   - **Four host-side tools** (Plane B, new `host/src/tools/knowledge.ts` — they read the project files directly, so they answer with nothing running): **`project_search`** (ripgrep-style literal/regex full-text search across the project, res:// paths + 1-based line/column, binary + cache dirs skipped), **`find_symbol`** (project-wide GDScript declaration index — `class_name` / `class` / `func` / `signal` / `enum` / `const` / `var` — the workspace-symbol answer Godot's LSP does not implement, cf. `gd_workspace_symbols` returning *unsupported*), **`find_usages`** (word-boundary identifier occurrences project-wide, the build-independent complement to the position-based `gd_references`), and **`example_snippet`** (curated GDScript idiom lookup — signals, autoload singletons, input, tweens, timers, scene changes, save/load, RNG, groups, state machines, HTTP, `@onready`).
   - **Two ClassDB-backed tools** (Plane A, over the editor bridge): **`class_reference`** (full class reference — method signatures with typed args + return, signal signatures, typed properties — the detailed view `classdb_get_class` summarises as bare names, plus the canonical docs URL; optional `member` filter), and **`docs_search`** (keyword search over the class reference — class names and, unless a `class_name`/`kind` scope narrows it, their members — each hit carrying its canonical online-docs URL; member scan bounded by `limit`).
-- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts` for all six; read-only, so none are undoable or gated; invalid-regex / not-found / empty-query surface as clear errors; contract-check parity; `EXPECTED_TOOL_COUNT` 217 → 223; `docs/TOOL_CATALOG.md` gains a Group K family section (prose + 6 detail blocks) + 6 index rows. Both `operations.gd` copies byte-identical (new `classdb.reference` / `docs.search` bridge handlers).
+- Same quality bar: frozen `outputSchema` entries in `host/src/schemas.ts` for all six; read-only, so none are undoable or gated; invalid-regex / not-found / empty-query surface as clear errors; contract-check parity; `EXPECTED_TOOL_COUNT` 217 → 223; `docs/TOOL_CATALOG.md` gains a Group K family section (prose + 6 detail blocks) + 6 index rows. Both `operations.gd` copies byte-identical (new `classdb.reference` / `docs.search` bridge handlers).
 - Unit-tested the four host-side tools against a throwaway project fixture in `host/test/knowledge.test.ts` (res:// paths, cache-dir skipping, regex + word-boundary semantics, exact vs substring). Added a live-engine `AUTH_K` probe family to the authoring-plane integration probe (host-side search over the example project + ClassDB `class_reference` / `docs_search` against a real editor).
 - No version bump — feature PRs leave the version stamps equal (a later release cut re-stamps them together).
 
@@ -61,7 +64,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **Input (4):** **`inputmap_add_action`** / **`inputmap_add_event`** / **`inputmap_erase_action`** — gated `ProjectSettings` `input/<name>` writers (optional `save`) — plus read-only **`inputmap_list`**. Events are built from a `{ type: key | mouse_button | joy_button | joy_motion, … }` descriptor (`keycode` / `physical_keycode` accept a key name via `OS.find_keycode_from_string` or an int).
   - **Project / config (6):** **`project_add_autoload`** / **`project_remove_autoload`** (`autoload/<name>`; a `*` prefix marks an enabled singleton), **`project_set_main_scene`** (validated `.tscn`/`.scn`), **`project_add_export_preset`** (appends to `export_presets.cfg` via `ConfigFile`), read-only **`project_list_settings`** (keys+values by dotted prefix), and **`editorsettings_get_set`** (read; gated write when `value` is given).
   - **Testing (2):** read-only **`test_detect`** (GUT / GdUnit4 / none) and **`test_list`** (`test_*.gd` / `*_test.gd`).
-- Same rigor bar: frozen `outputSchema` entries in `host/src/schemas.ts`; a confirm-gate on every writer (the `project_set_setting` model — `ProjectSettings` / editor-config mutations are **not** on the scene `EditorUndoRedoManager` history, so they are gated, not undoable); clear `bad_params`/`not_found` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 205 → 217; `docs/TOOL_CATALOG.md` gains a Group I family section (prose + 12 detail blocks) + 12 index rows. Both `operations.gd` copies byte-identical.
+- Same quality bar: frozen `outputSchema` entries in `host/src/schemas.ts`; a confirm-gate on every writer (the `project_set_setting` model — `ProjectSettings` / editor-config mutations are **not** on the scene `EditorUndoRedoManager` history, so they are gated, not undoable); clear `bad_params`/`not_found` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 205 → 217; `docs/TOOL_CATALOG.md` gains a Group I family section (prose + 12 detail blocks) + 12 index rows. Both `operations.gd` copies byte-identical.
 - Added a live-engine `AUTH_GROUPI` probe family (13 assertions) to the authoring-plane integration probe; the 8 gated writers added to its `GATED` set. Authoring probe 125 → 138, live-validated against a real Godot 4.7-stable editor.
 - `test_run` / `test_result` deferred on purpose (async / non-deterministic under a headless CI editor; needs a framework-bearing fixture + a maintainer semantics decision), so Group I ships 12 of the plan's ~14 tools. (#54)
 
@@ -69,15 +72,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Adds 3D and navigation editor tools (bridge namespaces `meshinstance.*` / `mesh.*` / `primitive_mesh.*` / `light.*` / `camera.*` / `csg.*` / `navregion.*` / `navagent.*` / `environment.*`), carrying the count to **205**.
   - **Seven edited-scene 3D mutators** (undoable via `EditorUndoRedoManager`, ungated — the `node_*` model): **`meshinstance_create`** (`MeshInstance3D`; optional `mesh_path` loads + assigns a `Mesh`), **`mesh_set_surface_material`** (`material_override` at surface -1, or a per-surface override slot), **`light_create`** (Directional / Omni / Spot), **`camera_create`** (`Camera3D`, optional current), **`csg_create`** (Box / Sphere / Cylinder / Torus / Polygon / Mesh / Combiner), **`navregion_create`** (`NavigationRegion3D`, seeding a fresh `NavigationMesh`), **`navagent_configure`** (`NavigationAgent3D` + radius / height / max_speed / path + target-distance / avoidance).
   - **Three confirm-gated resource file-writers** (the `resource_*` / `theme_create` model): **`primitive_mesh_create`** (Box/Sphere/Cylinder/Plane/Capsule/Prism/Torus/Quad mesh `.tres`), **`environment_create`** (`Environment` + background mode + optional ambient), **`environment_set_sky`** (attach a Procedural / Physical / Panorama `Sky`, switch background to SKY).
-- Same rigor bar: frozen `outputSchema` entries; undo for every scene mutator / confirm-gate for every file-writer; `MeshInstance3D` / `Material` / light-kind / CSG-shape / `Environment` type-guards with clear `bad_type`/`bad_params` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 195 → 205; `docs/TOOL_CATALOG.md` gains a Group H family section (prose + 10 detail blocks) + 10 index rows. Both `operations.gd` copies byte-identical.
+- Same quality bar: frozen `outputSchema` entries; undo for every scene mutator / confirm-gate for every file-writer; `MeshInstance3D` / `Material` / light-kind / CSG-shape / `Environment` type-guards with clear `bad_type`/`bad_params` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 195 → 205; `docs/TOOL_CATALOG.md` gains a Group H family section (prose + 10 detail blocks) + 10 index rows. Both `operations.gd` copies byte-identical.
 - Added a live-engine `AUTH_3D` probe family (13 assertions incl. a `meshinstance` undo/redo round-trip); the 3 writers added to its `GATED` set. Authoring probe 112 → 125, live-validated against a real Godot 4.7-stable editor.
 - `navmesh_bake` deferred on purpose (async / non-deterministic headless bake; needs a maintainer semantics decision), so Group H ships 10 of the plan's ~11 tools. (#53)
 
 ### Added — Group G: UI / Control / theming (11 tools, 184 → 195)
-- Adds UI/Control and theming editor tools (bridge namespaces `control.*` / `container.*` / `theme.*`) — the breadth-superset milestone — carrying the count to **195**.
+- Adds UI/Control and theming editor tools (bridge namespaces `control.*` / `container.*` / `theme.*`) — the editor-authoring milestone — carrying the count to **195**.
   - **Six edited-scene Control mutators** (undoable via `EditorUndoRedoManager`, ungated — the `node_*` model): **`control_create`** (instance a `Control` subclass; refuses non-`Control`; seeds `text` when present), **`container_add_child`** (add a `Control` child under a `Container`; refuses a non-`Container` parent), **`control_set_anchors`**, **`control_set_layout_preset`** (name or 0..15 int via `set_anchors_and_offsets_preset`, capturing all 8 anchor/offset props for undo), **`control_set_size_flags`**, **`control_set_theme`**.
   - **Five `Theme` `.tres` file-writers** (confirm-gated like `resource_*` / `shader_create`): **`theme_create`**, **`theme_set_color`**, **`theme_set_font`**, **`theme_set_stylebox`**, **`theme_set_constant`**.
-- Same rigor bar: frozen `outputSchema` entries; undo for every scene mutator / confirm-gate for every file-writer; Control-subclass / `Container` / `Theme` / `Font` / `StyleBox` type-guards with clear `bad_type` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 184 → 195; `docs/TOOL_CATALOG.md` gains a Group G family section (prose + 11 detail blocks) + 11 index rows. Both `operations.gd` copies byte-identical.
+- Same quality bar: frozen `outputSchema` entries; undo for every scene mutator / confirm-gate for every file-writer; Control-subclass / `Container` / `Theme` / `Font` / `StyleBox` type-guards with clear `bad_type` errors; contract-check parity; `EXPECTED_TOOL_COUNT` 184 → 195; `docs/TOOL_CATALOG.md` gains a Group G family section (prose + 11 detail blocks) + 11 index rows. Both `operations.gd` copies byte-identical.
 - Added a live-engine `AUTH_UI` probe family (13 assertions incl. a control undo/redo round-trip); the 5 theme writers added to its `GATED` set. Authoring probe 99 → 112, live-validated against a real Godot 4.7-stable editor. (#51)
 
 ### Added — `editor_undo` / `editor_redo` (2 tools, 182 → 184)
@@ -91,7 +94,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - The `authoring-plane` live probe was extended to cover the Groups A–D mutators (41 → 99 assertions) (#49), then promoted from experimental to a **required** CI gate — dropping `continue-on-error` (#50). The job was renamed `A-F` → `A-G` to track the live 112/112 probe as Group G landed (#52).
 
 ### Added — `authoring-plane` live CI probe for Groups E+F (no tool change)
-- Delivers the first installment of the long-tracked **`authoring-plane`** live-verification job (referenced as a follow-up since the Group A batches; rigor-bar item #6 in `BREADTH_SUPERSET_PLAN.md`). Two files, no tool/schema/addon change — the surface stays **182/173**:
+- Delivers the first installment of the long-tracked **`authoring-plane`** live-verification job (referenced as a follow-up since the Group A batches). Two files, no tool/schema/addon change — the surface stays **182/173**:
   - **`host/test-integration/authoring-plane.integration.mjs`** — spawns the MCP host over stdio, connects to a live editor's addon bridge (`:9080`), opens `res://main.tscn`, and drives all **29 Group E+F mutators** (physics/collision + VFX/audio). Each mutation is asserted **independently** by reading the edited scene back through *separate* read tools — `node_get_children` (creators), `node_get_property` (scalar props, and resource props via `Codec.encode`'s `{__type__:"Resource",class}` tag), `project_get_setting` (`physics_set_gravity`), `resource_load` (the `.gdshader` / `.tres` file writers) — rather than trusting the mutator's own post-commit echo. Grep markers `AUTH_PHYS_*` / `AUTH_VFX_PARTICLES_*` / `AUTH_VFX_SHADER_*` / `AUTH_AUDIO_*`; a trailing `AUTH_SUMMARY pass=N/N` line and non-zero exit on any failure. The probe **mints its own fixtures** — `PlaceholderTexture2D` + `AudioStreamWAV` via `resource_create`, two `.gdshader` via `shader_create` — so no binary fixtures are committed (`.tres` native resources sidestep the import pipeline).
   - **`authoring-plane` job in `.github/workflows/integration.yml`** — mirrors `editor-plane` (Ubuntu + Xvfb + software OpenGL, Godot 4.7-stable): boots the editor, waits for `:9080`, runs the probe. Single newest-stable arm (E+F are version-stable engine features, unlike the LSP/DAP planes that matrix 4.3/4.7 for capability divergence). `continue-on-error: true` while GUI-boot timing is proven on real runners; promote to a required gate once green across a few runs (the `runtime-plane` / `csharp-plane` pattern).
 - Live-validated **32/32** against a real Godot 4.7 editor and **green on the CI runner** on merge. **Undo-stack assertion is deferred**: no bridge action triggers an editor undo over `:9080` (and `contract_check`'s orphan scan forbids a caller-less bridge method), so the probe asserts **forward mutation only** (`AUTH_UNDO_DEFERRED` marker). An `editor_undo` capability that would let the probe assert mutate → undo → revert is the tracked follow-up. (#47)
@@ -106,7 +109,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **`audio_bus_add_effect`** — instantiate an `AudioEffect` subclass by class name (validated via `ClassDB.can_instantiate` + `is_parent_class("AudioEffect")`) and add it to a named bus. **Gated** (project-wide).
   - **`audio_bus_set_volume`** — set a named bus's `volume_db` on the `AudioServer`. **Gated** (project-wide).
   - **`audio_set_bus_layout`** — persist the current `AudioServer` bus layout (buses, effects, volumes) to a `.tres` on disk (default `res://default_bus_layout.tres`) via `generate_bus_layout` + `ResourceSaver.save`. **Gated** (writes a file).
-- Same rigor bar: the `AudioServer` bus API (`add_bus` / `set_bus_name` / `get_bus_index` / `set_bus_send` / `set_bus_volume_db` / `add_bus_effect` / `get_bus_effect_count` / `generate_bus_layout` / `set_bus_layout`), the `AudioEffect` `ClassDB` instantiation, and the player `stream` / `autoplay` / `volume_db` / `bus` props were probed live on Godot 4.7 (set + read-back on typed locals — no `get_property_list` / RefCounted `.free()`), and an `AudioStreamPlayer` carrying an external `AudioStream` (`autoplay` / `volume_db` / `bus` set) survives a `.tscn` save + fresh reload. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_audio_player_create` / `_audio_set_stream` / `_audio_bus_add` / `_audio_bus_add_effect` / `_audio_bus_set_volume` / `_audio_set_bus_layout`, plus the `_is_audio_player` helper), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts` (the four `AudioServer` tools reuse the `gate` confirm pattern); output schemas in `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT` 176 → 182; `docs/TOOL_CATALOG.md` (Group F header + detail + index). No version bump — the E+F release cut re-stamps all five version stamps together.
+- Same quality bar: the `AudioServer` bus API (`add_bus` / `set_bus_name` / `get_bus_index` / `set_bus_send` / `set_bus_volume_db` / `add_bus_effect` / `get_bus_effect_count` / `generate_bus_layout` / `set_bus_layout`), the `AudioEffect` `ClassDB` instantiation, and the player `stream` / `autoplay` / `volume_db` / `bus` props were probed live on Godot 4.7 (set + read-back on typed locals — no `get_property_list` / RefCounted `.free()`), and an `AudioStreamPlayer` carrying an external `AudioStream` (`autoplay` / `volume_db` / `bus` set) survives a `.tscn` save + fresh reload. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_audio_player_create` / `_audio_set_stream` / `_audio_bus_add` / `_audio_bus_add_effect` / `_audio_bus_set_volume` / `_audio_set_bus_layout`, plus the `_is_audio_player` helper), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts` (the four `AudioServer` tools reuse the `gate` confirm pattern); output schemas in `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT` 176 → 182; `docs/TOOL_CATALOG.md` (Group F header + detail + index). No version bump — the E+F release cut re-stamps all five version stamps together.
 
 ### Added — Group F (batch 2): Shaders (5 tools, 171 → 176)
 - Continues **Group F (VFX & audio)** with the **shaders** subgroup. Five tools split across the two established models:
@@ -115,10 +118,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **`shadermaterial_create`** — create a `ShaderMaterial` and assign it to a node's material slot in the edited scene, undoable via `EditorUndoRedoManager` and **ungated**. Feature-detects the slot: `CanvasItem.material` (2D / Control) vs `GeometryInstance3D.material_override` (3D); a node with neither degrades to a clear `unsupported`. Optionally binds a `Shader` loaded from a `res://` path (rides `add_do_property` + `add_do_reference`).
   - **`shadermaterial_set_shader`** — load a `Shader` from a `res://` path and assign it to an existing `ShaderMaterial` on the node's slot (undoable). No `add_do_reference` — the shader is a persisted disk resource (the `particles_set_texture` pattern).
   - **`shadermaterial_set_param`** — set a shader uniform through the `shader_parameter/<name>` property path (undoable via `add_do_property` / `add_undo_property`); the value uses the tagged-Variant convention (`Codec.decode` in, `Codec.encode` out).
-- Rigor bar held: `Shader` / `ShaderMaterial` / `set_shader_parameter` and the `shader_parameter/<name>` property-path form were probed live on Godot 4.7 (set + read-back on typed locals — no `get_property_list` / RefCounted `.free()`), and a `Sprite2D` carrying a `ShaderMaterial` (external `.gdshader` + a `shader_parameter` override) survives a `.tscn` save + fresh reload. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_shader_create` / `_shader_set_code` / `_shadermaterial_create` / `_shadermaterial_set_shader` / `_shadermaterial_set_param`, plus the `_material_prop` helper), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts` (the two `shader_*` writers reuse the `gate` confirm pattern); output schemas in `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT` 171 → 176; `docs/TOOL_CATALOG.md` (Group F header + detail + index). No version bump — the E+F release cut re-stamps all five version stamps together.
+- Quality bar held: `Shader` / `ShaderMaterial` / `set_shader_parameter` and the `shader_parameter/<name>` property-path form were probed live on Godot 4.7 (set + read-back on typed locals — no `get_property_list` / RefCounted `.free()`), and a `Sprite2D` carrying a `ShaderMaterial` (external `.gdshader` + a `shader_parameter` override) survives a `.tscn` save + fresh reload. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_shader_create` / `_shader_set_code` / `_shadermaterial_create` / `_shadermaterial_set_shader` / `_shadermaterial_set_param`, plus the `_material_prop` helper), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts` (the two `shader_*` writers reuse the `gate` confirm pattern); output schemas in `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT` 171 → 176; `docs/TOOL_CATALOG.md` (Group F header + detail + index). No version bump — the E+F release cut re-stamps all five version stamps together.
 
 ### Added — Group F (batch 1): GPU particles (6 tools, 165 → 171)
-- Starts **Group F (VFX & audio)** from the breadth-superset plan with the **GPU particles** subgroup. Six A/Editor
+- Starts **Group F (VFX & audio)** from the editor-authoring roadmap with the **GPU particles** subgroup. Six A/Editor
   tools, all mutating the edited scene, undoable via `EditorUndoRedoManager`, and **ungated** (the `node_*` model):
   - **`particles_create`** — add a `GPUParticles2D`/`GPUParticles3D` node (`dim` 2d default / 3d), optionally seeding `amount` (> 0), `lifetime` (> 0), `emitting`.
   - **`particles_set_process_material`** — create a `ParticleProcessMaterial` and assign it as `process_material` (GPU particles need one to emit): `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, `color`.
@@ -126,7 +129,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **`particles_set_lifetime`** — set `lifetime` in seconds (> 0).
   - **`particles_set_emitting`** — toggle `emitting`.
   - **`particles_set_texture`** — load a `Texture2D` from a `res://` path onto a `GPUParticles2D`'s `texture`. Feature-detects: `GPUParticles3D` has no `texture` (it draws meshes) and degrades to a clear `unsupported`.
-- Same rigor bar as the earlier groups: node authoring uses the `node_add` do/undo-reference pattern; the new
+- Same quality bar as the earlier groups: node authoring uses the `node_add` do/undo-reference pattern; the new
   `ParticleProcessMaterial` rides along via `add_do_reference`; property mutators use `add_do_property` /
   `add_undo_property`. The `GPUParticles2D/3D` property surface (`amount`/`lifetime`/`emitting`/`process_material`, and
   the **2D-only** `texture`) and the `ParticleProcessMaterial` knobs were probed live on Godot 4.7 before design.
@@ -138,7 +141,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   version bump — the E+F release cut re-stamps all five version stamps together.
 
 ### Added — Group E (batch 2): Areas, joints, collision polygons, rigidbody & material tuning (8 tools, 157 → 165)
-- Completes **Group E (Physics & collision)** from the breadth-superset plan — batch 2 carries the tool count past
+- Completes **Group E (Physics & collision)** from the editor-authoring roadmap — batch 2 carries the tool count past
   godot-mcp-pro's 162-tool ceiling to **165**. Eight A/Editor tools: seven mutate the edited scene, are undoable via
   `EditorUndoRedoManager`, and **ungated** (the `node_*` model); one writes ProjectSettings and is **gated** like
   `project_set_setting`:
@@ -150,7 +153,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **`rigidbody_set_properties`** — tune a `RigidBody2D/3D`: `mass` (> 0), `gravity_scale`, `linear_damp`, `angular_damp`.
   - **`body_set_physics_material`** — create a `PhysicsMaterial` and assign it as `physics_material_override` on a StaticBody/RigidBody (2D/3D): `friction`, `bounce`, `rough`, `absorbent`.
   - **`physics_set_gravity`** — write project `physics/{2d,3d}/default_gravity` (+ `default_gravity_vector`); `save` persists to `project.godot`. Gated.
-- Same rigor bar as the earlier groups: in-scene node authoring uses the `node_add` do/undo-reference pattern; property
+- Same quality bar as the earlier groups: in-scene node authoring uses the `node_add` do/undo-reference pattern; property
   mutators use `add_do_property` / `add_undo_property`; the new `PhysicsMaterial` rides along via `add_do_reference`.
   The eight joint classes (2D+3D), Area `monitoring`/`monitorable` + gravity props, RigidBody props, `CollisionPolygon2D/3D`
   (`polygon` is a `PackedVector2Array` for both dims), `PhysicsMaterial` + `physics_material_override`, and the four
@@ -166,14 +169,14 @@ and the project uses [Semantic Versioning](https://semver.org/).
   the E+F release cut re-stamps all five version stamps together.
 
 ### Added — Group E (batch 1): Physics bodies & collision shapes (4 tools, 153 → 157)
-- Starts **Group E (Physics & collision)** from the breadth-superset plan — the group that crosses
+- Starts **Group E (Physics & collision)** from the editor-authoring roadmap — the group that crosses
   godot-mcp-pro's 162-tool ceiling (at ~166 once the group lands). Four A/Editor tools that author physics
   nodes in the edited scene, all in-scene, undoable via `EditorUndoRedoManager`, and **ungated** (the
   `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model):
   - **`body_create`** — add a `StaticBody` / `RigidBody` / `CharacterBody` / `Area` node (2D or 3D via `dim`) under a parent.
   - **`collisionshape_add`** — add a `CollisionShape2D` / `CollisionShape3D` carrying a shape resource: `rect` (Rectangle/Box), `circle` (Circle/Sphere), `capsule` (Capsule 2D/3D), or `polygon` (ConvexPolygon 2D/3D).
   - **`body_set_collision_layer`** / **`body_set_collision_mask`** — set the `collision_layer` / `collision_mask` bitmask on any body or area (`CollisionObject2D/3D`).
-- Same rigor bar as Groups A–D: bodies/shapes go through the `node_add` do/undo reference pattern, layer/mask
+- Same quality bar as Groups A–D: bodies/shapes go through the `node_add` do/undo reference pattern, layer/mask
   through `add_do_property` / `add_undo_property`. The `StaticBody/RigidBody/CharacterBody/Area` (2D+3D),
   `CollisionShape2D/3D`, and `RectangleShape2D / CircleShape2D / CapsuleShape2D / ConvexPolygonShape2D` +
   `BoxShape3D / SphereShape3D / CapsuleShape3D / ConvexPolygonShape3D` APIs were probed live on Godot 4.7
@@ -189,7 +192,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [0.12.0] — 2026-07-08
 
 ### Added — Group D (batch 2): TileMapLayer + cell painting (5 tools, 148 → 153)
-- Completes **Group D (TileMap/TileSet)** from the breadth-superset plan. Five D/Editor tools that author a
+- Completes **Group D (TileMap/TileSet)** from the editor-authoring roadmap. Five D/Editor tools that author a
   `TileMapLayer` node in the edited scene and paint its cells — the in-scene counterpart to batch 1's disk-backed
   `tileset_*` writers:
   - **`tilemaplayer_create`** — add a `TileMapLayer` node under a parent, optionally binding a TileSet `.tres` (e.g. from `tileset_create`) as its `tile_set`.
@@ -197,7 +200,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - **`tilemap_set_cells_rect`** — fill a rectangular region `[x, y, w, h]` with one tile in a single undoable action (capped at 65536 cells).
   - **`tilemap_get_cell`** — read a cell; an empty cell reports `source_id` -1 / `atlas_coords` [-1, -1] / `alternative` 0 (`empty: true`).
   - **`tilemap_clear`** — remove every painted cell; undo restores the prior cells.
-- Same rigor bar as the rest of Groups A–C: every mutator goes through `EditorUndoRedoManager` (undoable) and is
+- Same quality bar as the rest of Groups A–C: every mutator goes through `EditorUndoRedoManager` (undoable) and is
   **ungated** — an in-scene mutation like `node_*` / `anim_*`, not the disk-writing gated model of `tileset_*`.
   `set_cell`/`set_cells_rect`/`clear` capture the prior per-cell state (source/atlas/alternative) for exact undo.
   The `TileMapLayer` API (`set_cell` / `get_cell_source_id` / `get_cell_atlas_coords` / `get_cell_alternative_tile`
@@ -210,7 +213,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Godot 4.x. Group D is now complete; the Group C+D release cut follows.
 
 ### Added — Group D (batch 1): TileSet authoring — TileSet / atlas source / tile / collision (4 tools, 144 → 148)
-- First family of **Group D (TileMap/TileSet)** from the breadth-superset plan (unblocked by Group B —
+- First family of **Group D (TileMap/TileSet)** from the editor-authoring roadmap (unblocked by Group B —
   `TileSet` is a Resource). Four D/Editor `tileset_*` tools over the editor bridge, schema-enforced, that author
   a disk-backed `.tres` `TileSet` (load → mutate → re-save; no scene needs to be open):
   - **`tileset_create`** — instantiate a `TileSet` and save it as a new `.tres`; optional base `tile_size` (default 16×16 px).
@@ -228,13 +231,13 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Group C+D release cut.
 
 ### Added — Group C (batch 2): animation state machines — AnimationTree + StateMachine (4 tools, 140 → 144)
-- Completes **Group C (Animation)** from the breadth-superset plan. Four C/Editor `anim_*` tools that author an
+- Completes **Group C (Animation)** from the editor-authoring roadmap. Four C/Editor `anim_*` tools that author an
   `AnimationTree` node and its `tree_root` graph, schema-enforced and undoable:
   - **`anim_tree_create`** — add an `AnimationTree` node with a fresh `tree_root` (`AnimationNodeBlendTree` or `AnimationNodeStateMachine`); created inactive, optionally wired to an `AnimationPlayer` via `anim_player`.
   - **`anim_tree_add_node`** — add any `AnimationNode` subclass to the tree_root graph (blend tree or state machine); binds a clip for `AnimationNodeAnimation`.
   - **`anim_statemachine_add_state`** — add a state (default `AnimationNodeAnimation`) to a state machine — the `tree_root`, or a nested state-machine node.
   - **`anim_statemachine_add_transition`** — connect two states with an `AnimationNodeStateMachineTransition` (xfade time, switch mode, advance mode/condition, priority).
-- Same rigor bar as batch 1: every mutation goes through `EditorUndoRedoManager` (undoable; nothing written to
+- Same quality bar as batch 1: every mutation goes through `EditorUndoRedoManager` (undoable; nothing written to
   disk), ungated (in-scene mutation, like `node_*`). The `AnimationTree` / `AnimationNode*` API surface was probed
   live on Godot 4.7 before design. Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch +
   `_anim_tree_*` / `_anim_statemachine_*`), statically parse-checked against local Godot 4.7; host registrations in
@@ -243,7 +246,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Group C complete; a release cut follows after Group D.
 
 ### Added — Group C (batch 1): animation authoring — AnimationPlayer + Animation (10 tools, 130 → 140)
-- First family of **Group C (Animation)** from the breadth-superset plan (unblocked by Group B — animations
+- First family of **Group C (Animation)** from the editor-authoring roadmap (unblocked by Group B — animations
   are Resources). Ten C/Editor `anim_*` tools over the editor bridge, schema-enforced, authoring an in-scene
   `AnimationPlayer` (animations live in its `AnimationLibrary` resources, addressed as `animation` within a
   `library`, default `""`):
@@ -274,7 +277,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [0.11.0] — 2026-07-08
 
-Lands **Group B of the breadth-superset plan** — the Resources & FileSystem layer that unblocks Groups
+Lands **Group B of the editor-authoring roadmap** — the Resources & FileSystem layer that unblocks Groups
 C–F (animation, tilesets, shaders, and audio are all Resources). Two families since 0.10.0: `resource_*`
 (#35) and `filesystem_*` (#36). Tool count **118 → 130** (new `resource_*` family of 8, new `filesystem_*`
 family of 4); host tests **173**; `scripts/contract_check.py` green at **130**. Every file-writing op is
@@ -295,7 +298,7 @@ changes). The live `authoring-plane` CI probe for the Group A/B mutators remains
 - Handlers in both `addons/claude_bridge/operations.gd` copies (dispatch + `_filesystem_*`), statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. Built on `DirAccess`, `FileAccess`, and `EditorInterface.get_resource_filesystem()`. Lands Group B; a minor release cut follows.
 
 ### Added — Group B (batch 1): resources (8 tools, 118 → 126)
-- First family of **Group B (Resources & FileSystem)** from the breadth-superset plan — the layer that
+- First family of **Group B (Resources & FileSystem)** from the editor-authoring roadmap — the layer that
   unblocks Groups C–F (animation/tileset/shader/audio are all Resources). Eight A/Editor tools,
   schema-enforced, in lockstep with `scripts/contract_check.py` (126), `registration.test.ts`
   (`EXPECTED_TOOL_COUNT` 118 → 126), and `docs/TOOL_CATALOG.md`:
@@ -309,19 +312,18 @@ changes). The live `authoring-plane` CI probe for the Group A/B mutators remains
 
 ## [0.10.0] — 2026-07-08
 
-Lands **Group A of the breadth-superset plan** — the full scene-graph authoring foundation, the biggest
+Lands **Group A of the editor-authoring roadmap** — the full scene-graph authoring foundation, the biggest
 single authoring jump in the project. Four batches of A/Editor tools since 0.9.0: node-graph depth
-(#31), node-depth authoring (#32), scene depth (#33), and signals (#34), plus the session-26
-`csharp-plane` release-pinning hardening (#30). Tool count **93 → 118** (`node_*` 6 → 13, `scene_*`
+(#31), node-depth authoring (#32), scene depth (#33), and signals (#34), plus the `csharp-plane` release-pinning hardening (#30). Tool count **93 → 118** (`node_*` 6 → 13, `scene_*`
 4 → 10, new `signal_*` family of 6); host tests **173**; `scripts/contract_check.py` green at **118**.
 Every mutator is undoable via `EditorUndoRedoManager` and every destructive op elicitation-gated, holding
-the rigor bar the breadth-only servers can't. Every version stamp (`host/package.json` + lockfile,
+the same undo-and-gating discipline across the new surface. Every version stamp (`host/package.json` + lockfile,
 `index.ts` serverInfo, both `plugin.cfg`, both `operations.gd` `ADDON_VERSION`) is now **0.10.0** — a
 minor bump (new tool surface, no breaking changes). The live `authoring-plane` CI probe for the Group A
 mutators remains a tracked follow-up.
 
 ### Added — Group A (batch 4): signals (6 tools, 112 → 118)
-- New `signal_*` family from the breadth-superset plan — completing Group A's authoring surface. Six
+- New `signal_*` family from the editor-authoring roadmap — completing Group A's authoring surface. Six
   A/Editor tools, schema-enforced and (where they mutate) undoable via `EditorUndoRedoManager`, in
   lockstep with `scripts/contract_check.py` (118), `registration.test.ts` (`EXPECTED_TOOL_COUNT`
   112 → 118), and `docs/TOOL_CATALOG.md`:
@@ -332,7 +334,7 @@ mutators remains a tracked follow-up.
 - Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_signal_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. Built on Godot 4.7 `Object` signal APIs (`get_signal_list`, `get_signal_connection_list`, `connect`/`disconnect`, `add_user_signal`/`remove_user_signal`, `emit_signal`). This lands the last of Group A; a minor release cut follows.
 
 ### Added — Group A (batch 3): scene depth (6 tools, 106 → 112)
-- Extends the `scene_*` family from the breadth-superset plan. Six A/Editor tools, schema-enforced,
+- Extends the `scene_*` family from the editor-authoring roadmap. Six A/Editor tools, schema-enforced,
   in lockstep with `scripts/contract_check.py` (112), `registration.test.ts` (`EXPECTED_TOOL_COUNT`
   106 → 112), and `docs/TOOL_CATALOG.md`:
   - **`scene_list_open`** — list open scene paths, the current one, and which have unsaved changes (read-only).
@@ -344,7 +346,7 @@ mutators remains a tracked follow-up.
 - Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_scene_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. `scene_close`/`scene_reload` use Godot 4.7 `EditorInterface.close_scene()` / `reload_scene_from_path()`. No release cut.
 
 ### Added — Group A (batch 2): node-depth authoring (7 tools, 99 → 106)
-- Completes the `node_*` depth surface from the breadth-superset plan. Seven A/Editor tools, all
+- Completes the `node_*` depth surface from the editor-authoring roadmap. Seven A/Editor tools, all
   schema-enforced and — where they mutate — undoable via `EditorUndoRedoManager`, in lockstep with
   `scripts/contract_check.py` (106), `registration.test.ts` (`EXPECTED_TOOL_COUNT` 99 → 106), and
   `docs/TOOL_CATALOG.md`:
@@ -357,7 +359,7 @@ mutators remains a tracked follow-up.
 - Handlers added to both `addons/claude_bridge/operations.gd` copies (dispatch + `_node_*`); host registrations in `host/src/tools/editor.ts`; output schemas in `host/src/schemas.ts`. No release cut; the live `authoring-plane` CI probe for the Group A mutators remains a tracked follow-up.
 
 ### Added — Group A (batch 1): node-graph authoring depth (6 tools, 93 → 99)
-- First installment of the breadth-superset plan (Group A). Six A/Editor authoring tools, all
+- First installment of the editor-authoring roadmap (Group A). Six A/Editor authoring tools, all
   schema-enforced and — where they mutate — undoable via `EditorUndoRedoManager`, in lockstep with
   `scripts/contract_check.py` (99), `registration.test.ts` (`EXPECTED_TOOL_COUNT` 93 → 99), and
   `docs/TOOL_CATALOG.md`:
@@ -599,7 +601,7 @@ the Godot 4.3/4.4 runtime-bridge fix + runtime-plane CI probe below. Every versi
   zero-config hook is active and fall back to `godot_run_managed` when it isn't.
 - Per the "GDScript now, native later" decision, the native GDExtension logger the plan originally
   scoped (godot-cpp / scons) is **deferred** — the 4.5 `Logger` API is scriptable and delivers the
-  same capability with no native toolchain. See `BACKLOG.md` and the session-19 handoff.
+  same capability with no native toolchain. See `BACKLOG.md`.
 - `ADDON_VERSION` (and both `plugin.cfg`) go **0.5.1 → 0.5.2**. Tool count unchanged (**still 70
   tools**); the host suite goes **123 → 124 tests** (the `godot://runtime/log` subscription push).
 

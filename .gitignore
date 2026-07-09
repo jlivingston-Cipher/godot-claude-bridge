@@ -9,6 +9,12 @@ npm-debug.log*
 .godot/
 *.import
 
+# Secrets / credentials (never commit)
+.env
+.env.*
+*.pem
+*.key
+
 # Editor / OS
 .DS_Store
 .vscode/

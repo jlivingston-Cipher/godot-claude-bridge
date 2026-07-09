@@ -8,11 +8,10 @@ import { gate } from "../confirm.js";
  * Group M (second half) — Backend-SDK integration scaffolding (`backend_*`,
  * `*_scaffold`).
  *
- * The competitive analysis flagged the breadth rivals' "backend" story
- * (leaderboards / cloud-save / auth). Evaluation result (BREADTH_SUPERSET_PLAN
- * §M): **host nothing, scaffold everything.** Running a leaderboard DB, a
- * save-store or an auth service is a SaaS, not editor control — but GENERATING
- * the integration against the game's *installed* SDK is squarely our lane.
+ * Principle: host nothing, scaffold everything. Running a leaderboard DB, a
+ * save-store or an auth service is a hosted service, outside the scope of editor
+ * control — but generating the integration against the game's *installed* SDK is
+ * in scope.
  *
  *   Detection (read-only, over the editor bridge):
  *     - backend_detect       — which of the known SDKs (SilentWolf / Nakama /

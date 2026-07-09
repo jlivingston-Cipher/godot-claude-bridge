@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/jlivingston-Cipher/godot-claude-bridge/discussions
+    about: Have a question, an idea to talk through, or need help getting set up? Start a discussion here.
+  - name: Browse existing issues
+    url: https://github.com/jlivingston-Cipher/godot-claude-bridge/issues
+    about: Search open and closed issues before filing a new one — someone may have hit the same thing.

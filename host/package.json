@@ -28,7 +28,7 @@
     "breakpoint-mcp": "dist/index.js"
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
     "README.md",
     "LICENSE"
   ],

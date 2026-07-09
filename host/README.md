@@ -1,15 +1,15 @@
 # breakpoint-mcp
 
-The MCP **host** for [breakpoint-mcp](https://github.com/jlivingston-Cipher/godot-claude-bridge) —
-a Model Context Protocol server that exposes the Godot game engine to Claude
-across four planes: headless CLI, the live editor, Godot's own LSP + DAP, and a
-runtime bridge inside the running game. **54 tools + 5 MCP resources**,
-live-validated against a real Godot 4.7 editor.
+The MCP **host** for [Breakpoint MCP](https://github.com/jlivingston-Cipher/godot-claude-bridge) —
+a [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the
+Godot game engine to Claude across four planes: headless CLI, the live editor, Godot's
+own LSP + DAP, and a runtime bridge inside the running game. **242 tools + 5 MCP
+resources**, built against the stable `@modelcontextprotocol/sdk` 1.x API.
 
 This package is the TypeScript host that Claude talks to over stdio. It needs the
-companion **Godot editor addon** (`breakpoint_mcp`) installed in your project to
-reach anything beyond the headless-CLI plane — see the repository for the addon
-and the full architecture.
+companion **Godot editor addon** (`breakpoint_mcp`) installed in your project to reach
+anything beyond the headless-CLI plane — see the repository for the addon and the full
+architecture.
 
 ## Install
 
@@ -19,8 +19,8 @@ npx breakpoint-mcp          # run on demand
 npm i -g breakpoint-mcp     # install the `breakpoint-mcp` command
 ```
 
-Requires **Node ≥ 18**. The host pins `@modelcontextprotocol/sdk` to the `1.x`
-line (the `registerTool({ inputSchema, outputSchema })` + elicitation surface).
+Requires **Node ≥ 18**. The host targets the `@modelcontextprotocol/sdk` `1.x` line
+(the `registerTool({ inputSchema, outputSchema })` + elicitation surface).
 
 ## Register with Claude
 
@@ -47,25 +47,34 @@ claude mcp add godot -- npx -y breakpoint-mcp
 }
 ```
 
-Set `GODOT_BIN` if `godot` isn't on your `PATH`. The full environment-variable
-table (bridge/LSP/DAP/runtime hosts, ports, and timeouts) is in the
-[repository README](https://github.com/jlivingston-Cipher/godot-claude-bridge#configuration-environment-variables).
+Set `GODOT_BIN` if `godot` isn't on your `PATH`. The full environment-variable table
+(bridge / LSP / DAP / runtime hosts, ports, and timeouts) and a complete walkthrough are
+in the [repository README](https://github.com/jlivingston-Cipher/godot-claude-bridge#configuration-environment-variables)
+and the [User Guide](https://github.com/jlivingston-Cipher/godot-claude-bridge/blob/main/docs/USER_GUIDE.md).
 
 ## The addon (required for the editor / runtime planes)
 
 Install the `breakpoint_mcp` editor addon into your Godot project (drop
-`addons/breakpoint_mcp/` in and enable it under Project Settings → Plugins). It
-opens the loopback servers this host connects to and auto-registers the in-game
-runtime bridge. Without it, only the headless-CLI (`godot_*`) plane works.
+`addons/breakpoint_mcp/` in and enable it under Project Settings → Plugins). It opens the
+loopback servers this host connects to and auto-registers the in-game runtime bridge.
+Without it, only the headless-CLI (`godot_*`) plane works.
 
-## Remote / Cowork note
+## Local-first
 
-This bridge is a **local** co-development tool: all four planes talk to
-`127.0.0.1`, and screenshots render real frames. A cloud/remote deployment can't
-see a local editor and is a degraded, headless subset without a local relay —
-run the host on the same machine as Godot. See
+This bridge is a **local** co-development tool: all four planes talk to `127.0.0.1`, and
+screenshots render real frames, so run the host on the same machine as Godot. A remote
+deployment can't see a local editor and is limited to the headless subset. See
 [`docs/DISTRIBUTION.md`](https://github.com/jlivingston-Cipher/godot-claude-bridge/blob/main/docs/DISTRIBUTION.md).
+
+## Security
+
+The host spawns the Godot binary, can run GDScript and a configured local command, and
+writes files into your project; destructive tools are confirmation-gated. See the
+[security policy](https://github.com/jlivingston-Cipher/godot-claude-bridge/blob/main/SECURITY.md)
+for the trust model and how to report a vulnerability.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE). Godot, Claude/Anthropic, and the named backend SDKs are
+trademarks of their respective owners; Breakpoint MCP is an independent project and is
+not affiliated with or endorsed by them.

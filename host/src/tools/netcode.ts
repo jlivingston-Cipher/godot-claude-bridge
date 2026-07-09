@@ -8,11 +8,10 @@ import { toFsPath, readFileText } from "../paths.js";
 /**
  * Group M — Netcode & backend scaffolding (native multiplayer family, `mp_*`).
  *
- * The competitive analysis flagged the breadth rivals' "multiplayer / backend"
- * story. Evaluation result (BREADTH_SUPERSET_PLAN §M): **host nothing, scaffold
- * everything.** Running a relay / leaderboard-DB / save-store is a SaaS, not
- * editor control — but GENERATING the integration (nodes, scripts, config) at
- * the rigor bar is squarely our lane. So this family adds only *authoring*:
+ * Principle: host nothing, scaffold everything. Running a relay / leaderboard-DB
+ * / save-store is a hosted service, outside the scope of editor control — but
+ * generating the integration (nodes, scripts, config) is in scope. So this
+ * family adds only *authoring*:
  *
  *   Node authoring (undoable, over the editor bridge):
  *     - mp_add_spawner       — a MultiplayerSpawner (spawn_path + spawnable scenes)

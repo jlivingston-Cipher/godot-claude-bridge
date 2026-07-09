@@ -52,7 +52,7 @@ One repo version, moved together, tagged repo-wide (`v0.4.3`, `v0.4.4`,
 
 ### One-time decisions (maintainer)
 
-- **Package name.** Current `package.json` name is `breakpoint-mcp-host`.
+- **Package name.** The `package.json` name is `breakpoint-mcp`.
   Options:
   - **Unscoped** `breakpoint-mcp` — cleanest to type (`npx breakpoint-mcp`)
     if the name is free on npm. **Check:** `npm view breakpoint-mcp` (a 404

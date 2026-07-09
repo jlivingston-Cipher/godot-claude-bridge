@@ -8,8 +8,7 @@ import { gate } from "../confirm.js";
 import { toFsPath } from "../paths.js";
 
 /**
- * Group J — AI asset generation (the one axis only Ziva has; makes us a strict
- * superset).
+ * Group J — AI asset generation.
  *
  * MCP-native framing: the server NEVER bundles or calls a model. Each generator
  * writes an asset to a res:// path, triggers an import (via the editor bridge),
