@@ -218,6 +218,14 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   body_set_physics_material: { path: z.string(), friction: z.number(), bounce: z.number(), rough: z.boolean(), absorbent: z.boolean() },
   physics_set_gravity: { dim: z.string(), magnitude: z.number(), direction: z.array(z.number()), saved: z.boolean() },
 
+  // ---- Group F batch 1: VFX particles (tools/editor.ts -> operations.gd _particles_*) ----
+  particles_create: { path: z.string(), name: z.string(), type: z.string(), dim: z.string(), amount: z.number(), lifetime: z.number(), emitting: z.boolean() },
+  particles_set_process_material: { path: z.string(), gravity: z.array(z.number()), direction: z.array(z.number()), spread: z.number(), initial_velocity_min: z.number(), initial_velocity_max: z.number(), scale_min: z.number(), scale_max: z.number(), color: z.array(z.number()) },
+  particles_set_amount: { path: z.string(), amount: z.number() },
+  particles_set_lifetime: { path: z.string(), lifetime: z.number() },
+  particles_set_emitting: { path: z.string(), emitting: z.boolean() },
+  particles_set_texture: { path: z.string(), texture_path: z.string() },
+
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
   gd_hover: { contents: z.string() },
