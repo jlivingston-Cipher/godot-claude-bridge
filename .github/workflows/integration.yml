@@ -42,6 +42,17 @@ name: integration
 #                     probe and the netcoredbg initialize gate must pass — the launch-to-breakpoint
 #                     flow past C#_DAP_REACHED stays log-only. Promoted from experimental the way
 #                     runtime-plane was in session 20. See docs/D4_CSHARP_PLAN.md.
+#   * authoring-plane — boots the editor GUI under Xvfb (like editor-plane) and drives the Group E
+#                     (physics/collision) + Group F (VFX/audio) authoring mutators against the addon
+#                     bridge (:9080), asserting each mutation by reading the live edited scene back
+#                     through separate read tools — node_get_children / node_get_property /
+#                     project_get_setting / resource_load (markers AUTH_PHYS_* / AUTH_VFX_* /
+#                     AUTH_AUDIO_*). Single newest-stable arm — E+F are version-stable engine
+#                     features, unlike the LSP/DAP planes that matrix 4.3/4.7 for capability
+#                     divergence. EXPERIMENTAL / continue-on-error while GUI-boot timing is tuned;
+#                     promote to a required gate once green across a few runs (the
+#                     runtime-plane/csharp-plane pattern). Undo-stack assertion is deferred (no
+#                     bridge action triggers an editor undo yet).
 #
 # Kept separate from ci.yml so a flaky live-engine step can never gate the fast,
 # deterministic build/test/contract checks.
@@ -417,3 +428,61 @@ jobs:
       - name: C# game log tail (on failure)
         if: always()
         run: tail -n 80 /tmp/godot-csharp.log || true
+
+  authoring-plane:
+    name: authoring plane / E+F mutators vs real editor (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # GUI-boot timing tuned on real runners; never blocks a merge until promoted
+    env:
+      # Groups E+F (physics/collision + VFX/audio) are version-stable engine features, so a single
+      # newest-stable arm is enough — unlike the LSP/DAP planes, which matrix 4.3/4.7 to reveal
+      # capability divergence. Overrides the workflow-level GODOT_VERSION for this job only.
+      GODOT_VERSION: "4.7-stable"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: host/package-lock.json
+      - name: Install Godot + Xvfb
+        run: |
+          set -eux
+          sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglu1-mesa
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          GODOT_BIN="$PWD/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Build host
+        working-directory: host
+        run: npm ci && npm run build
+      - name: Import the example project (headless)
+        run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example" --import || true'
+      - name: Boot the editor under Xvfb and run the authoring (E+F) mutator probe
+        working-directory: host
+        env:
+          GODOT_PROJECT: ${{ github.workspace }}/example
+          # A CI runner has no GPU, so Godot's default Vulkan backend segfaults on init before the
+          # addon bridge can start. Force software OpenGL (Mesa llvmpipe), same as the editor/dap planes.
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          set -eux
+          xvfb-run -a -s "-screen 0 1280x720x24" \
+            "$GODOT_BIN" --editor --path "$GODOT_PROJECT" \
+            --rendering-driver opengl3 --audio-driver Dummy \
+            >/tmp/godot-editor-authoring.log 2>&1 &
+          GODOT_PID=$!
+          # The Claude Bridge addon opens :9080 once the editor enables the plugin. Software-rendered
+          # editor boot is slow — wait up to ~120s for the bridge port before driving the mutators.
+          for i in $(seq 1 60); do
+            if node -e "require('net').connect(9080,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "bridge port open"; break
+            fi
+            sleep 2
+          done
+          node test-integration/authoring-plane.integration.mjs
+          kill "$GODOT_PID" 2>/dev/null || true
+      - name: Editor log tail (on failure)
+        if: always()
+        run: tail -n 80 /tmp/godot-editor-authoring.log || true
