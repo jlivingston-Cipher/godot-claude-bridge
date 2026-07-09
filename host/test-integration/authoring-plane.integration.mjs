@@ -60,7 +60,8 @@
 // Markers (grep-able): AUTH_NODE_* / AUTH_SCENE_* / AUTH_SIGNAL_* / AUTH_RESOURCE_* /
 // AUTH_ANIM_* / AUTH_TILESET_* / AUTH_TILEMAP_* / AUTH_PHYS_* / AUTH_VFX_PARTICLES_* /
 // AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UI_* / AUTH_3D_* / AUTH_GROUPI_* / AUTH_K_* (Group K
-// knowledge & search: read-only host-side + ClassDB) / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
+// knowledge & search: read-only host-side + ClassDB) / AUTH_ASSETGEN_* (Group J asset generation:
+// placeholder mint+import, degrade, command backend) / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
 // "OK" or "FAIL"; a trailing AUTH_SUMMARY line reports the tally and the process exits
 // non-zero if any assertion failed. The reachability check is the gate (exit 1 if the
 // addon is unreachable).
@@ -78,6 +79,9 @@
 //   * two extra AudioServer buses on the running editor (global, reset on restart).
 //   * Group I: in-memory ProjectSettings edits (input/autoload/main_scene, save:false ->
 //     vanish on close), a net-zero EditorSettings write, and res://export_presets.cfg on disk.
+//   * Group J: written files under res://_asset_probe_* (sprite/texture/icon/forced/det_*/model/
+//     cmd .tres native resources, sfx.tres) plus their .uid siblings, and a fixture generator script
+//     under the OS temp dir. asset_gen_configure state is restored to the default "none" backend at the end.
 //   Local cleanup (narrow — do NOT `rm example/*.uid`, that deletes tracked sidecars):
 //     rm -rf example/_auth_probe_* example/default_bus_layout.tres example/export_presets.cfg
 //     git checkout -- example/project.godot
@@ -89,6 +93,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url)); // host/test-integration
 const HOST_DIR = path.resolve(THIS_DIR, "..");                 // host/ (the package root)
@@ -116,6 +122,9 @@ const GATED = new Set([
   "inputmap_add_action", "inputmap_add_event", "inputmap_erase_action",
   "project_add_autoload", "project_remove_autoload", "project_add_export_preset",
   "project_set_main_scene", "editorsettings_get_set",
+  // Group J asset-generation writers (asset_gen_configure is read/session-only, not gated):
+  "asset_gen_placeholder", "asset_gen_sprite", "asset_gen_texture", "asset_gen_icon",
+  "asset_gen_audio_sfx", "asset_gen_model",
 ]);
 
 const results = { pass: [], fail: [] };
@@ -879,6 +888,84 @@ async function main() {
     (dm.results.some((r) => r.member === "add_child" && r.kind === "method" && String(r.docs_url).includes("#class-node-method-add-child")))
       ? pass("AUTH_K_DOCS_SEARCH_MEMBER", `count=${dm.count}`)
       : fail("AUTH_K_DOCS_SEARCH_MEMBER", JSON.stringify(dm).slice(0, 200));
+  });
+
+  // ---------------------------------------------------------------- Group J ----
+  // Asset generation. The placeholder path mints deterministic in-engine assets and
+  // imports them (proving the real editor import pipeline); the degrade path returns a
+  // request spec with no file; the command backend round-trips a fixture generator's
+  // output through the editor import. asset_gen_configure is host-side session state.
+  await family("AUTH_ASSETGEN", async () => {
+    const resType = async (p) => (await call("resource_load", { path: p })).type;
+
+    // configure: default is the "none" backend (off by default).
+    const cfg0 = await call("asset_gen_configure");
+    (cfg0.backend === "none" && cfg0.configured === false && Array.isArray(cfg0.supported_kinds) && cfg0.supported_kinds.length === 5)
+      ? pass("AUTH_ASSETGEN_CONFIGURE_DEFAULT", `kinds=${cfg0.supported_kinds.length}`)
+      : fail("AUTH_ASSETGEN_CONFIGURE_DEFAULT", JSON.stringify(cfg0).slice(0, 200));
+
+    // degrade: with no backend a typed generator writes nothing and returns a request spec.
+    const deg = await call("asset_gen_sprite", { prompt: "a hero", to_path: "res://_asset_probe_degrade.png", width: 16 });
+    (deg.status === "no_backend" && deg.path === null && deg.request && deg.request.kind === "sprite" && deg.request.to_path === "res://_asset_probe_degrade.png")
+      ? pass("AUTH_ASSETGEN_DEGRADE", "status=no_backend")
+      : fail("AUTH_ASSETGEN_DEGRADE", JSON.stringify(deg).slice(0, 200));
+
+    // placeholder image kinds: minted as native ImageTexture .tres the editor loads back.
+    for (const [kind, p, w] of [["sprite", "res://_asset_probe_sprite.tres", 32], ["texture", "res://_asset_probe_texture.tres", 32], ["icon", "res://_asset_probe_icon.tres", 32]]) {
+      const r = await call("asset_gen_placeholder", { kind, to_path: p, prompt: "coin", width: w, height: w });
+      const loadedType = await resType(p).catch(() => undefined);
+      (r.status === "placeholder" && r.kind === kind && r.bytes > 0 && String(r.imported_type || "").includes("Texture") && String(loadedType || "").includes("Texture"))
+        ? pass(`AUTH_ASSETGEN_PLACEHOLDER_${kind.toUpperCase()}`, `type=${r.imported_type} bytes=${r.bytes}`)
+        : fail(`AUTH_ASSETGEN_PLACEHOLDER_${kind.toUpperCase()}`, JSON.stringify({ r, loadedType }).slice(0, 220));
+    }
+
+    // placeholder audio: an AudioStreamWAV .tres, loadable.
+    const au = await call("asset_gen_placeholder", { kind: "audio_sfx", to_path: "res://_asset_probe_sfx.tres", prompt: "blip", duration_ms: 120 });
+    const auType = await resType("res://_asset_probe_sfx.tres").catch(() => undefined);
+    (au.status === "placeholder" && au.imported_type === "AudioStreamWAV" && auType === "AudioStreamWAV")
+      ? pass("AUTH_ASSETGEN_PLACEHOLDER_AUDIO", `type=${au.imported_type}`)
+      : fail("AUTH_ASSETGEN_PLACEHOLDER_AUDIO", JSON.stringify({ au, auType }).slice(0, 220));
+
+    // placeholder model: a primitive mesh .tres, loadable.
+    const md = await call("asset_gen_placeholder", { kind: "model", to_path: "res://_asset_probe_model.tres", prompt: "rock", shape: "box" });
+    const mdType = await resType("res://_asset_probe_model.tres").catch(() => undefined);
+    (md.status === "placeholder" && String(md.imported_type || "").includes("Mesh") && String(mdType || "").includes("Mesh"))
+      ? pass("AUTH_ASSETGEN_PLACEHOLDER_MODEL", `type=${md.imported_type}`)
+      : fail("AUTH_ASSETGEN_PLACEHOLDER_MODEL", JSON.stringify({ md, mdType }).slice(0, 220));
+
+    // placeholder:true forces the in-engine path on a typed generator (no backend needed).
+    const forced = await call("asset_gen_texture", { prompt: "brick wall", to_path: "res://_asset_probe_forced.tres", placeholder: true, width: 24 });
+    (forced.status === "placeholder" && forced.kind === "texture" && forced.bytes > 0)
+      ? pass("AUTH_ASSETGEN_PLACEHOLDER_FORCE", `bytes=${forced.bytes}`)
+      : fail("AUTH_ASSETGEN_PLACEHOLDER_FORCE", JSON.stringify(forced).slice(0, 200));
+
+    // determinism: the same prompt+size yields byte-identical PIXELS (the generator is a
+    // pure function of the prompt hash). The only variation between two saves is the random
+    // uid / sub-resource id ResourceSaver stamps into the .tres header (≤ a couple bytes) —
+    // different pixels would differ by hundreds of bytes, so a tight tolerance still catches it.
+    const d1 = await call("asset_gen_placeholder", { kind: "sprite", to_path: "res://_asset_probe_det_a.tres", prompt: "gem", width: 20 });
+    const d2 = await call("asset_gen_placeholder", { kind: "sprite", to_path: "res://_asset_probe_det_b.tres", prompt: "gem", width: 20 });
+    (d1.bytes > 0 && Math.abs(d1.bytes - d2.bytes) <= 8)
+      ? pass("AUTH_ASSETGEN_DETERMINISTIC", `bytes≈${d1.bytes}`)
+      : fail("AUTH_ASSETGEN_DETERMINISTIC", JSON.stringify({ a: d1.bytes, b: d2.bytes }).slice(0, 120));
+
+    // command backend: a fixture generator writes a resource; the host imports it end-to-end
+    // (a native .tres so the round-trip is synchronous — external formats import asynchronously).
+    const fixture = path.join(os.tmpdir(), "breakpoint_assetgen_fixture.cjs");
+    fs.writeFileSync(fixture, `const fs=require('fs');fs.writeFileSync(process.argv[2],'[gd_resource type="Resource" format=3]\\n\\n[resource]\\n');\n`);
+    const cfgc = await call("asset_gen_configure", { backend: "command", command: `node ${fixture} {output}`, provider: "fixture" });
+    if (cfgc.backend !== "command") {
+      fail("AUTH_ASSETGEN_COMMAND_CONFIGURE", JSON.stringify(cfgc).slice(0, 160));
+    } else {
+      pass("AUTH_ASSETGEN_COMMAND_CONFIGURE", `provider=${cfgc.provider}`);
+      const gen = await call("asset_gen_model", { prompt: "backend rock", to_path: "res://_asset_probe_cmd.tres" });
+      const cmdType = await resType("res://_asset_probe_cmd.tres").catch(() => undefined);
+      (gen.status === "generated" && gen.backend === "command" && gen.bytes > 0 && gen.imported_type === "Resource" && cmdType === "Resource")
+        ? pass("AUTH_ASSETGEN_COMMAND", `type=${gen.imported_type} bytes=${gen.bytes}`)
+        : fail("AUTH_ASSETGEN_COMMAND", JSON.stringify({ gen, cmdType }).slice(0, 220));
+    }
+    // Restore the default backend so nothing leaks into other state.
+    await call("asset_gen_configure", { backend: "none" });
   });
 
   // ---------------------------------------------------------------- undo / redo ----

@@ -512,6 +512,39 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     truncated: z.boolean(),
     results: z.array(z.object({ class: z.string(), member: z.string(), kind: z.string(), docs_url: z.string() })),
   },
+
+  // ---- Group J: AI asset generation (tools/assetgen.ts) ----
+  // asset_gen_configure reports/sets the session backend (the feature flag).
+  asset_gen_configure: {
+    backend: z.string(),
+    provider: z.string().nullable(),
+    command: z.string().nullable(),
+    configured: z.boolean(),
+    supported_kinds: z.array(z.string()),
+    note: z.string(),
+  },
+  // The six generators share one envelope. It must validate all three success
+  // outcomes — "placeholder" (in-engine), "generated" (command backend) and
+  // "no_backend" (degraded) — so only the always-present fields are pinned
+  // (path/prompt nullable; width/height/bytes/imported_type/request optional).
+  ...(() => {
+    const assetGenResult: z.ZodRawShape = {
+      status: z.string(),
+      kind: z.string(),
+      backend: z.string(),
+      path: z.string().nullable(),
+      prompt: z.string().nullable(),
+      message: z.string(),
+    };
+    return {
+      asset_gen_placeholder: assetGenResult,
+      asset_gen_sprite: assetGenResult,
+      asset_gen_texture: assetGenResult,
+      asset_gen_icon: assetGenResult,
+      asset_gen_audio_sfx: assetGenResult,
+      asset_gen_model: assetGenResult,
+    };
+  })(),
 };
 
 /**

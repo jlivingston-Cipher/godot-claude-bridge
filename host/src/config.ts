@@ -65,6 +65,26 @@ export interface Config {
   runtimeHost: string;
   runtimePort: number;
   runtimeTimeoutMs: number;
+  /**
+   * Group J — AI asset generation backend selection (the feature "flag").
+   * `assetGenBackend` is one of "none" | "placeholder" | "command":
+   *   - "none"        : OFF by default. The asset_gen_* tools degrade to a clear
+   *                     "no generation backend configured" and return a request
+   *                     spec the connected multimodal client can fulfil — the MCP
+   *                     server never calls a model itself.
+   *   - "placeholder" : deterministic, in-engine procedural stand-ins (no model).
+   *   - "command"     : delegate to a configured local backend. `assetGenCommand`
+   *                     is an argv TEMPLATE whose tokens {kind} {prompt} {output}
+   *                     {width} {height} {format} are substituted per-argument (no
+   *                     shell), and the command is responsible for writing the file
+   *                     to {output}. Same bring-your-own-tool trust model as the
+   *                     C# OmniSharp / netcoredbg commands above.
+   * All are session-overridable at runtime via the asset_gen_configure tool.
+   */
+  assetGenBackend: string;
+  assetGenCommand: string;
+  assetGenProvider: string;
+  assetGenTimeoutMs: number;
 }
 
 export function loadConfig(): Config {
@@ -105,5 +125,10 @@ export function loadConfig(): Config {
     runtimeHost: process.env.CLAUDE_RUNTIME_HOST ?? "127.0.0.1",
     runtimePort: Number.parseInt(process.env.CLAUDE_RUNTIME_PORT ?? "9081", 10),
     runtimeTimeoutMs: Number.parseInt(process.env.CLAUDE_RUNTIME_TIMEOUT_MS ?? "15000", 10),
+    // Group J: asset generation is OFF by default (backend "none" → tools degrade).
+    assetGenBackend: process.env.BREAKPOINT_ASSETGEN_BACKEND ?? "none",
+    assetGenCommand: process.env.BREAKPOINT_ASSETGEN_CMD ?? "",
+    assetGenProvider: process.env.BREAKPOINT_ASSETGEN_PROVIDER ?? "",
+    assetGenTimeoutMs: Number.parseInt(process.env.BREAKPOINT_ASSETGEN_TIMEOUT_MS ?? "120000", 10),
   };
 }
