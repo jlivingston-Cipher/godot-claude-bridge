@@ -232,6 +232,13 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   shadermaterial_create: { path: z.string(), target_property: z.string(), type: z.string(), shader_path: z.string() },
   shadermaterial_set_shader: { path: z.string(), shader_path: z.string() },
   shadermaterial_set_param: { path: z.string(), param: z.string(), value: encodedValue },
+  // ---- Group F batch 3: audio (tools/editor.ts -> operations.gd _audio_*) ----
+  audio_player_create: { path: z.string(), name: z.string(), type: z.string(), dim: z.string(), autoplay: z.boolean(), volume_db: z.number(), bus: z.string(), stream_path: z.string() },
+  audio_set_stream: { path: z.string(), stream_path: z.string() },
+  audio_bus_add: { index: z.number(), name: z.string(), send: z.string(), count: z.number() },
+  audio_bus_add_effect: { bus: z.string(), bus_index: z.number(), effect: z.string(), effect_count: z.number() },
+  audio_bus_set_volume: { bus: z.string(), bus_index: z.number(), volume_db: z.number() },
+  audio_set_bus_layout: { saved: z.string(), bus_count: z.number() },
 
   // ---- Plane D: semantic / LSP (tools/lsp.ts) ----
   gd_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },
