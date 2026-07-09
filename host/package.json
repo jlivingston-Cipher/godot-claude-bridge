@@ -1,6 +1,6 @@
 {
   "name": "godot-claude-bridge",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "MCP host exposing Godot to Claude across four planes (CLI, live editor, LSP+DAP, runtime) with elicitation-gated destructive tools, long jobs on the formal MCP task model, captured console output, and MCP resources.",
   "type": "module",
   "license": "MIT",
