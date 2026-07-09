@@ -24,12 +24,6 @@ reimplementing them, so behavior tracks the engine you already have.
 
 Breakpoint MCP is organized into four capability **planes** (242 tools + 5 resources):
 
-- **Plane B — Headless CLI** (`godot_*`): launch the editor, run the project, export,
-  import, and run headless scripts or tests — no editor window required. Long-running
-  jobs (`godot_export`, `godot_import`, `godot_run_headless_script`) run on the formal
-  MCP **task model** (create → poll → await → cancel), while simpler clients still get a
-  blocking result. `godot_run_managed` / `godot_output` capture the game's full console.
-
 - **Plane A — Live Editor Bridge** (~145 tools: `editor_*`, `scene_*`, `node_*`,
   `signal_*`, `resource_*`, `filesystem_*`, `anim_*`, and more): a Godot `EditorPlugin`
   opens a loopback server the host drives for scene/node/resource CRUD **with full
@@ -39,13 +33,11 @@ Breakpoint MCP is organized into four capability **planes** (242 tools + 5 resou
   `cloudsave_scaffold`, `auth_scaffold`), AI asset generation (`asset_*`), and a
   read-only documentation / code-lookup family.
 
-- **Plane D — Semantic & Debugging** (`gd_*`, `dbg_*`, plus C# `cs_*` / `cs_dbg_*`): the
-  host connects as a client to Godot's built-in **GDScript language server** (port 6005)
-  and **debug adapter** (port 6006) — completion, hover, definition/references, rename,
-  symbols, signature help, diagnostics, plus real debugging: breakpoints, stepping,
-  stack/scopes/variables, watch expressions, and expression evaluation. A parallel C#
-  plane speaks OmniSharp (LSP) and netcoredbg (DAP). Capabilities are **feature-detected
-  per engine build** and degrade to a clear "unsupported" message rather than erroring.
+- **Plane B — Headless CLI** (`godot_*`): launch the editor, run the project, export,
+  import, and run headless scripts or tests — no editor window required. Long-running
+  jobs (`godot_export`, `godot_import`, `godot_run_headless_script`) run on the formal
+  MCP **task model** (create → poll → await → cancel), while simpler clients still get a
+  blocking result. `godot_run_managed` / `godot_output` capture the game's full console.
 
 - **Plane C — Runtime Bridge** (`runtime_*`): an autoload (`BreakpointRuntimeBridge`) the
   plugin registers into every run opens a loopback server **inside the running game** —
@@ -53,6 +45,14 @@ Breakpoint MCP is organized into four capability **planes** (242 tools + 5 resou
   injection for play-testing, performance monitors, and in-game frame capture. On Godot
   4.5+ it also captures the game's console (`print()`, warnings, errors) with zero
   configuration.
+
+- **Plane D — Semantic & Debugging** (`gd_*`, `dbg_*`, plus C# `cs_*` / `cs_dbg_*`): the
+  host connects as a client to Godot's built-in **GDScript language server** (port 6005)
+  and **debug adapter** (port 6006) — completion, hover, definition/references, rename,
+  symbols, signature help, diagnostics, plus real debugging: breakpoints, stepping,
+  stack/scopes/variables, watch expressions, and expression evaluation. A parallel C#
+  plane speaks OmniSharp (LSP) and netcoredbg (DAP). Capabilities are **feature-detected
+  per engine build** and degrade to a clear "unsupported" message rather than erroring.
 
 Five **MCP resources** (`godot://scene-tree`, `godot://editor-state`,
 `godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose

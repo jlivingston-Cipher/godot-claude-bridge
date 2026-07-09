@@ -405,6 +405,17 @@ command line). Others need the editor open with the addon enabled, or the game r
                /undo/redo     live SceneTree  diagnostics   stepping, eval
 ```
 
+### Plane A — Live Editor Bridge (roughly 145 tools)
+
+The largest plane. It drives the editor through the addon's loopback server on
+`127.0.0.1:9080`, so it **requires the editor open with the plugin enabled**. It covers
+scene, node, and resource CRUD with **full undo/redo**, project settings, `ClassDB`
+introspection, selection, and editor screenshots — plus a broad set of authoring
+families: animation, tilemaps, physics/collision, particles and audio, UI/Control and
+theming, 3D and navigation, the input map, native multiplayer authoring, backend-SDK
+scaffolding, AI asset generation, and read-only knowledge/lookup tools. Every mutation
+here is wrapped in Godot's undo system.
+
 ### Plane B — Headless CLI (`godot_*`)
 
 Runs the Godot binary on the command line. **Works with no editor open.** Use it to check
@@ -418,16 +429,13 @@ on the formal **MCP task model**: a task-aware client creates the job and then p
 awaits its result, or cancels it (`tasks/get` / `tasks/result` / `tasks/cancel`). A plain
 client still gets the blocking result, exactly as before.
 
-### Plane A — Live Editor Bridge (roughly 145 tools)
+### Plane C — Runtime Bridge (`runtime_*`, 9 tools)
 
-The largest plane. It drives the editor through the addon's loopback server on
-`127.0.0.1:9080`, so it **requires the editor open with the plugin enabled**. It covers
-scene, node, and resource CRUD with **full undo/redo**, project settings, `ClassDB`
-introspection, selection, and editor screenshots — plus a broad set of authoring
-families: animation, tilemaps, physics/collision, particles and audio, UI/Control and
-theming, 3D and navigation, the input map, native multiplayer authoring, backend-SDK
-scaffolding, AI asset generation, and read-only knowledge/lookup tools. Every mutation
-here is wrapped in Godot's undo system.
+An autoload (`BreakpointRuntimeBridge`) that lives inside the **running game** and listens
+on `127.0.0.1:9081`. Through it, the assistant can read the live SceneTree, get and set runtime
+properties, call methods, emit signals, inject input for play-testing, read performance
+monitors, and capture in-game frames. On **Godot 4.5+** it additionally captures the
+game's console (`print()`, warnings, errors) with zero configuration.
 
 ### Plane D — Semantic and Debugging
 
@@ -443,14 +451,6 @@ There is also a **C# plane**: `cs_*` (semantic, via OmniSharp) and `cs_dbg_*` (d
 via netcoredbg). Many capabilities across this plane are **feature-detected** per Godot
 build and per adapter; where a capability is not implemented, the tool returns a clear
 "unsupported" message instead of hanging or erroring.
-
-### Plane C — Runtime Bridge (`runtime_*`, 9 tools)
-
-An autoload (`BreakpointRuntimeBridge`) that lives inside the **running game** and listens
-on `127.0.0.1:9081`. Through it, the assistant can read the live SceneTree, get and set runtime
-properties, call methods, emit signals, inject input for play-testing, read performance
-monitors, and capture in-game frames. On **Godot 4.5+** it additionally captures the
-game's console (`print()`, warnings, errors) with zero configuration.
 
 ### The 5 MCP resources
 
@@ -541,20 +541,6 @@ exists and where to look; for the exhaustive per-tool input/output JSON Schemas,
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
 
-### Plane B — Headless CLI and managed process (`godot_*`)
-
-Works without the editor open.
-
-- **`godot_version`** — the configured binary's version string.
-- **`godot_launch_editor`** — open the editor for the project (prerequisite for `editor_*`).
-- **`godot_run_project`** — run the project (detached), optionally from a chosen scene.
-- **`godot_export`** *(task, destructive)* — headless export via a preset.
-- **`godot_import`** *(task)* — headless (re)import of project assets.
-- **`godot_run_headless_script`** *(task, higher-trust — runs GDScript)* — run a script
-  headlessly; ideal for GdUnit4 / GUT test runners and batch tools.
-- **`godot_run_managed`** / **`godot_output`** / **`godot_stop`** — run the game as a
-  managed child process with captured stdout/stderr, read that console output, and stop it.
-
 ### Plane A — Editor bridge
 
 Requires the editor open with the plugin enabled. Every mutation is undoable via Godot's
@@ -611,6 +597,27 @@ undo system unless noted.
   `find_symbol`, `find_usages`, `example_snippet` (host-side), plus `class_reference` and
   `docs_search` (editor-side, `ClassDB`-backed).
 
+### Plane B — Headless CLI and managed process (`godot_*`)
+
+Works without the editor open.
+
+- **`godot_version`** — the configured binary's version string.
+- **`godot_launch_editor`** — open the editor for the project (prerequisite for `editor_*`).
+- **`godot_run_project`** — run the project (detached), optionally from a chosen scene.
+- **`godot_export`** *(task, destructive)* — headless export via a preset.
+- **`godot_import`** *(task)* — headless (re)import of project assets.
+- **`godot_run_headless_script`** *(task, higher-trust — runs GDScript)* — run a script
+  headlessly; ideal for GdUnit4 / GUT test runners and batch tools.
+- **`godot_run_managed`** / **`godot_output`** / **`godot_stop`** — run the game as a
+  managed child process with captured stdout/stderr, read that console output, and stop it.
+
+### Plane C — Runtime bridge (`runtime_*`, 9 tools)
+
+Requires the game running. `runtime_get_tree`, `runtime_get_property`,
+`runtime_set_property` *(destructive)*, `runtime_call_method` *(destructive)*,
+`runtime_emit_signal` *(destructive)*, `runtime_inject_input` *(destructive)*,
+`runtime_get_monitors`, `runtime_screenshot`, and `runtime_get_log`.
+
 ### Plane D — Semantic and debugging
 
 - **GDScript language server (`gd_*`)** — `gd_completion`, `gd_hover`, `gd_definition`,
@@ -631,13 +638,6 @@ undo system unless noted.
 - **C# debug adapter (`cs_dbg_*`)** — the equivalent set for .NET via netcoredbg
   (launch, attach, breakpoints, stepping, stack/scopes/variables, watch, evaluate,
   set-variable, exception breakpoints, restart).
-
-### Plane C — Runtime bridge (`runtime_*`, 9 tools)
-
-Requires the game running. `runtime_get_tree`, `runtime_get_property`,
-`runtime_set_property` *(destructive)*, `runtime_call_method` *(destructive)*,
-`runtime_emit_signal` *(destructive)*, `runtime_inject_input` *(destructive)*,
-`runtime_get_monitors`, `runtime_screenshot`, and `runtime_get_log`.
 
 ### MCP resources
 
