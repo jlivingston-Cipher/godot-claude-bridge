@@ -177,6 +177,22 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _body_set_collision_layer(params)
 		"body.set_collision_mask":
 			return _body_set_collision_mask(params)
+		"area.set_monitoring":
+			return _area_set_monitoring(params)
+		"area.set_gravity":
+			return _area_set_gravity(params)
+		"joint.create":
+			return _joint_create(params)
+		"joint.set_bodies":
+			return _joint_set_bodies(params)
+		"collisionpolygon.add":
+			return _collisionpolygon_add(params)
+		"rigidbody.set_properties":
+			return _rigidbody_set_properties(params)
+		"body.set_physics_material":
+			return _body_set_physics_material(params)
+		"physics.set_gravity":
+			return _physics_set_gravity(params)
 		"selection.get":
 			return _ok(_selection_get())
 		"selection.set":
@@ -2283,3 +2299,263 @@ func _body_set_collision_field(params: Dictionary, field: String, key: String) -
 	var result := {"path": _path_of(root, node)}
 	result[field] = new_value
 	return _ok(result)
+
+
+# ---------------------------------------------------------------- Group E batch 2 ----
+# Physics & collision, part 2: areas (monitoring / gravity zones), joints, collision
+# polygons, rigidbody tuning, per-body physics material — all in-scene node mutators,
+# undoable via EditorUndoRedoManager and ungated (the node_* model). _physics_set_gravity
+# writes ProjectSettings (no undo) and is gated host-side like project_set_setting.
+
+func _area_set_monitoring(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is Area2D or node is Area3D):
+		return _err("bad_type", "%s is not an Area2D/3D" % node.name)
+	if not (params.has("monitoring") or params.has("monitorable")):
+		return _err("bad_params", "Provide 'monitoring' and/or 'monitorable'")
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s monitoring" % node.name)
+	if params.has("monitoring"):
+		ur.add_do_property(node, "monitoring", bool(params.get("monitoring")))
+		ur.add_undo_property(node, "monitoring", node.get("monitoring"))
+	if params.has("monitorable"):
+		ur.add_do_property(node, "monitorable", bool(params.get("monitorable")))
+		ur.add_undo_property(node, "monitorable", node.get("monitorable"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "monitoring": node.get("monitoring"), "monitorable": node.get("monitorable")})
+
+
+func _area_space_override(s: String) -> int:
+	var m := {"disabled": 0, "combine": 1, "combine_replace": 2, "replace": 3, "replace_combine": 4}
+	return int(m.get(s, -1))
+
+
+func _area_space_override_name(v: int) -> String:
+	var names := ["disabled", "combine", "combine_replace", "replace", "replace_combine"]
+	if v >= 0 and v < names.size():
+		return names[v]
+	return str(v)
+
+
+func _area_set_gravity(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is Area2D or node is Area3D):
+		return _err("bad_type", "%s is not an Area2D/3D" % node.name)
+	if not (params.has("space_override") or params.has("gravity") or params.has("direction") or params.has("point")):
+		return _err("bad_params", "Provide at least one of space_override|gravity|direction|point")
+	var so := -1
+	if params.has("space_override"):
+		so = _area_space_override(String(params.get("space_override")))
+		if so < 0:
+			return _err("bad_params", "Unknown space_override '%s'" % params.get("space_override"))
+	var dim3 := node is Area3D
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s gravity" % node.name)
+	if params.has("space_override"):
+		ur.add_do_property(node, "gravity_space_override", so)
+		ur.add_undo_property(node, "gravity_space_override", node.get("gravity_space_override"))
+	if params.has("gravity"):
+		ur.add_do_property(node, "gravity", float(params.get("gravity")))
+		ur.add_undo_property(node, "gravity", node.get("gravity"))
+	if params.has("direction"):
+		var dir = _to_vec3(params.get("direction")) if dim3 else _to_vec2(params.get("direction"))
+		ur.add_do_property(node, "gravity_direction", dir)
+		ur.add_undo_property(node, "gravity_direction", node.get("gravity_direction"))
+	if params.has("point"):
+		ur.add_do_property(node, "gravity_point", bool(params.get("point")))
+		ur.add_undo_property(node, "gravity_point", node.get("gravity_point"))
+	ur.commit_action()
+	var dv = node.get("gravity_direction")
+	var dir_out: Array = ([dv.x, dv.y, dv.z] if dim3 else [dv.x, dv.y])
+	return _ok({"path": _path_of(root, node), "space_override": _area_space_override_name(int(node.get("gravity_space_override"))), "gravity": float(node.get("gravity")), "direction": dir_out, "gravity_point": bool(node.get("gravity_point")), "dim": ("3d" if dim3 else "2d")})
+
+
+func _joint_class(kind: String, dim3: bool) -> String:
+	if dim3:
+		if kind == "pin":
+			return "PinJoint3D"
+		if kind == "hinge":
+			return "HingeJoint3D"
+		if kind == "slider":
+			return "SliderJoint3D"
+		if kind == "cone_twist":
+			return "ConeTwistJoint3D"
+		if kind == "generic6dof":
+			return "Generic6DOFJoint3D"
+		return ""
+	if kind == "pin":
+		return "PinJoint2D"
+	if kind == "groove":
+		return "GrooveJoint2D"
+	if kind == "spring":
+		return "DampedSpringJoint2D"
+	return ""
+
+
+func _joint_create(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var kind := String(params.get("type", ""))
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	var cls := _joint_class(kind, dim3)
+	if cls == "":
+		return _err("bad_params", "Unknown joint type '%s' for %s (2D: pin|groove|spring; 3D: pin|hinge|slider|cone_twist|generic6dof)" % [kind, ("3d" if dim3 else "2d")])
+	if not ClassDB.can_instantiate(cls):
+		return _err("bad_type", "Cannot instantiate class: %s" % cls)
+	var node: Node = ClassDB.instantiate(cls)
+	node.name = String(params.get("name", cls))
+	if params.has("node_a"):
+		node.set("node_a", NodePath(String(params.get("node_a"))))
+	if params.has("node_b"):
+		node.set("node_b", NodePath(String(params.get("node_b"))))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": cls, "joint": kind, "dim": ("3d" if dim3 else "2d"), "node_a": String(node.get("node_a")), "node_b": String(node.get("node_b"))})
+
+
+func _joint_set_bodies(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is Joint2D or node is Joint3D):
+		return _err("bad_type", "%s is not a Joint2D/3D" % node.name)
+	if not (params.has("node_a") or params.has("node_b")):
+		return _err("bad_params", "Provide 'node_a' and/or 'node_b'")
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s bodies" % node.name)
+	if params.has("node_a"):
+		ur.add_do_property(node, "node_a", NodePath(String(params.get("node_a"))))
+		ur.add_undo_property(node, "node_a", node.get("node_a"))
+	if params.has("node_b"):
+		ur.add_do_property(node, "node_b", NodePath(String(params.get("node_b"))))
+		ur.add_undo_property(node, "node_b", node.get("node_b"))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "node_a": String(node.get("node_a")), "node_b": String(node.get("node_b"))})
+
+
+func _collisionpolygon_add(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	var pts := _to_packed_vec2(params.get("points"))
+	if pts.size() < 3:
+		return _err("bad_params", "collisionpolygon needs at least 3 points")
+	var node: Node
+	if dim3:
+		var c3 := CollisionPolygon3D.new()
+		c3.set("polygon", pts)
+		if params.has("depth"):
+			c3.set("depth", float(params.get("depth")))
+		node = c3
+	else:
+		var c2 := CollisionPolygon2D.new()
+		c2.set("polygon", pts)
+		if params.has("build_mode"):
+			var bm := 1 if String(params.get("build_mode")) == "segments" else 0
+			c2.set("build_mode", bm)
+		node = c2
+	node.name = String(params.get("name", node.get_class()))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % node.name)
+	ur.add_do_method(parent, "add_child", node)
+	ur.add_do_method(node, "set_owner", root)
+	ur.add_do_reference(node)
+	ur.add_undo_method(parent, "remove_child", node)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "name": String(node.name), "type": node.get_class(), "dim": ("3d" if dim3 else "2d"), "points": pts.size()})
+
+
+func _rigidbody_set_properties(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is RigidBody2D or node is RigidBody3D):
+		return _err("bad_type", "%s is not a RigidBody2D/3D" % node.name)
+	var provided: Array = []
+	for f in ["mass", "gravity_scale", "linear_damp", "angular_damp"]:
+		if params.has(f):
+			provided.append(f)
+	if provided.is_empty():
+		return _err("bad_params", "Provide at least one of mass|gravity_scale|linear_damp|angular_damp")
+	if params.has("mass") and float(params.get("mass")) <= 0.0:
+		return _err("bad_params", "'mass' must be > 0")
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s physics props" % node.name)
+	for f in provided:
+		ur.add_do_property(node, f, float(params.get(f)))
+		ur.add_undo_property(node, f, node.get(f))
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "mass": float(node.get("mass")), "gravity_scale": float(node.get("gravity_scale")), "linear_damp": float(node.get("linear_damp")), "angular_damp": float(node.get("angular_damp"))})
+
+
+func _body_set_physics_material(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if not (node is StaticBody2D or node is StaticBody3D or node is RigidBody2D or node is RigidBody3D):
+		return _err("bad_type", "%s has no physics_material_override (need StaticBody/RigidBody 2D/3D)" % node.name)
+	var mat := PhysicsMaterial.new()
+	mat.friction = float(params.get("friction", 1.0))
+	mat.bounce = float(params.get("bounce", 0.0))
+	mat.rough = bool(params.get("rough", false))
+	mat.absorbent = bool(params.get("absorbent", false))
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set %s physics material" % node.name)
+	ur.add_do_property(node, "physics_material_override", mat)
+	ur.add_undo_property(node, "physics_material_override", node.get("physics_material_override"))
+	ur.add_do_reference(mat)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "friction": mat.friction, "bounce": mat.bounce, "rough": mat.rough, "absorbent": mat.absorbent})
+
+
+func _physics_set_gravity(params: Dictionary) -> Dictionary:
+	var dim3 := String(params.get("dim", "2d")) == "3d"
+	var prefix := "physics/3d/" if dim3 else "physics/2d/"
+	if not (params.has("magnitude") or params.has("direction")):
+		return _err("bad_params", "Provide 'magnitude' and/or 'direction'")
+	if params.has("magnitude"):
+		ProjectSettings.set_setting(prefix + "default_gravity", float(params.get("magnitude")))
+	if params.has("direction"):
+		var dir = _to_vec3(params.get("direction")) if dim3 else _to_vec2(params.get("direction"))
+		ProjectSettings.set_setting(prefix + "default_gravity_vector", dir)
+	var saved := false
+	if bool(params.get("save", false)):
+		var e := ProjectSettings.save()
+		if e != OK:
+			return _err("save_failed", "ProjectSettings.save() returned %d" % e)
+		saved = true
+	var dv = ProjectSettings.get_setting(prefix + "default_gravity_vector", null)
+	var dir_out: Array = ([dv.x, dv.y, dv.z] if dim3 else [dv.x, dv.y])
+	return _ok({"dim": ("3d" if dim3 else "2d"), "magnitude": float(ProjectSettings.get_setting(prefix + "default_gravity", 0.0)), "direction": dir_out, "saved": saved})

@@ -6,6 +6,34 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Group E (batch 2): Areas, joints, collision polygons, rigidbody & material tuning (8 tools, 157 → 165)
+- Completes **Group E (Physics & collision)** from the breadth-superset plan — batch 2 carries the tool count past
+  godot-mcp-pro's 162-tool ceiling to **165**. Eight A/Editor tools: seven mutate the edited scene, are undoable via
+  `EditorUndoRedoManager`, and **ungated** (the `node_*` model); one writes ProjectSettings and is **gated** like
+  `project_set_setting`:
+  - **`area_set_monitoring`** — set `monitoring` / `monitorable` on an `Area2D/3D`.
+  - **`area_set_gravity`** — set an `Area2D/3D`'s local gravity override: `space_override`, magnitude, direction, point.
+  - **`joint_create`** — add a joint node via `type` × `dim` (2D: `PinJoint2D`/`GrooveJoint2D`/`DampedSpringJoint2D`; 3D: `PinJoint3D`/`HingeJoint3D`/`SliderJoint3D`/`ConeTwistJoint3D`/`Generic6DOFJoint3D`), optionally wiring `node_a`/`node_b`.
+  - **`joint_set_bodies`** — set `node_a` / `node_b` on an existing `Joint2D/3D`.
+  - **`collisionpolygon_add`** — add a `CollisionPolygon2D/3D` from a 2D outline (3D extruded by `depth`; 2D `build_mode`).
+  - **`rigidbody_set_properties`** — tune a `RigidBody2D/3D`: `mass` (> 0), `gravity_scale`, `linear_damp`, `angular_damp`.
+  - **`body_set_physics_material`** — create a `PhysicsMaterial` and assign it as `physics_material_override` on a StaticBody/RigidBody (2D/3D): `friction`, `bounce`, `rough`, `absorbent`.
+  - **`physics_set_gravity`** — write project `physics/{2d,3d}/default_gravity` (+ `default_gravity_vector`); `save` persists to `project.godot`. Gated.
+- Same rigor bar as the earlier groups: in-scene node authoring uses the `node_add` do/undo-reference pattern; property
+  mutators use `add_do_property` / `add_undo_property`; the new `PhysicsMaterial` rides along via `add_do_reference`.
+  The eight joint classes (2D+3D), Area `monitoring`/`monitorable` + gravity props, RigidBody props, `CollisionPolygon2D/3D`
+  (`polygon` is a `PackedVector2Array` for both dims), `PhysicsMaterial` + `physics_material_override`, and the four
+  `physics/{2d,3d}/default_gravity(_vector)` ProjectSettings keys were probed live on Godot 4.7 before design; the real
+  `operations.gd` helpers were unit-exercised, and a `Root → StaticBody2D(PhysicsMaterial) + PinJoint2D(node_a/node_b) +
+  CollisionPolygon2D` scene was packed to a `.tscn`, saved, and reloaded — the joint NodePaths, the inline material
+  (friction/bounce), and the polygon all survive the round-trip. Handlers in both `addons/claude_bridge/operations.gd`
+  copies (dispatch + `_area_set_monitoring` / `_area_set_gravity` / `_joint_create` / `_joint_set_bodies` /
+  `_collisionpolygon_add` / `_rigidbody_set_properties` / `_body_set_physics_material` / `_physics_set_gravity`),
+  statically parse-checked against local Godot 4.7; host registrations in `host/src/tools/editor.ts`
+  (`physics_set_gravity` gated); output schemas in `host/src/schemas.ts`; `registration.test.ts` `EXPECTED_TOOL_COUNT`
+  157 → 165; `docs/TOOL_CATALOG.md` (Group E section + index). `contract_check` 165; host tests 173. No version bump —
+  the E+F release cut re-stamps all five version stamps together.
+
 ### Added — Group E (batch 1): Physics bodies & collision shapes (4 tools, 153 → 157)
 - Starts **Group E (Physics & collision)** from the breadth-superset plan — the group that crosses
   godot-mcp-pro's 162-tool ceiling (at ~166 once the group lands). Four A/Editor tools that author physics
