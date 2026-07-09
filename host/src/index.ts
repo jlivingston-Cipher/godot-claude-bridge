@@ -18,6 +18,7 @@ import { registerRuntimeTools } from "./tools/runtime.js";
 import { registerProcessTools } from "./tools/processes.js";
 import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerAssetGenTools } from "./tools/assetgen.js";
+import { registerNetcodeTools } from "./tools/netcode.js";
 import { registerResources } from "./tools/resources.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
@@ -99,6 +100,10 @@ async function main(): Promise<void> {
   // Group J: AI asset generation (delegated backend / connected client; degrades
   // to a request spec when no backend is configured). Writes + imports via the bridge.
   registerAssetGenTools(server, bridge, config);
+  // Group M: native multiplayer & backend scaffolding (mp_*). Pure authoring —
+  // undoable node ops (spawner/synchronizer/authority) + gated GDScript codegen
+  // (enet/webrtc peer, @rpc wiring, lobby). Hosts nothing; scaffolds everything.
+  registerNetcodeTools(server, bridge, config);
   // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
   registerResources(server, bridge, runtime);
   // D3: resource subscriptions — push notifications/resources/updated when a

@@ -61,7 +61,9 @@
 // AUTH_ANIM_* / AUTH_TILESET_* / AUTH_TILEMAP_* / AUTH_PHYS_* / AUTH_VFX_PARTICLES_* /
 // AUTH_VFX_SHADER_* / AUTH_AUDIO_* / AUTH_UI_* / AUTH_3D_* / AUTH_GROUPI_* / AUTH_K_* (Group K
 // knowledge & search: read-only host-side + ClassDB) / AUTH_ASSETGEN_* (Group J asset generation:
-// placeholder mint+import, degrade, command backend) / AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
+// placeholder mint+import, degrade, command backend) / AUTH_MP_* (Group M netcode scaffolding: spawner /
+// synchronizer / authority node authoring + undo/redo, enet/lobby codegen, @rpc wiring, WebRTC feature-detect) /
+// AUTH_UNDO_* / AUTH_REDO_*. Every marker prints
 // "OK" or "FAIL"; a trailing AUTH_SUMMARY line reports the tally and the process exits
 // non-zero if any assertion failed. The reachability check is the gate (exit 1 if the
 // addon is unreachable).
@@ -82,6 +84,9 @@
 //   * Group J: written files under res://_asset_probe_* (sprite/texture/icon/forced/det_*/model/
 //     cmd .tres native resources, sfx.tres) plus their .uid siblings, and a fixture generator script
 //     under the OS temp dir. asset_gen_configure state is restored to the default "none" backend at the end.
+//   * Group M: written GDScript files res://_auth_probe_enet.gd (also mutated by mp_wire_rpc),
+//     _auth_probe_lobby.gd, and (only where the WebRTC module is present) _auth_probe_webrtc.gd, plus
+//     their .uid siblings — all covered by the _auth_probe_* cleanup glob below.
 //   Local cleanup (narrow — do NOT `rm example/*.uid`, that deletes tracked sidecars):
 //     rm -rf example/_auth_probe_* example/default_bus_layout.tres example/export_presets.cfg
 //     git checkout -- example/project.godot
@@ -125,6 +130,8 @@ const GATED = new Set([
   // Group J asset-generation writers (asset_gen_configure is read/session-only, not gated):
   "asset_gen_placeholder", "asset_gen_sprite", "asset_gen_texture", "asset_gen_icon",
   "asset_gen_audio_sfx", "asset_gen_model",
+  // Group M netcode codegen writers (the three node authoring tools are ungated/undoable):
+  "mp_setup_enet_peer", "mp_setup_webrtc_peer", "mp_wire_rpc", "mp_scaffold_lobby",
 ]);
 
 const results = { pass: [], fail: [] };
@@ -966,6 +973,84 @@ async function main() {
     }
     // Restore the default backend so nothing leaks into other state.
     await call("asset_gen_configure", { backend: "none" });
+  });
+
+  // ---------------------------------------------------------------- Group M: netcode scaffolding ----
+  // mp_add_spawner / mp_add_synchronizer / mp_set_authority mutate the edited scene (undoable, ungated);
+  // the four codegen tools write a res:// .gd (gated) — asserted via an independent resource_load
+  // (a written .gd loads back as a GDScript). mp_setup_webrtc_peer is feature-detected: on a build
+  // without the WebRTC module it degrades to status:"unsupported" (nothing written) — accepted either way.
+  await family("AUTH_MP", async () => {
+    const ENET = "res://_auth_probe_enet.gd";
+    const WEBRTC = "res://_auth_probe_webrtc.gd";
+    const LOBBY = "res://_auth_probe_lobby.gd";
+    const authorityOf = async (p) => (await call("node_call_method", { path: p, method: "get_multiplayer_authority", confirm: true })).result;
+
+    // mp_add_spawner (undoable) — forward + undo + redo; spawn_path + a spawnable scene echo.
+    const spawner = (await call("mp_add_spawner", { parent_path: ".", name: "AuthSpawner", spawn_path: "../AuthSpawnRoot", spawnable_scenes: ["res://main.tscn"] }));
+    const spMade = await hasChild(".", spawner.path, "MultiplayerSpawner");
+    const su = await call("editor_undo");
+    const spGone = !(await hasChild(".", spawner.path, "MultiplayerSpawner"));
+    (spMade && spawner.spawnable_scenes.includes("res://main.tscn") && su.performed === true && spGone)
+      ? pass("AUTH_MP_ADD_SPAWNER", `spawn_path=${spawner.spawn_path}`)
+      : fail("AUTH_MP_ADD_SPAWNER", `made=${spMade} scenes=${JSON.stringify(spawner.spawnable_scenes)} performed=${su.performed} gone=${spGone}`);
+    const sr = await call("editor_redo");
+    (sr.performed === true && (await hasChild(".", spawner.path, "MultiplayerSpawner")))
+      ? pass("AUTH_MP_ADD_SPAWNER_REDO") : fail("AUTH_MP_ADD_SPAWNER_REDO", `performed=${sr.performed}`);
+
+    // mp_add_synchronizer (undoable) — a SceneReplicationConfig is built from the property list.
+    const sync = (await call("mp_add_synchronizer", { parent_path: ".", name: "AuthSync", properties: [".:position", ".:rotation"] }));
+    const syncMade = await hasChild(".", sync.path, "MultiplayerSynchronizer");
+    const cfgClass = await propResClass(sync.path, "replication_config");
+    (syncMade && cfgClass === "SceneReplicationConfig" && sync.properties.length === 2)
+      ? pass("AUTH_MP_ADD_SYNCHRONIZER", `cfg=${cfgClass} props=${sync.properties.length}`)
+      : fail("AUTH_MP_ADD_SYNCHRONIZER", `made=${syncMade} cfg=${cfgClass} props=${JSON.stringify(sync.properties)}`);
+
+    // mp_set_authority (undoable) — set to 42, read back via get_multiplayer_authority, undo -> previous, redo -> 42.
+    const anode = (await call("node_add", { parent_path: ".", type: "Node2D", name: "AuthMPAuthority" })).path;
+    const setA = await call("mp_set_authority", { path: anode, peer_id: 42, recursive: false });
+    const gotA = await authorityOf(anode);
+    const au = await call("editor_undo");
+    const backA = await authorityOf(anode);
+    (Number(gotA) === 42 && au.performed === true && Number(backA) === Number(setA.previous))
+      ? pass("AUTH_MP_SET_AUTHORITY", `set=${gotA} previous=${setA.previous} back=${backA}`)
+      : fail("AUTH_MP_SET_AUTHORITY", `set=${gotA} performed=${au.performed} back=${backA} prev=${setA.previous}`);
+    await call("editor_redo");
+    Number(await authorityOf(anode)) === 42
+      ? pass("AUTH_MP_SET_AUTHORITY_REDO") : fail("AUTH_MP_SET_AUTHORITY_REDO", `got ${await authorityOf(anode)}`);
+
+    // mp_setup_enet_peer (gated codegen) — write + load back as a GDScript.
+    const enet = await call("mp_setup_enet_peer", { to_path: ENET, port: 5555, overwrite: true });
+    (enet.status === "written" && (await call("resource_load", { path: ENET })).type === "GDScript")
+      ? pass("AUTH_MP_SETUP_ENET_PEER", `path=${enet.path}`)
+      : fail("AUTH_MP_SETUP_ENET_PEER", JSON.stringify(enet).slice(0, 160));
+
+    // mp_setup_webrtc_peer (gated codegen, feature-detected) — unsupported (degrade) OR written+loadable.
+    const webrtc = await call("mp_setup_webrtc_peer", { to_path: WEBRTC, overwrite: true });
+    if (webrtc.status === "unsupported" && webrtc.path === null) {
+      pass("AUTH_MP_SETUP_WEBRTC_PEER", "degrade=unsupported (no WebRTC module)");
+    } else if (webrtc.status === "written" && (await call("resource_load", { path: WEBRTC })).type === "GDScript") {
+      pass("AUTH_MP_SETUP_WEBRTC_PEER", "written (WebRTC module present)");
+    } else {
+      fail("AUTH_MP_SETUP_WEBRTC_PEER", JSON.stringify(webrtc).slice(0, 160));
+    }
+
+    // mp_wire_rpc (gated) — append a stub for an absent function, then annotate an existing one; the
+    // rewritten file must still load as a valid GDScript (proves the codegen did not corrupt it).
+    const wrStub = await call("mp_wire_rpc", { path: ENET, function: "sync_state", mode: "any_peer", transfer_mode: "reliable" });
+    (wrStub.status === "written" && wrStub.stub_created === true && wrStub.annotation === '@rpc("any_peer", "call_remote", "reliable", 0)' && (await call("resource_load", { path: ENET })).type === "GDScript")
+      ? pass("AUTH_MP_WIRE_RPC_STUB", `annotation=${wrStub.annotation}`)
+      : fail("AUTH_MP_WIRE_RPC_STUB", JSON.stringify(wrStub).slice(0, 160));
+    const wrExisting = await call("mp_wire_rpc", { path: ENET, function: "host_game", call_local: true });
+    (wrExisting.status === "written" && wrExisting.stub_created === false && (await call("resource_load", { path: ENET })).type === "GDScript")
+      ? pass("AUTH_MP_WIRE_RPC_EXISTING", `stub_created=${wrExisting.stub_created}`)
+      : fail("AUTH_MP_WIRE_RPC_EXISTING", JSON.stringify(wrExisting).slice(0, 160));
+
+    // mp_scaffold_lobby (gated codegen) — write + load back as a GDScript.
+    const lobby = await call("mp_scaffold_lobby", { to_path: LOBBY, max_players: 6, overwrite: true });
+    (lobby.status === "written" && (await call("resource_load", { path: LOBBY })).type === "GDScript")
+      ? pass("AUTH_MP_SCAFFOLD_LOBBY", `path=${lobby.path}`)
+      : fail("AUTH_MP_SCAFFOLD_LOBBY", JSON.stringify(lobby).slice(0, 160));
   });
 
   // ---------------------------------------------------------------- undo / redo ----

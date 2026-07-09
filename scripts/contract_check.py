@@ -84,7 +84,7 @@ def catalog_json_blocks() -> list[str]:
 editor_methods = dispatch_methods(ADDON / "operations.gd", ["dispatch"])
 runtime_methods = dispatch_methods(ADDON / "runtime_bridge.gd", ["_dispatch"])
 gd_all = editor_methods | runtime_methods
-host_calls = host_bridge_calls([TOOLS / "editor.ts", TOOLS / "runtime.ts", TOOLS / "resources.ts", TOOLS / "assetgen.ts"])
+host_calls = host_bridge_calls([TOOLS / "editor.ts", TOOLS / "runtime.ts", TOOLS / "resources.ts", TOOLS / "assetgen.ts", TOOLS / "netcode.ts"])
 
 missing_in_gd = sorted(c for c in host_calls if c not in gd_all)
 if missing_in_gd:

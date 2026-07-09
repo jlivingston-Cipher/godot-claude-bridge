@@ -1698,6 +1698,151 @@ The shared generator result envelope (`asset_gen_placeholder` and the five typed
 
 ---
 
+## Group M — Netcode & backend scaffolding (Plane A / Editor + host)
+
+The "game backend" question, resolved as **authoring, not hosting**. Godot 4's built-in high-level multiplayer is a first-class engine feature, and multiplayer is a top game-dev request — but running a relay / leaderboard-DB / save-store is a SaaS, not editor control. So this family **hosts nothing and scaffolds everything**: it only adds nodes, scripts, and config to the project. Three tools author multiplayer nodes over the editor bridge (undoable via `EditorUndoRedoManager`, like every `node_*`); four generate GDScript. The generated code is built host-side (so the templates are unit-tested) and written by the editor's `FileAccess` through the `mp.write_script` bridge method, which triggers a filesystem rescan. Every code-writing tool is **destructive** (elicitation-gated — the `resource_create` model). `mp_setup_webrtc_peer` is **feature-detected**: if the WebRTC module/extension is absent from the build, it degrades to a clear `unsupported` result and writes nothing (never a dead call). Markers `AUTH_MP_*` in the authoring-plane probe.
+
+### `mp_add_spawner` ✅  (Plane A / Editor)  · undoable
+Add a `MultiplayerSpawner` (server-spawned nodes replicate to clients). `spawn_path` is the node whose children auto-replicate; `spawnable_scenes` are `res://` scenes it may instantiate.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"],
+  "properties": {
+    "parent_path": { "type": "string" },
+    "name": { "type": "string" },
+    "spawn_path": { "type": "string" },
+    "spawnable_scenes": { "type": "array", "items": { "type": "string" } }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "spawn_path", "spawnable_scenes"],
+  "properties": {
+    "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" },
+    "spawn_path": { "type": "string" },
+    "spawnable_scenes": { "type": "array", "items": { "type": "string" } }
+  } }
+```
+
+### `mp_add_synchronizer` ✅  (Plane A / Editor)  · undoable
+Add a `MultiplayerSynchronizer` and, when `properties` are given, build a `SceneReplicationConfig` replicating them. `root_path` is the node the property NodePaths are relative to (default `..`); property paths look like `.:position`.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"],
+  "properties": {
+    "parent_path": { "type": "string" },
+    "name": { "type": "string" },
+    "root_path": { "type": "string" },
+    "properties": { "type": "array", "items": { "type": "string" } },
+    "replication_mode": { "enum": ["always", "on_change", "never"] }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "root_path", "properties"],
+  "properties": {
+    "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" },
+    "root_path": { "type": "string" },
+    "properties": { "type": "array", "items": { "type": "string" } }
+  } }
+```
+
+### `mp_set_authority` ✅  (Plane A / Editor)  · undoable
+Set a node's multiplayer authority (`set_multiplayer_authority`) to a peer id (1 = server). The authority peer is the one allowed to push `authority`-mode RPCs / synchronizer state for that node.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "peer_id"],
+  "properties": {
+    "path": { "type": "string" },
+    "peer_id": { "type": "integer" },
+    "recursive": { "type": "boolean" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "peer_id", "previous", "recursive"],
+  "properties": {
+    "path": { "type": "string" }, "peer_id": { "type": "integer" },
+    "previous": { "type": "integer" }, "recursive": { "type": "boolean" }
+  } }
+```
+
+The four codegen tools share one result envelope (validates the `written` and — WebRTC only — `unsupported` outcomes; tool-specific extras like `bytes` / `created` / `function` / `annotation` / `stub_created` are additional):
+```json
+{ "type": "object", "required": ["status", "kind", "path", "message"],
+  "properties": {
+    "status": { "enum": ["written", "unsupported"] },
+    "kind": { "type": "string" },
+    "path": { "type": ["string", "null"] },
+    "message": { "type": "string" }
+  } }
+```
+
+### `mp_setup_enet_peer` ✅  (Plane A / Editor + host)  · writes file (gated)
+Generate an `ENetMultiplayerPeer` host/join helper script (`host_game` / `join_game` / `close`) and assign `multiplayer.multiplayer_peer`. Godot's default, always-available transport.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"],
+  "properties": {
+    "to_path": { "type": "string" },
+    "port": { "type": "integer", "minimum": 1 },
+    "max_clients": { "type": "integer", "minimum": 1 },
+    "class_name": { "type": "string" },
+    "overwrite": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared codegen envelope above (`status: "written"`).
+
+### `mp_setup_webrtc_peer` ✅  (Plane A / Editor + host)  · writes file (gated) · feature-detected
+Generate a `WebRTCMultiplayerPeer` mesh helper. If the WebRTC module/extension is absent, degrades to `status: "unsupported"` and writes nothing.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"],
+  "properties": {
+    "to_path": { "type": "string" },
+    "class_name": { "type": "string" },
+    "overwrite": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared codegen envelope above (`status: "written"` or `"unsupported"`).
+
+### `mp_wire_rpc` ✅  (Plane A / Editor + host)  · writes file (gated)
+Insert (or replace) an `@rpc(...)` annotation above a function in an existing `res://` script; appends a stub when the function is absent. Operates on the on-disk file (save unsaved editor changes first).
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "function"],
+  "properties": {
+    "path": { "type": "string" },
+    "function": { "type": "string" },
+    "mode": { "enum": ["authority", "any_peer"] },
+    "transfer_mode": { "enum": ["unreliable", "unreliable_ordered", "reliable"] },
+    "call_local": { "type": "boolean" },
+    "channel": { "type": "integer", "minimum": 0 },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared codegen envelope above, plus `function`, `annotation`, `stub_created`.
+
+### `mp_scaffold_lobby` ✅  (Plane A / Editor + host)  · writes file (gated)
+Generate a lobby controller GDScript: ENet host/join plus `peer_connected` / `peer_disconnected` tracking with `player_joined` / `player_left` / `server_started` / `join_succeeded` / `join_failed` signals.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"],
+  "properties": {
+    "to_path": { "type": "string" },
+    "port": { "type": "integer", "minimum": 1 },
+    "max_players": { "type": "integer", "minimum": 1 },
+    "class_name": { "type": "string" },
+    "overwrite": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output** — the shared codegen envelope above (`status: "written"`).
+
+---
+
 ## Destructive-action gating (elicitation) — Phase 4
 
 Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `cs_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
@@ -2018,5 +2163,13 @@ via `CLAUDE_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most one tr
 | `asset_gen_icon` | J / Editor | ✅ | ✔ writes file |
 | `asset_gen_audio_sfx` | J / Editor | ✅ | ✔ writes file |
 | `asset_gen_model` | J / Editor | ✅ | ✔ writes file |
+
+| `mp_add_spawner` | M / Editor | ✅ | undoable |
+| `mp_add_synchronizer` | M / Editor | ✅ | undoable |
+| `mp_set_authority` | M / Editor | ✅ | undoable |
+| `mp_setup_enet_peer` | M / Editor | ✅ | ✔ writes file |
+| `mp_setup_webrtc_peer` | M / Editor | ✅ | ✔ writes file |
+| `mp_wire_rpc` | M / Editor | ✅ | ✔ writes file |
+| `mp_scaffold_lobby` | M / Editor | ✅ | ✔ writes file |
 
 **70 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 18 LSP, 15 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**

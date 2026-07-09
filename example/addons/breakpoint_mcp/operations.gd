@@ -131,6 +131,14 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _asset_gen_placeholder(params)
 		"asset.import":
 			return _asset_import(params)
+		"mp.add_spawner":
+			return _mp_add_spawner(params)
+		"mp.add_synchronizer":
+			return _mp_add_synchronizer(params)
+		"mp.set_authority":
+			return _mp_set_authority(params)
+		"mp.write_script":
+			return _mp_write_script(params)
 		"anim.player_create":
 			return _anim_player_create(params)
 		"anim.create":
@@ -4379,3 +4387,135 @@ func _test_list(params: Dictionary) -> Dictionary:
 	if DirAccess.dir_exists_absolute(dir_path):
 		_collect_tests(dir_path, tests)
 	return _ok({"dir": dir_path, "count": tests.size(), "tests": tests})
+
+
+# ------------------------------------------------ Group M: netcode scaffolding ----
+# Node authoring (undoable, EditorUndoRedoManager) for Godot 4's built-in
+# high-level multiplayer, plus a shared GDScript writer for the host-built codegen
+# tools. We host nothing — these only add nodes / scripts / config to the project.
+
+
+func _mp_add_spawner(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var spawner := MultiplayerSpawner.new()
+	spawner.name = String(params.get("name", "MultiplayerSpawner"))
+	var spawn_path_str := String(params.get("spawn_path", ""))
+	if spawn_path_str != "":
+		spawner.spawn_path = NodePath(spawn_path_str)
+	var added_scenes: Array = []
+	for s in params.get("spawnable_scenes", []):
+		var sp := String(s)
+		if sp.begins_with("res://"):
+			spawner.add_spawnable_scene(sp)
+			added_scenes.append(sp)
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % spawner.name)
+	ur.add_do_method(parent, "add_child", spawner)
+	ur.add_do_method(spawner, "set_owner", root)
+	ur.add_do_reference(spawner)
+	ur.add_undo_method(parent, "remove_child", spawner)
+	ur.commit_action()
+	return _ok({
+		"path": _path_of(root, spawner),
+		"name": String(spawner.name),
+		"type": "MultiplayerSpawner",
+		"spawn_path": String(spawner.spawn_path),
+		"spawnable_scenes": added_scenes,
+	})
+
+
+func _mp_add_synchronizer(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var parent := _resolve(root, String(params.get("parent_path", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent_path", ""))
+	var sync := MultiplayerSynchronizer.new()
+	sync.name = String(params.get("name", "MultiplayerSynchronizer"))
+	var root_path_str := String(params.get("root_path", ""))
+	if root_path_str != "":
+		sync.root_path = NodePath(root_path_str)
+	var mode_str := String(params.get("replication_mode", "always"))
+	var mode := SceneReplicationConfig.REPLICATION_MODE_ALWAYS
+	if mode_str == "on_change":
+		mode = SceneReplicationConfig.REPLICATION_MODE_ON_CHANGE
+	elif mode_str == "never":
+		mode = SceneReplicationConfig.REPLICATION_MODE_NEVER
+	var added_props: Array = []
+	var props: Array = params.get("properties", [])
+	if props.size() > 0:
+		var cfg := SceneReplicationConfig.new()
+		for p in props:
+			var np := NodePath(String(p))
+			cfg.add_property(np)
+			cfg.property_set_replication_mode(np, mode)
+			added_props.append(String(p))
+		sync.replication_config = cfg
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: add %s" % sync.name)
+	ur.add_do_method(parent, "add_child", sync)
+	ur.add_do_method(sync, "set_owner", root)
+	ur.add_do_reference(sync)
+	ur.add_undo_method(parent, "remove_child", sync)
+	ur.commit_action()
+	return _ok({
+		"path": _path_of(root, sync),
+		"name": String(sync.name),
+		"type": "MultiplayerSynchronizer",
+		"root_path": String(sync.root_path),
+		"properties": added_props,
+	})
+
+
+func _mp_set_authority(params: Dictionary) -> Dictionary:
+	var root := _edited_root()
+	if root == null:
+		return _err("no_scene", "No scene is open")
+	var node := _resolve(root, String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	var peer_id := int(params.get("peer_id", 1))
+	var recursive := bool(params.get("recursive", true))
+	var previous := node.get_multiplayer_authority()
+	var ur := _plugin.get_undo_redo()
+	ur.create_action("Claude: set authority %s -> %d" % [node.name, peer_id])
+	ur.add_do_method(node, "set_multiplayer_authority", peer_id, recursive)
+	ur.add_undo_method(node, "set_multiplayer_authority", previous, recursive)
+	ur.commit_action()
+	return _ok({"path": _path_of(root, node), "peer_id": peer_id, "previous": previous, "recursive": recursive})
+
+
+## Write a host-built GDScript to a res:// .gd path through the editor's FileAccess
+## and rescan, so the codegen tools (enet/webrtc peer, @rpc wiring, lobby) land a
+## file the editor immediately sees. `require_class` feature-detects (WebRTC): an
+## absent class returns status:"unsupported" with nothing written.
+func _mp_write_script(params: Dictionary) -> Dictionary:
+	var to_path := String(params.get("to_path", ""))
+	if not to_path.begins_with("res://") or not to_path.ends_with(".gd"):
+		return _err("bad_params", "'to_path' must be a res:// .gd path")
+	var require_class := String(params.get("require_class", ""))
+	if require_class != "" and not ClassDB.can_instantiate(require_class):
+		return _ok({"status": "unsupported", "path": null, "required_class": require_class})
+	var overwrite := bool(params.get("overwrite", false))
+	var existed := FileAccess.file_exists(to_path)
+	if existed and not overwrite:
+		return _err("exists", "File already exists (pass overwrite): %s" % to_path)
+	var base_dir := to_path.get_base_dir()
+	if base_dir != "" and base_dir != "res://" and not DirAccess.dir_exists_absolute(base_dir):
+		DirAccess.make_dir_recursive_absolute(base_dir)
+	var content := String(params.get("content", ""))
+	var f := FileAccess.open(to_path, FileAccess.WRITE)
+	if f == null:
+		return _err("write_failed", "Could not open %s for writing (error %d)" % [to_path, FileAccess.get_open_error()])
+	f.store_string(content)
+	f.close()
+	var efs := EditorInterface.get_resource_filesystem()
+	efs.update_file(to_path)
+	efs.scan()
+	return _ok({"status": "written", "path": to_path, "bytes": content.to_utf8_buffer().size(), "created": not existed})

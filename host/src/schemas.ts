@@ -545,6 +545,29 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
       asset_gen_model: assetGenResult,
     };
   })(),
+
+  // ---- Group M: netcode & backend scaffolding (tools/netcode.ts) ----
+  // Node authoring (undoable, over the editor bridge).
+  mp_add_spawner: { path: z.string(), name: z.string(), type: z.string(), spawn_path: z.string(), spawnable_scenes: z.array(z.string()) },
+  mp_add_synchronizer: { path: z.string(), name: z.string(), type: z.string(), root_path: z.string(), properties: z.array(z.string()) },
+  mp_set_authority: { path: z.string(), peer_id: z.number(), previous: z.number(), recursive: z.boolean() },
+  // The four codegen tools share one envelope validating both the "written" and
+  // "unsupported" (webrtc feature-detect) outcomes — path nullable, tool-specific
+  // extras (bytes/created/function/annotation/stub_created) left optional (non-strict).
+  ...(() => {
+    const netcodeScaffold: z.ZodRawShape = {
+      status: z.string(),
+      kind: z.string(),
+      path: z.string().nullable(),
+      message: z.string(),
+    };
+    return {
+      mp_setup_enet_peer: netcodeScaffold,
+      mp_setup_webrtc_peer: netcodeScaffold,
+      mp_wire_rpc: netcodeScaffold,
+      mp_scaffold_lobby: netcodeScaffold,
+    };
+  })(),
 };
 
 /**

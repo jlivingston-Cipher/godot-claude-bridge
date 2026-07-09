@@ -10,13 +10,14 @@ import { registerRuntimeTools } from "../src/tools/runtime.js";
 import { registerProcessTools } from "../src/tools/processes.js";
 import { registerKnowledgeTools } from "../src/tools/knowledge.js";
 import { registerAssetGenTools } from "../src/tools/assetgen.js";
+import { registerNetcodeTools } from "../src/tools/netcode.js";
 import { registerResources } from "../src/tools/resources.js";
 import { applyOutputSchemas, outputSchemas } from "../src/schemas.js";
 import { loadConfig } from "../src/config.js";
 
 /** Tools that return image content with no structuredContent — deliberately schema-exempt. */
 const IMAGE_TOOLS = ["screenshot_editor", "runtime_screenshot"];
-const EXPECTED_TOOL_COUNT = 230;
+const EXPECTED_TOOL_COUNT = 237;
 const EXPECTED_RESOURCES = ["scene-tree", "editor-state", "runtime-tree", "runtime-log", "class-doc"];
 
 /**
@@ -55,6 +56,7 @@ function registerAll() {
   registerProcessTools(mcp, cfg);
   registerKnowledgeTools(mcp, cfg);
   registerAssetGenTools(mcp, stub, cfg);
+  registerNetcodeTools(mcp, stub, cfg);
   registerResources(mcp, stub, stub);
 
   return { calls, resources };
