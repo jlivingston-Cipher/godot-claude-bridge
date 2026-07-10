@@ -136,6 +136,60 @@ function normalizeColors(result: unknown): Array<{ line: number; character: numb
   });
 }
 
+// textDocument/prepareCallHierarchy + callHierarchy/{incoming,outgoing}Calls.
+// A CallHierarchyItem carries a SymbolKind and a selectionRange (the name range);
+// surface the selectionRange start (falling back to the full range) so a caller
+// gets the caret position of each symbol.
+function normalizeCallItem(item: unknown): { name: string; kind: string; uri: string; line: number; character: number; detail: string } {
+  const it = (item ?? {}) as { name?: string; kind?: number; uri?: string; range?: Range; selectionRange?: Range; detail?: string };
+  const r = it.selectionRange ?? it.range ?? {};
+  return {
+    name: it.name ?? "",
+    kind: it.kind ? SYMBOL_KIND[it.kind] ?? String(it.kind) : "",
+    uri: it.uri ?? "",
+    line: r.start?.line ?? 0,
+    character: r.start?.character ?? 0,
+    detail: it.detail ?? "",
+  };
+}
+
+// The call-site ranges (fromRanges) an incoming/outgoing call reports, within the
+// file that makes the call.
+function normalizeCallRanges(ranges: unknown): Array<{ line: number; character: number; end_line: number; end_character: number }> {
+  const arr = Array.isArray(ranges) ? ranges : [];
+  return arr.map((rr) => {
+    const r = (rr ?? {}) as Range;
+    return {
+      line: r.start?.line ?? 0, character: r.start?.character ?? 0,
+      end_line: r.end?.line ?? 0, end_character: r.end?.character ?? 0,
+    };
+  });
+}
+
+// Decode the LSP semantic-tokens packed integer array (flat 5-tuples of
+// deltaLine, deltaStartChar, length, tokenType, tokenModifiers) into absolute
+// tokens, resolving the numeric type/modifier indices through the server's
+// advertised legend. deltaStartChar is relative to the previous token ONLY when
+// the token is on the same line (deltaLine == 0), else it is absolute from the
+// line start.
+interface SemanticLegend { tokenTypes?: string[]; tokenModifiers?: string[] }
+function decodeSemanticTokens(data: unknown, legend: SemanticLegend | undefined): Array<{ line: number; character: number; length: number; type: string; modifiers: string[] }> {
+  const d = Array.isArray(data) ? (data as number[]) : [];
+  const types = legend?.tokenTypes ?? [];
+  const mods = legend?.tokenModifiers ?? [];
+  const out: Array<{ line: number; character: number; length: number; type: string; modifiers: string[] }> = [];
+  let line = 0, char = 0;
+  for (let i = 0; i + 4 < d.length; i += 5) {
+    const dLine = d[i] ?? 0, dChar = d[i + 1] ?? 0, len = d[i + 2] ?? 0, typeIdx = d[i + 3] ?? 0, modBits = d[i + 4] ?? 0;
+    line += dLine;
+    char = dLine === 0 ? char + dChar : dChar;
+    const modifiers: string[] = [];
+    for (let b = 0; b < 32; b++) if (modBits & (1 << b)) modifiers.push(mods[b] ?? String(b));
+    out.push({ line, character: char, length: len, type: types[typeIdx] ?? String(typeIdx), modifiers });
+  }
+  return out;
+}
+
 // offsetOf / applyTextEdits now live in ./lsp-common.js (shared with the C#
 // rename mutator, cs_rename). Imported above.
 
@@ -635,6 +689,80 @@ export function registerLspTools(server: McpServer, lsp: LspClient, cfg: Config)
         return ok({ colors: normalizeColors(result) });
       } catch (err) {
         if (isMethodNotFound(err)) return unsupportedLsp("gd_document_color", "textDocument/documentColor", "colorProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  // ---- Phase 2 LSP-depth: call hierarchy + semantic tokens -----------------
+  // Two heavier semantic providers. Godot's GDScript language server does not
+  // advertise callHierarchyProvider or semanticTokensProvider on current builds
+  // (observed through 4.7), so both feature-detect and return a clear
+  // "unsupported" message, keeping the D7 -32601 belt-and-suspenders in case a
+  // future build advertises one but still answers "method not found".
+
+  server.registerTool(
+    "gd_call_hierarchy",
+    {
+      title: "GDScript call hierarchy",
+      description:
+        "Find the callers (direction=incoming, the default) or callees (direction=outgoing) of the function at a position. " +
+        "Resolves the symbol with textDocument/prepareCallHierarchy, then callHierarchy/incomingCalls or outgoingCalls, and " +
+        "returns each related function with the call-site ranges. Read-only. " +
+        "Godot's GDScript language server does not advertise callHierarchyProvider through 4.7; feature-detected.",
+      inputSchema: {
+        ...posSchema,
+        direction: z.enum(["incoming", "outgoing"]).optional().describe("incoming = who calls this (default); outgoing = what this calls"),
+      },
+    },
+    async ({ path, line, character, direction }) => {
+      const dir = direction ?? "incoming";
+      const alt = "Use gd_references to find where a symbol is used, or gd_definition to jump to it.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        if (!caps.callHierarchyProvider) return unsupportedLsp("gd_call_hierarchy", "textDocument/prepareCallHierarchy", "callHierarchyProvider", alt);
+        const uri = await openAndPos(path);
+        const prepared = (await lsp.request("textDocument/prepareCallHierarchy", { textDocument: { uri }, position: { line, character } })) as unknown[] | null;
+        const method = dir === "outgoing" ? "callHierarchy/outgoingCalls" : "callHierarchy/incomingCalls";
+        const items = await Promise.all((prepared ?? []).map(async (prep) => {
+          const calls = (await lsp.request(method, { item: prep })) as unknown[] | null;
+          const related = (calls ?? []).map((c) => {
+            const cc = (c ?? {}) as { from?: unknown; to?: unknown; fromRanges?: unknown };
+            const peer = dir === "outgoing" ? cc.to : cc.from;
+            return { ...normalizeCallItem(peer), ranges: normalizeCallRanges(cc.fromRanges) };
+          });
+          return { ...normalizeCallItem(prep), calls: related };
+        }));
+        return ok({ direction: dir, items });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_call_hierarchy", "textDocument/prepareCallHierarchy", "callHierarchyProvider", alt);
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "gd_semantic_tokens",
+    {
+      title: "GDScript semantic tokens",
+      description:
+        "Return the semantic-highlighting tokens for a whole script — each token's position, length, type (e.g. function, " +
+        "variable, keyword) and modifiers — decoded from the LSP packed-integer form through the server's advertised legend. " +
+        "Read-only. Godot's GDScript language server does not advertise semanticTokensProvider through 4.7; feature-detected.",
+      inputSchema: { path: z.string().describe("Script path (res://..., absolute, or project-relative)") },
+    },
+    async ({ path }) => {
+      const alt = "Use gd_document_symbols for a structural outline of the file.";
+      try {
+        const caps = await lsp.getServerCapabilities();
+        const provider = caps.semanticTokensProvider as { legend?: SemanticLegend } | undefined;
+        if (!provider) return unsupportedLsp("gd_semantic_tokens", "textDocument/semanticTokens/full", "semanticTokensProvider", alt);
+        const uri = await openAndPos(path);
+        const result = (await lsp.request("textDocument/semanticTokens/full", { textDocument: { uri } })) as { data?: number[] } | null;
+        const tokens = decodeSemanticTokens(result?.data ?? [], provider.legend);
+        return ok({ token_count: tokens.length, tokens });
+      } catch (err) {
+        if (isMethodNotFound(err)) return unsupportedLsp("gd_semantic_tokens", "textDocument/semanticTokens/full", "semanticTokensProvider", alt);
         return fail(err);
       }
     },

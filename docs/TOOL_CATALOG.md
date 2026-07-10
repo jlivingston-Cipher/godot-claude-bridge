@@ -1940,6 +1940,97 @@ List the color literals the language server recognizes in a script — the `Colo
     "hex": { "type": "string" } } } } } }
 ```
 
+### `gd_call_hierarchy` ⚠️ · engine-missing through Godot 4.7 (handled)
+Find the callers (`direction: "incoming"`, the default) or callees (`direction: "outgoing"`) of the function at a position — resolved with `textDocument/prepareCallHierarchy`, then `callHierarchy/incomingCalls` / `outgoingCalls`. Each related function is returned with its `name`, `kind`, `uri`, position and `detail`, plus the call-site `ranges`. Read-only. Godot's GDScript language server does not advertise `callHierarchyProvider` (observed through 4.7), so the tool feature-detects and returns a clear "unsupported" message, keeping a `-32601` belt-and-suspenders for a future build that implements it.
+- **Input**
+```json
+{ "type": "object", "required": ["path", "line", "character"], "properties": {
+  "path": { "type": "string" },
+  "line": { "type": "integer" },
+  "character": { "type": "integer" },
+  "direction": { "type": "string", "enum": ["incoming", "outgoing"], "default": "incoming" } } }
+```
+- **Output**
+```json
+{
+  "type": "object",
+  "required": ["direction", "items"],
+  "properties": {
+    "direction": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "uri": { "type": "string" },
+          "line": { "type": "integer" },
+          "character": { "type": "integer" },
+          "detail": { "type": "string" },
+          "calls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "kind": { "type": "string" },
+                "uri": { "type": "string" },
+                "line": { "type": "integer" },
+                "character": { "type": "integer" },
+                "detail": { "type": "string" },
+                "ranges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "line": { "type": "integer" },
+                      "character": { "type": "integer" },
+                      "end_line": { "type": "integer" },
+                      "end_character": { "type": "integer" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### `gd_semantic_tokens` ⚠️ · engine-missing through Godot 4.7 (handled)
+Return the semantic-highlighting tokens for a whole script — each token's position, `length`, `type` (e.g. `function`, `variable`, `keyword`) and `modifiers` — decoded from the LSP packed-integer form (`textDocument/semanticTokens/full`) through the server's advertised legend. Read-only. Godot's GDScript language server does not advertise `semanticTokensProvider` (observed through 4.7), so the tool feature-detects and returns a clear "unsupported" message, keeping a `-32601` belt-and-suspenders for a future build that implements it.
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{
+  "type": "object",
+  "required": ["token_count", "tokens"],
+  "properties": {
+    "token_count": { "type": "integer" },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "line": { "type": "integer" },
+          "character": { "type": "integer" },
+          "length": { "type": "integer" },
+          "type": { "type": "string" },
+          "modifiers": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
+```
+
 ---
 
 # Plane D — C# Semantic (OmniSharp LSP)  (✅ implemented — D4 C2; the C#/.NET mirror of the GDScript LSP plane. OmniSharp is spawned by the host over **stdio** (lazily, on the first `cs_*` call) and driven against a C# Godot project — e.g. the `example-csharp/` fixture — set via `GODOT_CSHARP_PROJECT`. The read-only `cs_*` tools mirror the read-only `gd_*` surface; the two mutators — `cs_rename` (elicitation-gated on `apply=true`) and the read-only `cs_code_action` listing — mirror the GDScript `gd_rename` / `gd_code_action`. Feature-detected the same way: a method the server never advertised, or a `-32601` from one that lied about it, degrades to a clear "unsupported" message rather than a hang.)
@@ -3178,6 +3269,8 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `gd_document_link` | D / LSP | ✅ confirmed live (4.3) | – |
 | `gd_formatting` | D / LSP | ⚠️ 4.3 advertises false (handled) | – |
 | `gd_document_color` | D / LSP | ⚠️ 4.3 advertises false (handled) | – |
+| `gd_call_hierarchy` | D / LSP | ⚠️ engine-missing through 4.7 (handled) | – |
+| `gd_semantic_tokens` | D / LSP | ⚠️ engine-missing through 4.7 (handled) | – |
 | `cs_completion` | D / C# LSP | ✅ | – |
 | `cs_hover` | D / C# LSP | ✅ | – |
 | `cs_definition` | D / C# LSP | ✅ | – |

@@ -108,6 +108,27 @@ if (reached) {
       console.log(`PROBE ${name} threw`, err?.message ?? String(err));
     }
   }
+
+  // Phase-2 LSP-depth: call hierarchy + semantic tokens. Godot has not advertised
+  // these providers through 4.7; D7_CAPS3 records the live truth per build, and the
+  // capability-gated tool wrappers surface an isError "unsupported" rather than crash.
+  const p2Caps = await lsp.getServerCapabilities();
+  console.log(`D7_CAPS3: callHierarchy=${!!p2Caps.callHierarchyProvider} semanticTokens=${!!p2Caps.semanticTokensProvider}`);
+  const p2Probes = [
+    ["gd_call_hierarchy", { path: "res://player.gd", line: 13, character: 8, direction: "incoming" }, "items"],
+    ["gd_semantic_tokens", { path: "res://player.gd" }, "tokens"],
+  ];
+  for (const [name, args, field] of p2Probes) {
+    try {
+      const res = await call(name, args);
+      const detail = res.isError
+        ? JSON.stringify(res.content?.[0]?.text ?? "").slice(0, 90)
+        : `${field}=${res.structuredContent?.[field]?.length ?? "-"}`;
+      console.log(`PROBE ${name}: isError=${!!res.isError} ${detail}`);
+    } catch (err) {
+      console.log(`PROBE ${name} threw`, err?.message ?? String(err));
+    }
+  }
 }
 
 lsp.close();
