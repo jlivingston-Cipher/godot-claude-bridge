@@ -9,7 +9,12 @@ extends SceneTree
 ##   * the pure helpers in runtime_bridge.gd exercised WITHOUT entering the tree
 ##     (so no TCP socket opens): the {ok}/{err} envelope, _dispatch's ping /
 ##     unknown-method paths, _get_monitors key filtering, the CLAUDE_*→BREAKPOINT_*
-##     env-compat shim (_env_compat), and the push_log / _get_log ring buffer.
+##     env-compat shim (_env_compat), and the push_log / _get_log ring buffer,
+##   * the _base()-dependent runtime_bridge.gd handlers (get_tree / resolve /
+##     path_of / serialize / get_property / set_property / call_method /
+##     emit_signal) via a subclass that overrides _base() with an in-memory
+##     scene fixture, so they run with no real SceneTree and no TCP socket, plus
+##     inject_input (bad kind + action / key / mouse) on a plain instance.
 ##
 ## The editor-COUPLED handlers (every mutator that drives EditorInterface /
 ## EditorUndoRedoManager) are already covered end-to-end by the authoring-plane
@@ -23,6 +28,17 @@ extends SceneTree
 const Ops := preload("res://addons/breakpoint_mcp/operations.gd")
 const Codec := preload("res://addons/breakpoint_mcp/variant_json.gd")
 const RB := preload("res://addons/breakpoint_mcp/runtime_bridge.gd")
+
+## A runtime_bridge subclass whose _base() returns a caller-set in-memory
+## fixture root instead of get_tree().current_scene, so the _base()-dependent
+## handlers (_get_tree / _resolve / _path_of / _serialize / _get_property /
+## _set_property / _call_method / _emit_signal) run WITHOUT entering the live
+## SceneTree — an RB.new() added to a real tree would fire _ready() and open the
+## runtime TCP server. Only editor-free logic is exercised.
+class _FixtureRuntimeBridge extends RB:
+	var fixture_base: Node = null
+	func _base() -> Node:
+		return fixture_base
 
 var _pass := 0
 var _fail := 0
@@ -42,6 +58,9 @@ func _initialize() -> void:
 	_test_runtime_envelope_and_dispatch()
 	_test_runtime_env_compat()
 	_test_runtime_log()
+	_test_runtime_tree_handlers()
+	_test_runtime_property_method_signal()
+	_test_runtime_inject_input()
 	print("OPS_UNIT_SUMMARY pass=%d/%d" % [_pass, _pass + _fail])
 	quit(0 if _fail == 0 else 1)
 
@@ -318,3 +337,130 @@ func _test_runtime_log() -> void:
 	_eq("rb.log.cap.latest_seq", cap["result"]["latest_seq"], total)
 	_eq("rb.log.cap.oldest_seq", cap["result"]["entries"][0]["seq"], total - RB.LOG_CAP + 1)
 	rb2.free()
+
+
+# --- runtime_bridge.gd _base()-dependent handlers (in-memory fixture) -------
+func _test_runtime_tree_handlers() -> void:
+	# In-memory fixture: Node2D "Root" -> Node2D "Child" -> Node "GC". A subclass
+	# overrides _base() so the tree handlers run with no real SceneTree and no
+	# socket (an RB.new() entering a tree would fire _ready() -> open the server).
+	var root := Node2D.new()
+	root.name = "Root"
+	var child := Node2D.new()
+	child.name = "Child"
+	var gc := Node.new()
+	gc.name = "GC"
+	child.add_child(gc)
+	root.add_child(child)
+	var rb := _FixtureRuntimeBridge.new()
+	# _get_tree with no current scene -> no_scene error
+	rb.fixture_base = null
+	var ns: Dictionary = rb._get_tree({})
+	_eq("rb.tree.no_scene.ok", ns["ok"], false)
+	_eq("rb.tree.no_scene.code", ns["error"]["code"], "no_scene")
+	# _get_tree against the fixture -> serialized root
+	rb.fixture_base = root
+	var t: Dictionary = rb._get_tree({})
+	var d: Dictionary = t["result"]
+	_eq("rb.tree.ok", t["ok"], true)
+	_eq("rb.tree.name", d["name"], "Root")
+	_eq("rb.tree.type", d["type"], "Node2D")
+	_eq("rb.tree.path", d["path"], ".")
+	_eq("rb.tree.child_count", d["child_count"], 1)
+	_eq("rb.tree.visible", d["visible"], true)  # Node2D is a CanvasItem
+	_eq("rb.tree.children_len", (d["children"] as Array).size(), 1)
+	_eq("rb.tree.grandchild_path", d["children"][0]["children"][0]["path"], "Child/GC")
+	# max_depth 0 omits the children key
+	var shallow: Dictionary = rb._get_tree({"max_depth": 0})
+	_check("rb.tree.truncate", not (shallow["result"] as Dictionary).has("children"))
+	# _resolve
+	_check("rb.resolve.empty", rb._resolve("") == root)
+	_check("rb.resolve.dot", rb._resolve(".") == root)
+	_check("rb.resolve.nested", rb._resolve("Child/GC") == gc)
+	_check("rb.resolve.missing", rb._resolve("Nope") == null)
+	rb.fixture_base = null
+	_check("rb.resolve.null_base", rb._resolve("x") == null)
+	rb.fixture_base = root
+	# _path_of
+	_eq("rb.path_of.root", rb._path_of(root), ".")
+	_eq("rb.path_of.nested", rb._path_of(gc), "Child/GC")
+	# _dispatch routes to the tree handler
+	_eq("rb.dispatch.get_tree", rb._dispatch("runtime.get_tree", {})["ok"], true)
+	rb.free()
+	root.free()
+
+
+# --- runtime_bridge.gd get/set property, call, emit (in-memory fixture) -----
+func _test_runtime_property_method_signal() -> void:
+	var root := Node2D.new()
+	root.name = "Root"
+	var child := Node2D.new()
+	child.name = "Child"
+	root.add_child(child)
+	var rb := _FixtureRuntimeBridge.new()
+	rb.fixture_base = root
+	# _get_property codec-encodes the value (Vector2 -> tagged object); bad path errors
+	var gp: Dictionary = rb._get_property({"path": "Child", "property": "position"})
+	_eq("rb.get_prop.ok", gp["ok"], true)
+	_eq("rb.get_prop.tag", gp["result"]["value"]["__type__"], "Vector2")
+	var gpb: Dictionary = rb._get_property({"path": "Nope", "property": "x"})
+	_eq("rb.get_prop.bad_path", gpb["error"]["code"], "bad_path")
+	# _set_property decodes the tagged value, applies it, re-encodes the readback
+	var enc := {"__type__": "Vector2", "x": 10, "y": 20}
+	var sp: Dictionary = rb._set_property({"path": "Child", "property": "position", "value": enc})
+	_eq("rb.set_prop.ok", sp["ok"], true)
+	_eq("rb.set_prop.readback_x", sp["result"]["value"]["x"], 10)
+	_check("rb.set_prop.applied", child.position == Vector2(10, 20))
+	var spb: Dictionary = rb._set_property({"path": "Nope", "property": "position", "value": enc})
+	_eq("rb.set_prop.bad_path", spb["error"]["code"], "bad_path")
+	# _call_method callv + codec-encoded return; unknown method + bad path error
+	var cm: Dictionary = rb._call_method({"path": "", "method": "get_child_count", "args": []})
+	_eq("rb.call.ok", cm["ok"], true)
+	_eq("rb.call.return", cm["result"]["return"], 1)
+	var cmn: Dictionary = rb._call_method({"path": "", "method": "no_such_method", "args": []})
+	_eq("rb.call.no_method", cmn["error"]["code"], "no_method")
+	var cmb: Dictionary = rb._call_method({"path": "Nope", "method": "get_child_count"})
+	_eq("rb.call.bad_path", cmb["error"]["code"], "bad_path")
+	# _emit_signal error paths, then a scripted-signal success (args decoded)
+	var esn: Dictionary = rb._emit_signal({"path": "Child", "signal": "no_such_signal"})
+	_eq("rb.emit.no_signal", esn["error"]["code"], "no_signal")
+	var esb: Dictionary = rb._emit_signal({"path": "Nope", "signal": "x"})
+	_eq("rb.emit.bad_path", esb["error"]["code"], "bad_path")
+	var scr := GDScript.new()
+	scr.source_code = "extends Node\nsignal ut_sig(x)\n"
+	scr.reload()
+	var sig_node: Node = scr.new()
+	sig_node.name = "Sig"
+	root.add_child(sig_node)
+	var es: Dictionary = rb._emit_signal({"path": "Sig", "signal": "ut_sig", "args": [7]})
+	_eq("rb.emit.ok", es["ok"], true)
+	_eq("rb.emit.emitted", es["result"]["emitted"], true)
+	# _dispatch routes to the property handler
+	_eq("rb.dispatch.get_property", rb._dispatch("runtime.get_property", {"path": "Child", "property": "position"})["ok"], true)
+	rb.free()
+	root.free()
+
+
+# --- runtime_bridge.gd _inject_input (no tree/base needed) -------------------
+func _test_runtime_inject_input() -> void:
+	var rb := RB.new()
+	var bad: Dictionary = rb._inject_input({"event": {"kind": "bogus"}})
+	_eq("rb.inject.bad_kind", bad["error"]["code"], "bad_kind")
+	# action press/release — register the action first so no "unknown action" error
+	if not InputMap.has_action("bp_unittest_action"):
+		InputMap.add_action("bp_unittest_action")
+	var ia: Dictionary = rb._inject_input({"event": {"kind": "action", "action": "bp_unittest_action", "pressed": true}})
+	_eq("rb.inject.action", ia["result"]["injected"], true)
+	var iar: Dictionary = rb._inject_input({"event": {"kind": "action", "action": "bp_unittest_action", "pressed": false}})
+	_eq("rb.inject.action_release", iar["ok"], true)
+	InputMap.erase_action("bp_unittest_action")
+	# key / mouse_button / mouse_motion build InputEvent* and echo the kind
+	var ik: Dictionary = rb._inject_input({"event": {"kind": "key", "keycode": KEY_A, "pressed": true}})
+	_eq("rb.inject.key", ik["result"]["kind"], "key")
+	var imb: Dictionary = rb._inject_input({"event": {"kind": "mouse_button", "button": 1, "pressed": true, "position": {"__type__": "Vector2", "x": 5, "y": 6}}})
+	_eq("rb.inject.mouse_button", imb["result"]["kind"], "mouse_button")
+	var imm: Dictionary = rb._inject_input({"event": {"kind": "mouse_motion", "position": {"__type__": "Vector2", "x": 1, "y": 2}, "relative": {"__type__": "Vector2", "x": 3, "y": 4}}})
+	_eq("rb.inject.mouse_motion", imm["result"]["kind"], "mouse_motion")
+	# _dispatch routes to inject_input (bad kind still routes, returns not-ok)
+	_eq("rb.dispatch.inject_input", rb._dispatch("runtime.inject_input", {"event": {"kind": "bogus"}})["ok"], false)
+	rb.free()
