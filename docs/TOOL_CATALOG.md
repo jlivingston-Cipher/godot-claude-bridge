@@ -631,12 +631,24 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - **Output** `{ "type": "object", "required": ["path", "signal", "emitted"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "emitted": { "type": "boolean" } } }`
 
 ### `selection_get` ✅
-- **Input** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `selection_set` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["paths"], "properties": { "paths": { "type": "array", "items": { "type": "string" } } } }`
-- **Output** `{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["paths"], "properties": { "paths": { "type": "array", "items": { "type": "string" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["selection"], "properties": { "selection": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `classdb_get_class` ✅
 - **Input**
@@ -873,40 +885,94 @@ Disk-backed TileSet authoring: each tool loads a `.tres` `TileSet`, mutates it, 
 Batch 2 (`tilemaplayer_create`, `tilemap_*`) is the other half: it authors a `TileMapLayer` **node in the edited scene** and paints its cells. Unlike the disk-backed writers above, these mutate the open scene and are **undoable** via `EditorUndoRedoManager` and **ungated** (the in-scene `node_*` model). `tilemaplayer_create` optionally binds a TileSet `.tres` as the layer's `tile_set`; cells are addressed by integer `coords` and painted with a `source_id` + `atlas_coords` (+ `alternative`). `set_cell` with `source_id` -1 erases; `set_cells_rect` fills a region in one undoable action (capped at 65536 cells); an empty cell reads back as `source_id` -1 / `atlas_coords` [-1, -1] / `alternative` 0. `TileMapLayer` supersedes the deprecated `TileMap` node in Godot 4.x.
 
 ### `tileset_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string", "pattern": "^res://" }, "tile_size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "tile_size"], "properties": { "created": { "type": "string" }, "tile_size": { "type": "array", "items": { "type": "integer" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string", "pattern": "^res://" }, "tile_size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "tile_size"], "properties": { "created": { "type": "string" }, "tile_size": { "type": "array", "items": { "type": "integer" } } } }
+```
 
 ### `tileset_add_source` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "texture_path"], "properties": { "tileset_path": { "type": "string" }, "texture_path": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "margins": { "type": "array", "items": { "type": "integer" } }, "separation": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["tileset", "source_id", "texture", "texture_region_size", "source_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "texture": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "texture_path"], "properties": { "tileset_path": { "type": "string" }, "texture_path": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "margins": { "type": "array", "items": { "type": "integer" } }, "separation": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tileset", "source_id", "texture", "texture_region_size", "source_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "texture": { "type": "string" }, "texture_region_size": { "type": "array", "items": { "type": "integer" } }, "source_count": { "type": "integer" } } }
+```
 
 ### `tileset_add_tile` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "size", "tiles_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "tiles_count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "size", "tiles_count"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "size": { "type": "array", "items": { "type": "integer" } }, "tiles_count": { "type": "integer" } } }
+```
 
 ### `tileset_set_tile_collision` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords", "polygon"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "polygon": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "physics_layer": { "type": "integer" }, "one_way": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "physics_layer", "polygon_index", "points", "one_way"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "physics_layer": { "type": "integer" }, "polygon_index": { "type": "integer" }, "points": { "type": "integer" }, "one_way": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tileset_path", "source_id", "atlas_coords", "polygon"], "properties": { "tileset_path": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "polygon": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "physics_layer": { "type": "integer" }, "one_way": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tileset", "source_id", "atlas_coords", "physics_layer", "polygon_index", "points", "one_way"], "properties": { "tileset": { "type": "string" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "physics_layer": { "type": "integer" }, "polygon_index": { "type": "integer" }, "points": { "type": "integer" }, "one_way": { "type": "boolean" } } }
+```
 
 ### `tilemaplayer_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "tileset_path": { "type": "string", "pattern": "^res://" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "tile_set"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "tile_set": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "tileset_path": { "type": "string", "pattern": "^res://" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "tile_set"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "tile_set": { "type": "string" } } }
+```
 
 ### `tilemap_set_cell` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }
+```
 
 ### `tilemap_set_cells_rect` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "rect"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "description": "[x, y, width, height] in cells" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "rect", "cells", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" } }, "cells": { "type": "integer" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "rect"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "description": "[x, y, width, height] in cells" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "rect", "cells", "source_id", "atlas_coords", "alternative", "erased"], "properties": { "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "integer" } }, "cells": { "type": "integer" }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "erased": { "type": "boolean" } } }
+```
 
 ### `tilemap_get_cell` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } } } }`
-- **Output** `{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "empty"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "empty": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "coords"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "coords", "source_id", "atlas_coords", "alternative", "empty"], "properties": { "path": { "type": "string" }, "coords": { "type": "array", "items": { "type": "integer" } }, "source_id": { "type": "integer" }, "atlas_coords": { "type": "array", "items": { "type": "integer" } }, "alternative": { "type": "integer" }, "empty": { "type": "boolean" } } }
+```
 
 ### `tilemap_clear` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "cleared_cells"], "properties": { "path": { "type": "string" }, "cleared_cells": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "cleared_cells"], "properties": { "path": { "type": "string" }, "cleared_cells": { "type": "integer" } } }
+```
 
 ## Group E — Physics & collision (Plane A / Editor)
 
@@ -1097,24 +1163,54 @@ In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoabl
 ```
 
 ### `shader_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "code": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "type", "code_length"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "code_length": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "code": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "type", "code_length"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "code_length": { "type": "number" } } }
+```
 
 ### `shader_set_code` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "code"], "properties": { "path": { "type": "string" }, "code": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "code_length"], "properties": { "path": { "type": "string" }, "code_length": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "code"], "properties": { "path": { "type": "string" }, "code": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "code_length"], "properties": { "path": { "type": "string" }, "code_length": { "type": "number" } } }
+```
 
 ### `shadermaterial_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "target_property", "type", "shader_path"], "properties": { "path": { "type": "string" }, "target_property": { "type": "string" }, "type": { "type": "string" }, "shader_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "target_property", "type", "shader_path"], "properties": { "path": { "type": "string" }, "target_property": { "type": "string" }, "type": { "type": "string" }, "shader_path": { "type": "string" } } }
+```
 
 ### `shadermaterial_set_shader` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "shader_path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "shader_path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "shader_path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "shader_path"], "properties": { "path": { "type": "string" }, "shader_path": { "type": "string" } } }
+```
 
 ### `shadermaterial_set_param` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }`
-- **Output** `{ "type": "object", "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }
+```
 
 ### `audio_player_create` ✅  (undoable)
 - **Input**
@@ -1181,48 +1277,114 @@ In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoabl
 The user-interface authoring surface (now **195**). `control_create` and `container_add_child` add a **Control**-derived node (Button / Label / Panel / any `Container` / TextureRect / …) to the **edited scene** — both refuse a non-Control class, and `container_add_child` additionally refuses a non-`Container` parent so the child lands in a real layout container; `control_create` also seeds `text` on controls that expose it. `control_set_anchors` sets any of the four anchors (`left`/`top`/`right`/`bottom`, 0..1) directly; `control_set_layout_preset` applies a `LayoutPreset` (by name — `full_rect`, `center`, `top_left`, `hcenter_wide`, … — or the 0..15 integer) via `set_anchors_and_offsets_preset`, capturing all eight anchor/offset properties for a clean undo; `control_set_size_flags` sets the container `size_flags_horizontal` / `size_flags_vertical` bitmasks and/or `size_flags_stretch_ratio`; `control_set_theme` assigns (or clears) a `Theme` on a Control's `theme` property. All six mutate the edited scene and are **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. The five `theme_*` tools author a **`Theme` resource on disk**: `theme_create` writes a new empty Theme, and `theme_set_color` / `theme_set_font` / `theme_set_stylebox` / `theme_set_constant` load a Theme, set one typed item (a `Color`, a `Font`/`StyleBox` loaded from a `res://` path, or an integer constant) for a given theme type, and re-save — so, like the `resource_*` / `shader_create` writers, they are **gated** by confirmation (not scene-undoable). The Control anchor / preset / size-flag / `theme` API and `Theme.set_color` / `set_font` / `set_stylebox` / `set_constant` were probed live on Godot 4.7 before design, and a `Button` carrying anchors + a `Theme` override survives a `.tscn` save + fresh reload.
 
 ### `control_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string" }, "name": { "type": "string" }, "text": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string" }, "name": { "type": "string" }, "text": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `container_add_child` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["container_path", "type"], "properties": { "container_path": { "type": "string" }, "type": { "type": "string" }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "container"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "container": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["container_path", "type"], "properties": { "container_path": { "type": "string" }, "type": { "type": "string" }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "container"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "container": { "type": "string" } } }
+```
 
 ### `control_set_anchors` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "left": { "type": "number" }, "top": { "type": "number" }, "right": { "type": "number" }, "bottom": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "anchors"], "properties": { "path": { "type": "string" }, "anchors": { "type": "object", "required": ["left", "top", "right", "bottom"], "properties": { "left": { "type": "number" }, "top": { "type": "number" }, "right": { "type": "number" }, "bottom": { "type": "number" } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "left": { "type": "number" }, "top": { "type": "number" }, "right": { "type": "number" }, "bottom": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "anchors"], "properties": { "path": { "type": "string" }, "anchors": { "type": "object", "required": ["left", "top", "right", "bottom"], "properties": { "left": { "type": "number" }, "top": { "type": "number" }, "right": { "type": "number" }, "bottom": { "type": "number" } } } } }
+```
 
 ### `control_set_layout_preset` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "preset"], "properties": { "path": { "type": "string" }, "preset": { "type": ["string", "integer"] }, "resize_mode": { "type": "integer" }, "margin": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "preset", "preset_name"], "properties": { "path": { "type": "string" }, "preset": { "type": "number" }, "preset_name": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "preset"], "properties": { "path": { "type": "string" }, "preset": { "type": ["string", "integer"] }, "resize_mode": { "type": "integer" }, "margin": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "preset", "preset_name"], "properties": { "path": { "type": "string" }, "preset": { "type": "number" }, "preset_name": { "type": "string" } } }
+```
 
 ### `control_set_size_flags` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "horizontal": { "type": "integer" }, "vertical": { "type": "integer" }, "stretch_ratio": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "horizontal", "vertical", "stretch_ratio"], "properties": { "path": { "type": "string" }, "horizontal": { "type": "number" }, "vertical": { "type": "number" }, "stretch_ratio": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "horizontal": { "type": "integer" }, "vertical": { "type": "integer" }, "stretch_ratio": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "horizontal", "vertical", "stretch_ratio"], "properties": { "path": { "type": "string" }, "horizontal": { "type": "number" }, "vertical": { "type": "number" }, "stretch_ratio": { "type": "number" } } }
+```
 
 ### `control_set_theme` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "theme_path"], "properties": { "path": { "type": "string" }, "theme_path": { "type": "string", "description": "Theme res:// path, or \"\" to clear" } } }`
-- **Output** `{ "type": "object", "required": ["path", "theme_path"], "properties": { "path": { "type": "string" }, "theme_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "theme_path"], "properties": { "path": { "type": "string" }, "theme_path": { "type": "string", "description": "Theme res:// path, or \"\" to clear" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "theme_path"], "properties": { "path": { "type": "string" }, "theme_path": { "type": "string" } } }
+```
 
 ### `theme_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "type"], "properties": { "created": { "type": "string" }, "type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "type"], "properties": { "created": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `theme_set_color` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "color"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "color": { "type": "array", "items": { "type": "number" } }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "theme_type", "color"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "color": { "type": "array", "items": { "type": "number" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "color"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "color": { "type": "array", "items": { "type": "number" } }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "theme_type", "color"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "color": { "type": "array", "items": { "type": "number" } } } }
+```
 
 ### `theme_set_font` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "font_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "font_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "theme_type", "font_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "font_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "font_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "font_path": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "theme_type", "font_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "font_path": { "type": "string" } } }
+```
 
 ### `theme_set_stylebox` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "stylebox_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "stylebox_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "theme_type", "stylebox_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "stylebox_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "stylebox_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "stylebox_path": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "theme_type", "stylebox_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "stylebox_path": { "type": "string" } } }
+```
 
 ### `theme_set_constant` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "integer" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "integer" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "theme_type", "value"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "theme_type": { "type": "string" }, "value": { "type": "number" } } }
+```
 
 ## Group H — 3D & navigation (Plane A / Editor)
 
