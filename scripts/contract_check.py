@@ -122,8 +122,52 @@ def _match_braces(text: str, open_idx: int) -> int:
     return n
 
 
+def _strip_comments(body: str) -> str:
+    """Remove `//` line and `/* */` block comments, respecting string and
+    backtick literals, so commented-out text inside an object literal can't be
+    misread as a key or spread. Line comments keep their trailing newline;
+    block comments collapse to a single space (so neighbouring tokens don't
+    fuse)."""
+    out: list[str] = []
+    i, n = 0, len(body)
+    while i < n:
+        c = body[i]
+        if c in "\"'`":
+            q = c
+            out.append(c)
+            i += 1
+            while i < n and body[i] != q:
+                if body[i] == "\\" and i + 1 < n:
+                    out.append(body[i])
+                    out.append(body[i + 1])
+                    i += 2
+                    continue
+                out.append(body[i])
+                i += 1
+            if i < n:
+                out.append(body[i])  # closing quote
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and body[i + 1] == "/":
+            i += 2
+            while i < n and body[i] != "\n":
+                i += 1
+            continue  # leave the newline for the next iteration
+        if c == "/" and i + 1 < n and body[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (body[i] == "*" and body[i + 1] == "/"):
+                i += 1
+            i += 2  # skip the closing */
+            out.append(" ")
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _top_level_keys(body: str) -> set[str]:
     """`identifier:` keys at depth 0 of an object-literal body (between braces)."""
+    body = _strip_comments(body)
     keys: set[str] = set()
     depth, i, n, tok = 0, 0, len(body), ""
     while i < n:
@@ -159,6 +203,7 @@ def _top_level_keys(body: str) -> set[str]:
 
 def _top_level_spreads(body: str) -> set[str]:
     """`...ident` object-spread names at depth 0 of an object-literal body."""
+    body = _strip_comments(body)
     spreads: set[str] = set()
     depth, i, n = 0, 0, len(body)
     while i < n:

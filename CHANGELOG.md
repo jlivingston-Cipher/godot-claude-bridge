@@ -6,6 +6,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `scripts/contract_check.py` now strips `//` line and `/* */` block comments (string/backtick-aware) before extracting an object literal's top-level keys and spreads, so a code comment inside a `host/src/schemas.ts` schema literal can no longer be misread as a pinned output field. The `// D6: …` note inside the `runtime_get_log` `outputSchemas` entry was previously parsed as a phantom `D6` field — harmless while that tool's catalog Output stays an inline code span, but a latent false-positive that would break shape-check #7 ("field pinned in schemas.ts but absent from the catalog Output block") the moment `runtime.ts`'s Output blocks are fenced. No behaviour, tool, schema, or version change (still 242 tools; all hard checks pass, coverage unchanged at 215 input / 204 output shapes).
+
 ## [1.0.0] — 2026-07-10
 
 First stable public release. The tool surface — **242 tools + 5 MCP resources** — and all behaviour are identical to the built-but-never-published `0.17.0` tree; this cut only advances the version stamps and consolidates the accumulated `[Unreleased]` history into the 1.0 line. The project now commits to [Semantic Versioning](https://semver.org/): subsequent breaking changes to the tool surface, output schemas, or configuration will bump the major version. The `CLAUDE_*` → `BREAKPOINT_*` environment-variable migration ships with its backward-compatible deprecation shim intact — legacy names are still honoured for one release cycle with a one-time warning.
