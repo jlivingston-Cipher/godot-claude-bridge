@@ -9,6 +9,7 @@ import {
   runInit,
 } from "../src/cli/init.js";
 import { mergeClientConfig, serverEntry } from "../src/cli/clients.js";
+import type { FetchLike, HttpResponse } from "../src/cli/github.js";
 
 /**
  * Tests for `breakpoint-mcp init`. The addon source is a tiny fixture (pointed at
@@ -206,4 +207,70 @@ test("runInit fails clearly when the target has no project.godot", async () => {
     if (savedSrc === undefined) delete process.env.BREAKPOINT_ADDON_SRC;
     else process.env.BREAKPOINT_ADDON_SRC = savedSrc;
   }
+});
+
+// ---- runInit --from-github (injected fetch) -------------------------------
+
+/** A fake GitHub fetch: git/trees lists the given files, raw serves their bodies. */
+function ghFetch(files: Record<string, string>): FetchLike {
+  const tree = {
+    truncated: false,
+    tree: Object.keys(files).map((f) => ({ path: `addons/breakpoint_mcp/${f}`, type: "blob" })),
+  };
+  return async (url: string): Promise<HttpResponse> => {
+    if (url.includes("/git/trees/")) {
+      return { ok: true, status: 200, json: async () => tree, arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    const name = url.split("/breakpoint_mcp/")[1] ?? "";
+    const body = files[name];
+    if (body === undefined) {
+      return { ok: false, status: 404, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    const bytes = Uint8Array.from(new TextEncoder().encode(body));
+    return { ok: true, status: 200, json: async () => ({}), arrayBuffer: async () => bytes.buffer };
+  };
+}
+
+test("runInit --from-github installs the fetched addon", async () => {
+  const proj = makeProject();
+  const fetchFn = ghFetch({
+    "plugin.cfg": '[plugin]\nname="Breakpoint MCP"\nversion="9.9.9"\nscript="plugin.gd"\n',
+    "plugin.gd": "extends EditorPlugin\n",
+  });
+  const { code, out } = await capture(() =>
+    runInit(["--project", proj, "--from-github", "main", "--client", "none"], { fetchFn }),
+  );
+  assert.equal(code, 0);
+  assert.ok(fs.existsSync(path.join(proj, "addons", "breakpoint_mcp", "plugin.cfg")));
+  assert.ok(fs.readFileSync(path.join(proj, "project.godot"), "utf8").includes(ENABLED_RES));
+  assert.match(out, /from GitHub/);
+});
+
+test("runInit --from-github --dry-run fetches nothing and writes nothing", async () => {
+  const proj = makeProject();
+  let called = false;
+  const fetchFn: FetchLike = async () => {
+    called = true;
+    return { ok: false, status: 500, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) };
+  };
+  const { code, out } = await capture(() =>
+    runInit(["--project", proj, "--from-github", "--dry-run", "--client", "none"], { fetchFn }),
+  );
+  assert.equal(code, 0);
+  assert.equal(called, false, "dry-run must not hit the network");
+  assert.equal(fs.existsSync(path.join(proj, "addons", "breakpoint_mcp")), false);
+  assert.match(out, /would fetch/);
+});
+
+test("runInit --from-github returns 1 and installs nothing when the fetch fails", async () => {
+  const proj = makeProject();
+  const fetchFn: FetchLike = async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({}),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  });
+  const { code } = await capture(() => runInit(["--project", proj, "--from-github", "main"], { fetchFn }));
+  assert.equal(code, 1);
+  assert.equal(fs.existsSync(path.join(proj, "addons", "breakpoint_mcp")), false);
 });
