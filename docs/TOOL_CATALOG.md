@@ -1357,12 +1357,24 @@ List the code actions (quick fixes / refactors) OmniSharp offers for a range —
 # Plane D — Debugging (DAP)  (✅ implemented — Phase 2; raw TCP + DAP `Content-Length` framing to Godot's debug adapter, default `127.0.0.1:6006`)
 
 ### `dbg_launch` ✅
-- **Input** `{ "type": "object", "properties": { "scene": { "type": "string", "description": "'main' (default), 'current', or a res:// scene path" }, "stop_on_entry": { "type": "boolean", "default": false } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "state", "scene"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" }, "scene": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "scene": { "type": "string", "description": "'main' (default), 'current', or a res:// scene path" }, "stop_on_entry": { "type": "boolean", "default": false } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "state", "scene"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" }, "scene": { "type": "string" } } }
+```
 
 ### `dbg_attach` ✅
-- **Input** `{ "type": "object", "properties": { "address": { "type": "string", "default": "127.0.0.1" }, "port": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "address": { "type": "string", "default": "127.0.0.1" }, "port": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }
+```
 
 ### `dbg_set_breakpoints` ✅
 - **Input**
@@ -1375,30 +1387,60 @@ List the code actions (quick fixes / refactors) OmniSharp offers for a range —
     "hit_conditions": { "type": "array", "items": { "type": ["string", "null"] }, "description": "Per-line hit expressions aligned to lines, e.g. '>3' or '%5'" },
     "log_messages": { "type": "array", "items": { "type": ["string", "null"] }, "description": "Per-line log messages aligned to lines; makes that breakpoint a logpoint (logs, never halts)" } } }
 ```
-- **Output** `{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } }, "unsupported_modifiers": { "type": "array", "items": { "type": "string" } }, "warning": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } }, "unsupported_modifiers": { "type": "array", "items": { "type": "string" } }, "warning": { "type": "string" } } }
+```
 - **Feature-detect:** `conditions` / `hit_conditions` / `log_messages` are sent only when the connected adapter advertises `supportsConditionalBreakpoints` / `supportsHitConditionalBreakpoints` / `supportsLogPoints`. Godot 4.3 advertises all three **false** and ignores them (a conditional breakpoint would halt unconditionally — verified live in the `dap-plane` modifier probe), so there they are dropped and the result carries `unsupported_modifiers` + a `warning`. Detection needs a live session (set modifiers after `dbg_launch`).
 
 ### `dbg_continue` / `dbg_step` ✅
 - **Input (`dbg_step`)** `{ "type": "object", "required": ["kind"], "properties": { "kind": { "enum": ["in", "over", "out"] } } }`
 - **Input (`dbg_continue`)** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["state"], "properties": { "state": { "enum": ["running", "stopped", "terminated"] }, "stopped_reason": { "type": ["string", "null"] } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["state"], "properties": { "state": { "enum": ["running", "stopped", "terminated"] }, "stopped_reason": { "type": ["string", "null"] } } }
+```
 
 ### `dbg_stack_trace` ✅
-- **Input** `{ "type": "object", "properties": { "levels": { "type": "integer", "minimum": 1, "default": 20, "description": "Max frames" } } }`
-- **Output** `{ "type": "object", "required": ["frames"], "properties": { "frames": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "source": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "levels": { "type": "integer", "minimum": 1, "default": 20, "description": "Max frames" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["frames"], "properties": { "frames": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "source": { "type": "string" }, "line": { "type": "integer" } } } } } }
+```
 
 ### `dbg_scopes` ✅
-- **Input** `{ "type": "object", "required": ["frame_id"], "properties": { "frame_id": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["scopes"], "properties": { "scopes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["frame_id"], "properties": { "frame_id": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scopes"], "properties": { "scopes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }
+```
 
 ### `dbg_variables` ✅
-- **Input** `{ "type": "object", "required": ["variables_ref"], "properties": { "variables_ref": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["variables_ref"], "properties": { "variables_ref": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }
+```
 
 ### `dbg_evaluate` ✅ · destructive (arbitrary code execution — gate hard)
 Evaluate an expression in the current stopped frame (DAP `evaluate`, repl context). **Live-verified in CI:** Godot 4.3 does bare-name lookup only (a compound expression like `counter + 1` returns empty), while **Godot 4.7 performs full expression evaluation** (`counter + 1` → `101`). The request is bounded by `GODOT_DAP_EVALUATE_TIMEOUT_MS` (~8 s) so a non-answering adapter fails fast rather than hanging the full DAP timeout.
-- **Input** `{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }
+```
 
 ### `dbg_watch` ✅
 Manage a persistent set of watch expressions and re-evaluate them in the current stopped frame. Evaluated in DAP `watch` context (side-effect-free), so it is **not** gated. Results are only meaningful while stopped at a breakpoint.
@@ -1411,11 +1453,17 @@ Manage a persistent set of watch expressions and re-evaluate them in the current
     "clear": { "type": "boolean", "description": "Clear all watches before applying add" },
     "frame_id": { "type": "integer", "description": "Frame id from dbg_stack_trace; omit for the top frame" } } }
 ```
-- **Output** `{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }
+```
 
 ### `dbg_set_exception_breakpoints` ✅
 Enable (replace) the debugger's exception breakpoint filters so execution halts when a matching error is thrown (DAP `setExceptionBreakpoints`). Pass filter IDs to enable; call with no filters (or `[]`) to clear. The result echoes the active `filters` and reports `available_filters` — the exception filters the connected adapter advertises. Requires a running session; **not** gated (it only configures the debugger). Feature-detected: on an adapter that advertises no `exceptionBreakpointFilters` (e.g. Godot 4.3, which also does not answer the request — it would otherwise time out) it returns a clear "unsupported" message **without sending anything**.
-- **Input** `{ "type": "object", "properties": { "filters": { "type": "array", "items": { "type": "string" }, "description": "Exception filter IDs to enable (default none = clear); choose from available_filters" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "filters": { "type": "array", "items": { "type": "string" }, "description": "Exception filter IDs to enable (default none = clear); choose from available_filters" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["filters", "available_filters", "breakpoints"], "properties": { "filters": { "type": "array", "items": { "type": "string" } }, "available_filters": { "type": "array", "items": { "type": "object", "properties": { "filter": { "type": "string" }, "label": { "type": "string" } } } }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "verified": { "type": "boolean" } } } } } }
@@ -1423,23 +1471,47 @@ Enable (replace) the debugger's exception breakpoint filters so execution halts 
 
 ### `dbg_set_variable` ✅ · destructive (mutates live program state — gate hard)
 Change a variable's value in a stopped frame (DAP `setVariable`). `variables_ref` is the container's `variablesReference` (from `dbg_scopes`, or a complex `dbg_variables` entry), `name` is the variable within it, `value` is a GDScript literal/expression. Feature-detected: on an adapter that advertises `supportsSetVariable: false` it returns a clear "unsupported" message **without prompting**.
-- **Input** `{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean", "description": "Auto-approve this mutation (skip the elicitation prompt)" } } }`
-- **Output** `{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean", "description": "Auto-approve this mutation (skip the elicitation prompt)" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }
+```
 
 ### `dbg_restart` ✅
 Restart the current debug session. Uses the DAP `restart` request when the adapter advertises `supportsRestartRequest`; otherwise falls back to `terminate` + a fresh launch/attach handshake, so it works on every adapter. Reuses the last `dbg_launch`/`dbg_attach` params; `scene` / `stop_on_entry` override them for a launched session. `method` reports which path ran (`restart` = native DAP restart, `relaunch` = terminate + fresh handshake).
-- **Input** `{ "type": "object", "properties": { "scene": { "type": "string", "description": "Override scene for a launched session: 'main', 'current', or res://scene.tscn" }, "stop_on_entry": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "method", "state"], "properties": { "session_id": { "type": "string" }, "method": { "enum": ["restart", "relaunch"] }, "state": { "type": "string" }, "scene": { "type": ["string", "null"] } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "scene": { "type": "string", "description": "Override scene for a launched session: 'main', 'current', or res://scene.tscn" }, "stop_on_entry": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "method", "state"], "properties": { "session_id": { "type": "string" }, "method": { "enum": ["restart", "relaunch"] }, "state": { "type": "string" }, "scene": { "type": ["string", "null"] } } }
+```
 
 ### `dbg_goto` ✅ · destructive (moves execution — gate hard)
 Move the program counter within the current stopped frame — 'set next statement' (DAP `gotoTargets` + `goto`). Call with `path` + `line` to list the valid goto targets on that line; when the line has exactly one target (or you pass `target_id`) it jumps there. Feature-detected: on an adapter that does not advertise `supportsGotoTargetsRequest` it returns a clear "unsupported" message **without prompting**. Only meaningful while stopped at a breakpoint.
-- **Input** `{ "type": "object", "required": ["path", "line"], "properties": { "path": { "type": "string" }, "line": { "type": "integer", "minimum": 1 }, "target_id": { "type": "integer", "description": "A specific target id from a prior listing; omit to auto-pick when the line has a single target" }, "confirm": { "type": "boolean", "description": "Auto-approve the jump (skip the elicitation prompt)" } } }`
-- **Output** `{ "type": "object", "required": ["targets", "jumped", "target_id"], "properties": { "targets": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "label": { "type": "string" }, "line": { "type": "integer" } } } }, "jumped": { "type": "boolean" }, "target_id": { "type": ["integer", "null"] } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path", "line"], "properties": { "path": { "type": "string" }, "line": { "type": "integer", "minimum": 1 }, "target_id": { "type": "integer", "description": "A specific target id from a prior listing; omit to auto-pick when the line has a single target" }, "confirm": { "type": "boolean", "description": "Auto-approve the jump (skip the elicitation prompt)" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["targets", "jumped", "target_id"], "properties": { "targets": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "label": { "type": "string" }, "line": { "type": "integer" } } } }, "jumped": { "type": "boolean" }, "target_id": { "type": ["integer", "null"] } } }
+```
 
 ### `dbg_data_breakpoints` ✅
 Set (replace) data breakpoints — 'watchpoints' that halt when a variable's value changes (DAP `dataBreakpointInfo` + `setDataBreakpoints`). Each `watch` entry `{ name, variables_ref?, access_type? }` is resolved to a dataId, then every resolvable id is armed in one `setDataBreakpoints` call. Call with no `watch` (or `[]`) to clear all data breakpoints. The result reports the armed `breakpoints` (with `data_id` + `verified`) and any `unresolved` variables the adapter cannot watch. Requires a running session; **not** gated. Feature-detected on `supportsDataBreakpoints`.
-- **Input** `{ "type": "object", "properties": { "watch": { "type": "array", "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" }, "access_type": { "enum": ["read", "write", "readWrite"] } } }, "description": "Variables to watch; omit or [] to clear all data breakpoints" } } }`
-- **Output** `{ "type": "object", "required": ["breakpoints", "unresolved"], "properties": { "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "data_id": { "type": "string" }, "verified": { "type": "boolean" } } } }, "unresolved": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "reason": { "type": "string" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "watch": { "type": "array", "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" }, "access_type": { "enum": ["read", "write", "readWrite"] } } }, "description": "Variables to watch; omit or [] to clear all data breakpoints" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["breakpoints", "unresolved"], "properties": { "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "data_id": { "type": "string" }, "verified": { "type": "boolean" } } } }, "unresolved": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "reason": { "type": "string" } } } } } }
+```
 
 ---
 
@@ -1447,46 +1519,97 @@ Set (replace) data breakpoints — 'watchpoints' that halt when a variable's val
 
 ### `cs_dbg_launch` ✅ · runs code
 Launch a C# Godot game under netcoredbg. `program` defaults to the configured Mono/.NET Godot binary and `args` to `['--path', <C# project>]`; override either to debug a different .NET program. Buffered breakpoints are applied during the handshake.
-- **Input** `{ "type": "object", "properties": { "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } }, "stop_on_entry": { "type": "boolean", "default": false }, "just_my_code": { "type": "boolean", "default": true } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } }, "stop_on_entry": { "type": "boolean", "default": false }, "just_my_code": { "type": "boolean", "default": true } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }
+```
 
 ### `cs_dbg_attach` ✅
 Attach netcoredbg to an already-running .NET process (e.g. a C# Godot game launched separately) by its OS process id.
-- **Input** `{ "type": "object", "required": ["process_id"], "properties": { "process_id": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["process_id"], "properties": { "process_id": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "state"], "properties": { "session_id": { "type": "string" }, "state": { "type": "string" } } }
+```
 
 ### `cs_dbg_set_breakpoints` ✅
 Set (replace) the breakpoints for a C# source file. Applied immediately if a session is running, else buffered until launch/attach. Feature-detected: the per-line `conditions` modifier is only sent when the connected adapter advertises `supportsConditionalBreakpoints` (netcoredbg does); on an adapter that advertises it unsupported the modifier is dropped and the result carries `unsupported_modifiers` + a `warning`.
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "lines"], "properties": { "path": { "type": "string" }, "lines": { "type": "array", "items": { "type": "integer", "minimum": 1 } }, "conditions": { "type": "array", "items": { "type": ["string", "null"] } } } }`
-- **Output** `{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } }, "unsupported_modifiers": { "type": "array", "items": { "type": "string" } }, "warning": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "lines"], "properties": { "path": { "type": "string" }, "lines": { "type": "array", "items": { "type": "integer", "minimum": 1 } }, "conditions": { "type": "array", "items": { "type": ["string", "null"] } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "buffered", "breakpoints"], "properties": { "path": { "type": "string" }, "buffered": { "type": "boolean" }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "line": { "type": "integer" }, "verified": { "type": "boolean" } } } }, "unsupported_modifiers": { "type": "array", "items": { "type": "string" } }, "warning": { "type": "string" } } }
+```
 
 ### `cs_dbg_continue` / `cs_dbg_step` ✅
 Resume execution and wait for the program to settle again (next breakpoint or termination). `cs_dbg_step` takes a `kind`; `cs_dbg_continue` takes no input.
 - **Input (`cs_dbg_step`)** `{ "type": "object", "required": ["kind"], "properties": { "kind": { "enum": ["in", "over", "out"] } } }`
 - **Input (`cs_dbg_continue`)** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["state"], "properties": { "state": { "enum": ["running", "stopped", "terminated"] }, "stopped_reason": { "type": ["string", "null"] } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["state"], "properties": { "state": { "enum": ["running", "stopped", "terminated"] }, "stopped_reason": { "type": ["string", "null"] } } }
+```
 
 ### `cs_dbg_stack_trace` ✅
-- **Input** `{ "type": "object", "properties": { "levels": { "type": "integer", "minimum": 1, "default": 20 } } }`
-- **Output** `{ "type": "object", "required": ["frames"], "properties": { "frames": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "source": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "levels": { "type": "integer", "minimum": 1, "default": 20 } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["frames"], "properties": { "frames": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" }, "source": { "type": "string" }, "line": { "type": "integer" } } } } } }
+```
 
 ### `cs_dbg_scopes` ✅
-- **Input** `{ "type": "object", "required": ["frame_id"], "properties": { "frame_id": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["scopes"], "properties": { "scopes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["frame_id"], "properties": { "frame_id": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scopes"], "properties": { "scopes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }
+```
 
 ### `cs_dbg_variables` ✅
-- **Input** `{ "type": "object", "required": ["variables_ref"], "properties": { "variables_ref": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["variables_ref"], "properties": { "variables_ref": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["variables"], "properties": { "variables": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } } } } }
+```
 
 ### `cs_dbg_evaluate` ✅ · destructive (arbitrary code execution — gate hard)
 Evaluate a C# expression in the current stopped frame (DAP `evaluate`, repl context). Bounded by `GODOT_CSDAP_EVALUATE_TIMEOUT_MS` (~8 s) so a non-answering adapter fails fast rather than hanging the full DAP timeout.
-- **Input** `{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" }, "confirm": { "type": "boolean", "description": "Auto-approve this arbitrary-code evaluation (skip the elicitation prompt)" } } }`
-- **Output** `{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["expression"], "properties": { "expression": { "type": "string" }, "frame_id": { "type": "integer" }, "confirm": { "type": "boolean", "description": "Auto-approve this arbitrary-code evaluation (skip the elicitation prompt)" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["result"], "properties": { "result": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }
+```
 
 ### `cs_dbg_set_variable` ✅ · destructive (mutates live program state — gate hard)
 Change a variable's value in a stopped C# frame (DAP `setVariable`). `variables_ref` is the container's `variablesReference` (from `cs_dbg_scopes`, or a complex `cs_dbg_variables` entry), `name` is the variable within it, `value` is a C# literal/expression. Feature-detected: on an adapter that advertises `supportsSetVariable: false` it returns a clear "unsupported" message **without prompting**; otherwise a bounded deadline (`GODOT_CSDAP_SETVAR_TIMEOUT_MS`) turns a non-answering adapter into a clear message rather than a hang.
-- **Input** `{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["variables_ref", "name", "value"], "properties": { "variables_ref": { "type": "integer" }, "name": { "type": "string" }, "value": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["name", "value", "variables_ref"], "properties": { "name": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "variables_ref": { "type": "integer" } } }
+```
 
 ### `cs_dbg_watch` ✅
 Manage a persistent set of C# watch expressions and re-evaluate them in the current stopped frame. Evaluated in DAP `watch` context (side-effect-free), so it is **not** gated. Results are only meaningful while stopped at a breakpoint. Each watch's `evaluate` is bounded by `GODOT_CSDAP_EVALUATE_TIMEOUT_MS` so a stalling expression fails fast on that entry.
@@ -1499,11 +1622,17 @@ Manage a persistent set of C# watch expressions and re-evaluate them in the curr
     "clear": { "type": "boolean", "description": "Clear all watches before applying add" },
     "frame_id": { "type": "integer", "description": "Frame id from cs_dbg_stack_trace; omit for the top frame" } } }
 ```
-- **Output** `{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["watches"], "properties": { "watches": { "type": "array", "items": { "type": "object", "required": ["expression", "value", "type", "error"], "properties": { "expression": { "type": "string" }, "value": { "type": "string" }, "type": { "type": "string" }, "error": { "type": ["string", "null"] } } } } } }
+```
 
 ### `cs_dbg_set_exception_breakpoints` ✅
 Enable (replace) the debugger's exception breakpoint filters so execution halts when a matching .NET exception is thrown (DAP `setExceptionBreakpoints`). Pass filter IDs to enable; call with no filters (or `[]`) to clear. The result echoes the active `filters` and reports `available_filters` — the exception filters the connected adapter advertises (**netcoredbg exposes `all` and `user-unhandled`**). Requires a running session; **not** gated (it only configures the debugger). Feature-detected: on an adapter that advertises no `exceptionBreakpointFilters` it returns a clear "unsupported" message **without sending anything**.
-- **Input** `{ "type": "object", "properties": { "filters": { "type": "array", "items": { "type": "string" }, "description": "Exception filter IDs to enable (default none = clear); choose from available_filters" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "filters": { "type": "array", "items": { "type": "string" }, "description": "Exception filter IDs to enable (default none = clear); choose from available_filters" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["filters", "available_filters", "breakpoints"], "properties": { "filters": { "type": "array", "items": { "type": "string" } }, "available_filters": { "type": "array", "items": { "type": "object", "properties": { "filter": { "type": "string" }, "label": { "type": "string" } } } }, "breakpoints": { "type": "array", "items": { "type": "object", "properties": { "verified": { "type": "boolean" } } } } } }
@@ -1511,8 +1640,14 @@ Enable (replace) the debugger's exception breakpoint filters so execution halts 
 
 ### `cs_dbg_restart` ✅
 Restart the current C# debug session. Uses the DAP `restart` request when the adapter advertises `supportsRestartRequest`; otherwise falls back to `terminate` + a fresh launch/attach handshake, so it works on every adapter (**netcoredbg advertises none, so the relaunch path runs**). Reuses the last `cs_dbg_launch`/`cs_dbg_attach` params; `stop_on_entry` / `program` / `args` override them for a launched session. `method` reports which path ran (`restart` = native DAP restart, `relaunch` = terminate + fresh handshake). C# sessions have no scene, so there is no `scene` field.
-- **Input** `{ "type": "object", "properties": { "stop_on_entry": { "type": "boolean" }, "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } }`
-- **Output** `{ "type": "object", "required": ["session_id", "method", "state"], "properties": { "session_id": { "type": "string" }, "method": { "enum": ["restart", "relaunch"] }, "state": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "stop_on_entry": { "type": "boolean" }, "program": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["session_id", "method", "state"], "properties": { "session_id": { "type": "string" }, "method": { "enum": ["restart", "relaunch"] }, "state": { "type": "string" } } }
+```
 
 ---
 
