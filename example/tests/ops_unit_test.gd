@@ -24,6 +24,16 @@ extends SceneTree
 ## Prints `OPS_UNIT_PASS` / `OPS_UNIT_FAIL` per assertion and a final
 ## `OPS_UNIT_SUMMARY pass=<n>/<total>` line, and quits non-zero if anything fails
 ## so a CI step can gate on it.
+##
+## A small LIVE-TREE phase runs in _process (frame 1, after _initialize): it needs
+## a running SceneTree so `root` is active — nodes then actually enter the tree, so
+## get_viewport() and absolute `/root/...` paths resolve, reaching branches the
+## hermetic phase cannot (runtime_bridge._resolve's absolute branch + _screenshot).
+## To keep the suite SOCKET-FREE anyway, _initialize frees the example's
+## BreakpointRuntimeBridge autoload before that first frame (it is parented to root
+## but not yet _ready), so its runtime TCP server never opens. The pure
+## operations._resource_props helper and the _screenshot no_viewport guard stay in
+## the hermetic _initialize phase.
 
 const Ops := preload("res://addons/breakpoint_mcp/operations.gd")
 const Codec := preload("res://addons/breakpoint_mcp/variant_json.gd")
@@ -40,11 +50,27 @@ class _FixtureRuntimeBridge extends RB:
 	func _base() -> Node:
 		return fixture_base
 
+## A runtime_bridge subclass whose _ready() is a no-op, so it can be added to the
+## LIVE SceneTree (to exercise get_viewport() and absolute-path resolution) WITHOUT
+## opening the TCP socket that RB._ready() normally would. Used only by _process.
+class _LiveRuntimeBridge extends RB:
+	func _ready() -> void:
+		pass
+
 var _pass := 0
 var _fail := 0
+var _live_done := false
 
 
 func _initialize() -> void:
+	# Free the example's BreakpointRuntimeBridge autoload BEFORE the first frame.
+	# It is parented to `root` but not yet inside the active tree (its _ready has
+	# not run), so freeing it now stops _ready() opening the runtime TCP socket
+	# once the live-tree phase (_process) iterates a frame — keeping this suite
+	# socket-free, the hermetic property it guards.
+	var autoload := root.get_node_or_null("BreakpointRuntimeBridge")
+	if autoload:
+		autoload.free()
 	var ops = Ops.new()  # untyped: only editor-free helpers are called (no setup(plugin))
 	_test_codec()
 	_test_codec_edges()
@@ -61,8 +87,24 @@ func _initialize() -> void:
 	_test_runtime_tree_handlers()
 	_test_runtime_property_method_signal()
 	_test_runtime_inject_input()
+	_test_resource_props(ops)          # pure resource-property listing (hermetic)
+	_test_screenshot_no_viewport()     # runtime screenshot guard, detached (hermetic)
+	# Summary + quit are emitted from _process, after the live-tree phase runs.
+
+
+func _process(_delta: float) -> bool:
+	# One-shot LIVE-TREE phase. On the first real frame `root` is active, so nodes
+	# added to it enter the tree (get_viewport / absolute `/root/...` paths resolve)
+	# — reaching branches the hermetic phase cannot. The runtime-bridge autoload was
+	# freed in _initialize, so no socket opens here either.
+	if _live_done:
+		return true
+	_live_done = true
+	_test_live_resolve_absolute()
+	_test_live_screenshot()
 	print("OPS_UNIT_SUMMARY pass=%d/%d" % [_pass, _pass + _fail])
 	quit(0 if _fail == 0 else 1)
+	return true
 
 
 func _check(label: String, cond: bool) -> void:
@@ -464,3 +506,92 @@ func _test_runtime_inject_input() -> void:
 	# _dispatch routes to inject_input (bad kind still routes, returns not-ok)
 	_eq("rb.dispatch.inject_input", rb._dispatch("runtime.inject_input", {"event": {"kind": "bogus"}})["ok"], false)
 	rb.free()
+
+
+# --- operations.gd _resource_props (pure; editor-usage filter) --------------
+func _test_resource_props(ops) -> void:
+	# A tiny scripted Resource with two @export vars — @export forces
+	# PROPERTY_USAGE_EDITOR, so both must appear; the built-in resource_* props are
+	# editor-visible too. Verifies the usage filter keeps editor props and the shape.
+	var scr := GDScript.new()
+	scr.source_code = "extends Resource\n@export var hp: int = 3\n@export var label: String = \"x\"\n"
+	scr.reload()
+	var res: Resource = scr.new()
+	var props: Array = ops._resource_props(res)
+	var by_name := {}
+	for p in props:
+		by_name[String(p.get("name", ""))] = p
+	_check("rprops.has_hp", by_name.has("hp"))
+	_check("rprops.has_label", by_name.has("label"))
+	if by_name.has("hp"):
+		_eq("rprops.hp_type", by_name["hp"]["type"], TYPE_INT)
+	if by_name.has("label"):
+		_eq("rprops.label_type", by_name["label"]["type"], TYPE_STRING)
+	# every returned prop passed the PROPERTY_USAGE_EDITOR filter and is non-nil
+	var all_editor := true
+	var all_typed := true
+	for p in props:
+		if (int(p.get("usage", 0)) & PROPERTY_USAGE_EDITOR) == 0:
+			all_editor = false
+		if int(p.get("type", TYPE_NIL)) == TYPE_NIL:
+			all_typed = false
+	_check("rprops.all_editor_usage", all_editor)
+	_check("rprops.no_nil_types", all_typed)
+
+
+# --- runtime_bridge.gd _screenshot guard (no viewport; hermetic) ------------
+func _test_screenshot_no_viewport() -> void:
+	# A _LiveRuntimeBridge NOT in the tree has no viewport, so _screenshot must
+	# short-circuit to the no_viewport error without touching the renderer.
+	var rb := _LiveRuntimeBridge.new()
+	var shot: Dictionary = rb._screenshot()
+	_eq("rb.shot.no_viewport.ok", shot["ok"], false)
+	_eq("rb.shot.no_viewport.code", shot["error"]["code"], "no_viewport")
+	rb.free()
+
+
+# --- LIVE tree: _resolve absolute (/...) branch — rb + operations -----------
+func _test_live_resolve_absolute() -> void:
+	# Build a real scene under the now-active root: /root/Scene/Kid.
+	var scene := Node2D.new()
+	scene.name = "Scene"
+	var kid := Node.new()
+	kid.name = "Kid"
+	scene.add_child(kid)
+	root.add_child(scene)
+	var rb := _LiveRuntimeBridge.new()
+	rb.name = "LiveRB"
+	root.add_child(rb)
+	_check("rb.live.in_tree", kid.is_inside_tree())
+	# runtime_bridge._resolve: the begins_with("/") branch -> get_node_or_null
+	_check("rb.resolve.abs_hit", rb._resolve("/root/Scene/Kid") == kid)
+	_check("rb.resolve.abs_miss", rb._resolve("/root/Nope/Nope") == null)
+	# operations._resolve: an absolute path through has_node/get_node on a live tree
+	var ops = Ops.new()
+	_check("ops.resolve.abs_hit", ops._resolve(scene, "/root/Scene/Kid") == kid)
+	rb.free()
+	scene.free()
+
+
+# --- LIVE tree: _screenshot with a real viewport ----------------------------
+func _test_live_screenshot() -> void:
+	# In-tree, get_viewport() is non-null — the precondition the hermetic guard
+	# cannot reach. The capture itself needs a real renderer: under the headless
+	# dummy driver get_image() yields null, so _screenshot degrades to no_image
+	# (it also logs a benign engine "Parameter t is null"); on a GPU it returns ok.
+	var host := Node.new()
+	host.name = "ShotHost"
+	root.add_child(host)
+	var rb := _LiveRuntimeBridge.new()
+	host.add_child(rb)
+	_check("rb.live.has_viewport", rb.get_viewport() != null)
+	var shot: Dictionary = rb._screenshot()
+	if shot["ok"]:
+		var r: Dictionary = shot["result"]
+		_eq("rb.shot.mime", r["mime"], "image/png")
+		_check("rb.shot.dims", int(r["width"]) > 0 and int(r["height"]) > 0)
+	else:
+		# headless / dummy renderer: graceful degradation to a clean error, no crash
+		_check("rb.shot.degrades", shot["error"]["code"] in ["no_image", "no_texture"])
+	rb.free()
+	host.free()
