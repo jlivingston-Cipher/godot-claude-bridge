@@ -727,60 +727,144 @@ Authoring over an in-scene `AnimationPlayer`; animations live in its `AnimationL
 Batch 2 (`anim_tree_*`, `anim_statemachine_*`) authors an `AnimationTree` node and its `tree_root` graph — an `AnimationNodeBlendTree` or `AnimationNodeStateMachine` — adding graph nodes, state-machine states, and transitions. Same model: undoable via `EditorUndoRedoManager`, ungated, nothing written to disk.
 
 ### `anim_player_create` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `anim_create` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["player", "library", "name"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "name": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["player", "library", "name"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "name": { "type": "string" } } }
+```
 
 ### `anim_delete` ✅ · destructive (removes an animation; gated)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["player", "library", "deleted"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "deleted": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "library": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["player", "library", "deleted"], "properties": { "player": { "type": "string" }, "library": { "type": "string" }, "deleted": { "type": "string" } } }
+```
 
 ### `anim_add_track` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "path"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string", "description": "node path or Node:property" }, "type": { "type": "string", "enum": ["value", "position_3d", "rotation_3d", "scale_3d", "blend_shape", "method", "bezier", "audio", "animation"] }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["track", "type", "path"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "path"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string", "description": "node path or Node:property" }, "type": { "type": "string", "enum": ["value", "position_3d", "rotation_3d", "scale_3d", "blend_shape", "method", "bezier", "audio", "animation"] }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["track", "type", "path"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" } } }
+```
 
 ### `anim_insert_key` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "time", "value"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "time": { "type": "number" }, "value": { "description": "Variant matching the track type" }, "transition": { "type": "number" }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["track", "time", "key_count"], "properties": { "track": { "type": "integer" }, "time": { "type": "number" }, "key_count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "time", "value"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "time": { "type": "number" }, "value": { "description": "Variant matching the track type" }, "transition": { "type": "number" }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["track", "time", "key_count"], "properties": { "track": { "type": "integer" }, "time": { "type": "number" }, "key_count": { "type": "integer" } } }
+```
 
 ### `anim_remove_key` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "key"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "key": { "type": "integer" }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["track", "removed_key", "time"], "properties": { "track": { "type": "integer" }, "removed_key": { "type": "integer" }, "time": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track", "key"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "key": { "type": "integer" }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["track", "removed_key", "time"], "properties": { "track": { "type": "integer" }, "removed_key": { "type": "integer" }, "time": { "type": "number" } } }
+```
 
 ### `anim_set_length` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "length"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "length": { "type": "number" }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["length", "previous"], "properties": { "length": { "type": "number" }, "previous": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "length"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "length": { "type": "number" }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["length", "previous"], "properties": { "length": { "type": "number" }, "previous": { "type": "number" } } }
+```
 
 ### `anim_set_loop` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "mode"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "mode": { "type": "string", "enum": ["none", "linear", "pingpong"] }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["mode", "previous"], "properties": { "mode": { "type": "string" }, "previous": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "mode"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "mode": { "type": "string", "enum": ["none", "linear", "pingpong"] }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["mode", "previous"], "properties": { "mode": { "type": "string" }, "previous": { "type": "string" } } }
+```
 
 ### `anim_get_track_keys` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "library": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["track", "type", "path", "keys"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" }, "keys": { "type": "array", "items": { "type": "object", "properties": { "index": { "type": "integer" }, "time": { "type": "number" }, "value": {}, "transition": { "type": "number" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path", "name", "track"], "properties": { "player_path": { "type": "string" }, "name": { "type": "string" }, "track": { "type": "integer" }, "library": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["track", "type", "path", "keys"], "properties": { "track": { "type": "integer" }, "type": { "type": "string" }, "path": { "type": "string" }, "keys": { "type": "array", "items": { "type": "object", "properties": { "index": { "type": "integer" }, "time": { "type": "number" }, "value": {}, "transition": { "type": "number" } } } } } }
+```
 
 ### `anim_list` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["player_path"], "properties": { "player_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["player", "animations"], "properties": { "player": { "type": "string" }, "animations": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "library": { "type": "string" }, "animation": { "type": "string" }, "length": { "type": "number" }, "loop_mode": { "type": "string" }, "track_count": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["player_path"], "properties": { "player_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["player", "animations"], "properties": { "player": { "type": "string" }, "animations": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "library": { "type": "string" }, "animation": { "type": "string" }, "length": { "type": "number" }, "loop_mode": { "type": "string" }, "track_count": { "type": "integer" } } } } } }
+```
 
 ### `anim_tree_create` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "root_type": { "type": "string", "enum": ["blend_tree", "state_machine"] }, "anim_player_path": { "type": "string" }, "active": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "root_type", "anim_player", "active"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "root_type": { "type": "string" }, "anim_player": { "type": "string" }, "active": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "root_type": { "type": "string", "enum": ["blend_tree", "state_machine"] }, "anim_player_path": { "type": "string" }, "active": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "root_type", "anim_player", "active"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "root_type": { "type": "string" }, "anim_player": { "type": "string" }, "active": { "type": "boolean" } } }
+```
 
 ### `anim_tree_add_node` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "node_name", "node_type"], "properties": { "tree_path": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
-- **Output** `{ "type": "object", "required": ["tree", "node_name", "node_type", "position"], "properties": { "tree": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tree_path", "node_name", "node_type"], "properties": { "tree_path": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tree", "node_name", "node_type", "position"], "properties": { "tree": { "type": "string" }, "node_name": { "type": "string" }, "node_type": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }
+```
 
 ### `anim_statemachine_add_state` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "state_name"], "properties": { "tree_path": { "type": "string" }, "state_name": { "type": "string" }, "animation": { "type": "string" }, "node_type": { "type": "string" }, "state_machine": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
-- **Output** `{ "type": "object", "required": ["tree", "state_machine", "state_name", "node_type", "animation", "position"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "state_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tree_path", "state_name"], "properties": { "tree_path": { "type": "string" }, "state_name": { "type": "string" }, "animation": { "type": "string" }, "node_type": { "type": "string" }, "state_machine": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tree", "state_machine", "state_name", "node_type", "animation", "position"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "state_name": { "type": "string" }, "node_type": { "type": "string" }, "animation": { "type": "string" }, "position": { "type": "array", "items": { "type": "number" } } } }
+```
 
 ### `anim_statemachine_add_transition` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["tree_path", "from_state", "to_state"], "properties": { "tree_path": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "state_machine": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string", "enum": ["immediate", "sync", "at_end"] }, "advance_mode": { "type": "string", "enum": ["disabled", "enabled", "auto"] }, "advance_condition": { "type": "string" }, "priority": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["tree", "state_machine", "from_state", "to_state", "xfade_time", "switch_mode", "advance_mode", "transition_count"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string" }, "advance_mode": { "type": "string" }, "transition_count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["tree_path", "from_state", "to_state"], "properties": { "tree_path": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "state_machine": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string", "enum": ["immediate", "sync", "at_end"] }, "advance_mode": { "type": "string", "enum": ["disabled", "enabled", "auto"] }, "advance_condition": { "type": "string" }, "priority": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["tree", "state_machine", "from_state", "to_state", "xfade_time", "switch_mode", "advance_mode", "transition_count"], "properties": { "tree": { "type": "string" }, "state_machine": { "type": "string" }, "from_state": { "type": "string" }, "to_state": { "type": "string" }, "xfade_time": { "type": "number" }, "switch_mode": { "type": "string" }, "advance_mode": { "type": "string" }, "transition_count": { "type": "integer" } } }
+```
 
 ## Group D — TileMap/TileSet (Plane A / Editor)
 
@@ -881,28 +965,64 @@ In-scene physics authoring. Every tool mutates the **edited scene** and is **und
 In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Batch 1 covers **GPU particles**: `particles_create` adds a `GPUParticles2D`/`GPUParticles3D` (`dim` selects 2D default or 3D), optionally seeding `amount`/`lifetime`/`emitting`; `particles_set_process_material` creates a `ParticleProcessMaterial` and assigns it as `process_material` (GPU particles need one to emit), exposing `gravity`/`direction` (Vector3), `spread`, `initial_velocity_min`/`_max`, `scale_min`/`_max`, and `color`; `particles_set_amount` / `particles_set_lifetime` / `particles_set_emitting` tune the headline knobs individually; `particles_set_texture` loads a `Texture2D` from a `res://` path onto a `GPUParticles2D` — GPUParticles3D draws meshes and has no texture, so it degrades to a clear `unsupported`. The particle + `ParticleProcessMaterial` API surface (properties present per dim, the 2D-only `texture`) was probed live on Godot 4.7 before design. **Batch 2 adds shaders** (now **176**): `shader_create` and `shader_set_code` author a `Shader` (`.gdshader`) resource on disk — initial or replacement GDShader source — and, because they write files, are **gated** by confirmation like the `resource_*` / `tileset_*` writers (not the in-scene model); `shadermaterial_create` creates a `ShaderMaterial` and assigns it to a node's material slot — `CanvasItem.material` (2D / Control) or `GeometryInstance3D.material_override` (3D), degrading to a clear `unsupported` for a node with neither — optionally binding a `Shader` loaded from a `res://` path; `shadermaterial_set_shader` swaps the shader on an existing `ShaderMaterial`; `shadermaterial_set_param` sets a uniform through the `shader_parameter/<name>` property path (values use the tagged-Variant convention). The three `shadermaterial_*` tools mutate the edited scene and are **undoable** and **ungated**. `Shader` / `ShaderMaterial` / `set_shader_parameter` and the `shader_parameter/<name>` property-path form were probed live on Godot 4.7, and a `Sprite2D` carrying a `ShaderMaterial` (external `.gdshader` + a `shader_parameter` override) survives a `.tscn` save + fresh reload. **Batch 3 completes Group F with audio** (now **182**): `audio_player_create` adds an `AudioStreamPlayer` / `AudioStreamPlayer2D` / `AudioStreamPlayer3D` (`dim` selects `none` default / `2d` / `3d`), optionally seeding `stream_path` (a `res://` `AudioStream`), `autoplay`, `volume_db`, `bus`; `audio_set_stream` loads an `AudioStream` from a `res://` path onto a player — both mutate the edited scene and are **undoable** / **ungated** (the `node_*` model). The remaining four drive the **global `AudioServer`** (project-wide, not scene-undoable) and are **gated** like `physics_set_gravity`: `audio_bus_add` adds a bus (optional name / position / send), `audio_bus_add_effect` instantiates an `AudioEffect` subclass by name onto a named bus, `audio_bus_set_volume` sets a bus's `volume_db`, and `audio_set_bus_layout` persists the current layout to a `.tres` on disk (`generate_bus_layout` + `ResourceSaver.save`; a file-writer). The `AudioServer` bus API and the player `stream` / `autoplay` / `volume_db` / `bus` props were probed live on Godot 4.7, and an `AudioStreamPlayer` carrying an external stream survives a `.tscn` save + fresh reload.
 
 ### `particles_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "amount", "lifetime", "emitting"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "dim", "amount", "lifetime", "emitting"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "amount": { "type": "number" }, "lifetime": { "type": "number" }, "emitting": { "type": "boolean" } } }
+```
 
 ### `particles_set_process_material` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }`
-- **Output** `{ "type": "object", "required": ["path", "gravity", "direction", "spread", "initial_velocity_min", "initial_velocity_max", "scale_min", "scale_max", "color"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "gravity", "direction", "spread", "initial_velocity_min", "initial_velocity_max", "scale_min", "scale_max", "color"], "properties": { "path": { "type": "string" }, "gravity": { "type": "array", "items": { "type": "number" } }, "direction": { "type": "array", "items": { "type": "number" } }, "spread": { "type": "number" }, "initial_velocity_min": { "type": "number" }, "initial_velocity_max": { "type": "number" }, "scale_min": { "type": "number" }, "scale_max": { "type": "number" }, "color": { "type": "array", "items": { "type": "number" } } } }
+```
 
 ### `particles_set_amount` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "amount"], "properties": { "path": { "type": "string" }, "amount": { "type": "number" } } }
+```
 
 ### `particles_set_lifetime` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "lifetime"], "properties": { "path": { "type": "string" }, "lifetime": { "type": "number" } } }
+```
 
 ### `particles_set_emitting` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "emitting"], "properties": { "path": { "type": "string" }, "emitting": { "type": "boolean" } } }
+```
 
 ### `particles_set_texture` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "texture_path"], "properties": { "path": { "type": "string" }, "texture_path": { "type": "string" } } }
+```
 
 ### `shader_create` ✅ · destructive (writes a file)
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "code": { "type": "string" }, "confirm": { "type": "boolean" } } }`
@@ -925,28 +1045,64 @@ In-scene VFX authoring. Every tool mutates the **edited scene** and is **undoabl
 - **Output** `{ "type": "object", "required": ["path", "param", "value"], "properties": { "path": { "type": "string" }, "param": { "type": "string" }, "value": {} } }`
 
 ### `audio_player_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["none", "2d", "3d"] }, "name": { "type": "string" }, "stream_path": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "autoplay", "volume_db", "bus", "stream_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" }, "stream_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "dim": { "type": "string", "enum": ["none", "2d", "3d"] }, "name": { "type": "string" }, "stream_path": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "dim", "autoplay", "volume_db", "bus", "stream_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "autoplay": { "type": "boolean" }, "volume_db": { "type": "number" }, "bus": { "type": "string" }, "stream_path": { "type": "string" } } }
+```
 
 ### `audio_set_stream` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "stream_path"], "properties": { "path": { "type": "string" }, "stream_path": { "type": "string" } } }
+```
 
 ### `audio_bus_add` ✅ · destructive (project-wide audio state)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": [], "properties": { "name": { "type": "string" }, "at_position": { "type": "number" }, "send": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["index", "name", "send", "count"], "properties": { "index": { "type": "number" }, "name": { "type": "string" }, "send": { "type": "string" }, "count": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": [], "properties": { "name": { "type": "string" }, "at_position": { "type": "number" }, "send": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["index", "name", "send", "count"], "properties": { "index": { "type": "number" }, "name": { "type": "string" }, "send": { "type": "string" }, "count": { "type": "number" } } }
+```
 
 ### `audio_bus_add_effect` ✅ · destructive (project-wide audio state)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["bus", "effect"], "properties": { "bus": { "type": "string" }, "effect": { "type": "string" }, "at_position": { "type": "number" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["bus", "bus_index", "effect", "effect_count"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "effect": { "type": "string" }, "effect_count": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["bus", "effect"], "properties": { "bus": { "type": "string" }, "effect": { "type": "string" }, "at_position": { "type": "number" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["bus", "bus_index", "effect", "effect_count"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "effect": { "type": "string" }, "effect_count": { "type": "number" } } }
+```
 
 ### `audio_bus_set_volume` ✅ · destructive (project-wide audio state)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["bus", "volume_db"], "properties": { "bus": { "type": "string" }, "volume_db": { "type": "number" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["bus", "bus_index", "volume_db"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "volume_db": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["bus", "volume_db"], "properties": { "bus": { "type": "string" }, "volume_db": { "type": "number" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["bus", "bus_index", "volume_db"], "properties": { "bus": { "type": "string" }, "bus_index": { "type": "number" }, "volume_db": { "type": "number" } } }
+```
 
 ### `audio_set_bus_layout` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": [], "properties": { "to_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["saved", "bus_count"], "properties": { "saved": { "type": "string" }, "bus_count": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": [], "properties": { "to_path": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["saved", "bus_count"], "properties": { "saved": { "type": "string" }, "bus_count": { "type": "number" } } }
+```
 
 ## Group G — UI / Control / theming (Plane A / Editor)
 
