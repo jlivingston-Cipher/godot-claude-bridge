@@ -109,7 +109,10 @@ npx breakpoint-mcp doctor
 `init` copies the addon into `addons/breakpoint_mcp/`, enables it in `project.godot`, and
 prints the client config snippet — pass `--client claude-desktop|cursor|windsurf|vscode`
 to write it into that client's config directly, or `--client claude-code` to get the
-`claude mcp add` command. `doctor` checks the Godot binary, the addon, and the four bridges
+`claude mcp add` command. By default `init` installs the addon bundled in the package; add
+`--from-github [ref]` to fetch it from GitHub instead (e.g. `--from-github main` for the
+latest, or a tag like `--from-github v1.3.0`; `--repo <owner/repo>` targets a fork).
+`doctor` checks the Godot binary, the addon, and the four bridges
 (add `--require-live` once the editor is open to require them; `--json` for a machine-readable
 report). The manual steps below do the same thing by hand.
 

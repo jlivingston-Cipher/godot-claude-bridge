@@ -9,10 +9,12 @@
  * it into that client's config file (see clients.ts for the id list + paths).
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "./args.js";
 import { CLIENT_IDS, clientInfo, mergeClientConfig, serverEntry, snippet } from "./clients.js";
+import { DEFAULT_REPO, fetchAddonFromGitHub, type FetchLike } from "./github.js";
 
 const PLUGIN_REL = "addons/breakpoint_mcp";
 const PLUGIN_CFG_RES = "res://addons/breakpoint_mcp/plugin.cfg";
@@ -38,6 +40,24 @@ export function resolveBundledAddon(): string | null {
     if (fs.existsSync(path.join(c, "plugin.cfg"))) return c;
   }
   return null;
+}
+
+/** This package's own version, read from its package.json (null if unreadable). */
+function packageVersion(): string | null {
+  try {
+    const pkgRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".."); // dist/cli -> pkg
+    const v = (JSON.parse(fs.readFileSync(path.join(pkgRoot, "package.json"), "utf8")) as { version?: unknown })
+      .version;
+    return typeof v === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Default ref for --from-github: this package's version tag (vX.Y.Z), else main. */
+function defaultGitHubRef(): string {
+  const v = packageVersion();
+  return v ? `v${v}` : "main";
 }
 
 export interface EnableResult {
@@ -122,7 +142,7 @@ function claudeCodeCommand(projectPath: string): string {
 }
 
 /** Entry point for `breakpoint-mcp init`. Returns the process exit code. */
-export async function runInit(argv: string[]): Promise<number> {
+export async function runInit(argv: string[], deps: { fetchFn?: FetchLike } = {}): Promise<number> {
   const { flags } = parseArgs(argv, ["force", "dry-run"]);
   const projectPath =
     typeof flags.project === "string"
@@ -133,18 +153,18 @@ export async function runInit(argv: string[]): Promise<number> {
   const client = typeof flags.client === "string" ? flags.client : "none";
   const godotBin = process.env.GODOT_BIN ?? "godot";
 
+  // --from-github [ref]: source the addon from GitHub instead of the bundled copy.
+  const fromGitHub = "from-github" in flags;
+  const fgVal = flags["from-github"];
+  const ref = typeof fgVal === "string" && fgVal.length > 0 ? fgVal : defaultGitHubRef();
+  const repo = typeof flags.repo === "string" && flags.repo.length > 0 ? flags.repo : DEFAULT_REPO;
+
   const projGodot = path.join(projectPath, "project.godot");
   if (!fs.existsSync(projGodot)) {
     process.stderr.write(
       `init: no project.godot at ${projectPath}\n` +
         "  Pass --project <dir> pointing at your Godot project (the folder with project.godot).\n",
     );
-    return 1;
-  }
-
-  const addonSource = resolveBundledAddon();
-  if (!addonSource) {
-    process.stderr.write("init: could not locate the bundled editor addon inside the package.\n");
     return 1;
   }
 
@@ -155,13 +175,53 @@ export async function runInit(argv: string[]): Promise<number> {
 
   say(`Project: ${projectPath}${dryRun ? "  (dry run — no changes written)" : ""}`);
 
+  // Resolve the addon source: the bundled copy, or (--from-github) a temp dir
+  // fetched from GitHub. The temp dir is removed once the addon is installed.
+  let addonSource: string | null = null;
+  let tmpFetchDir: string | null = null;
+  if (fromGitHub) {
+    if (dryRun) {
+      say(`  addon source: would fetch ${repo}@${ref} from GitHub`);
+    } else {
+      say(`  addon source: fetching ${repo}@${ref} from GitHub…`);
+      tmpFetchDir = fs.mkdtempSync(path.join(os.tmpdir(), "bpmcp-gh-"));
+      try {
+        const written = await fetchAddonFromGitHub({ repo, ref, dest: tmpFetchDir }, deps.fetchFn);
+        say(`  addon source: fetched ${written.length} file(s) from ${repo}@${ref}`);
+        addonSource = tmpFetchDir;
+      } catch (err) {
+        fs.rmSync(tmpFetchDir, { recursive: true, force: true });
+        process.stderr.write(
+          `init: --from-github failed: ${err instanceof Error ? err.message : String(err)}\n` +
+            "  Omit --from-github to install the addon bundled with this package.\n",
+        );
+        return 1;
+      }
+    }
+  } else {
+    addonSource = resolveBundledAddon();
+    if (!addonSource) {
+      process.stderr.write(
+        "init: could not locate the bundled editor addon inside the package.\n" +
+          "  Reinstall breakpoint-mcp, or pass --from-github to fetch the addon from GitHub.\n",
+      );
+      return 1;
+    }
+  }
+
   // 1. Install the addon.
   const destHasAddon = fs.existsSync(path.join(projectPath, PLUGIN_REL, "plugin.cfg"));
   if (dryRun) {
     const verb = destHasAddon ? (force ? "overwrite" : "skip (already present; --force to overwrite)") : "install";
-    say(`  addon: would ${verb} → ${PLUGIN_REL}/`);
+    const srcNote = fromGitHub ? ` (from ${repo}@${ref})` : "";
+    say(`  addon: would ${verb} → ${PLUGIN_REL}/${srcNote}`);
   } else {
+    if (!addonSource) {
+      process.stderr.write("init: internal error — no addon source resolved.\n");
+      return 1;
+    }
     const r = installAddon(addonSource, projectPath, { force });
+    if (tmpFetchDir) fs.rmSync(tmpFetchDir, { recursive: true, force: true });
     say(`  addon: ${r.action} → ${PLUGIN_REL}/`);
   }
 

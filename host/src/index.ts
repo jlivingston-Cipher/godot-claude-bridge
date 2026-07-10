@@ -158,6 +158,8 @@ function printUsage(): void {
       "  --client <id>       Write the MCP config for a client: claude-code | claude-desktop | cursor | windsurf | vscode.",
       "  --force             Overwrite an addon that is already installed.",
       "  --dry-run           Print what would change without writing anything.",
+      "  --from-github [ref] Fetch the editor addon from GitHub at [ref] (default: this package's version tag) instead of the bundled copy.",
+      "  --repo <owner/repo> With --from-github, the source repo (default: jlivingston-Cipher/godot-breakpoint-mcp).",
       "",
       "doctor options:",
       "  --project <dir>     Project to check (default: $GODOT_PROJECT or the current directory).",
