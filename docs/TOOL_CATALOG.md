@@ -2816,7 +2816,10 @@ Report which known backend SDKs (SilentWolf / Nakama / PlayFab / Photon) are ins
     "sdk": { "enum": ["silentwolf", "nakama", "playfab", "photon"] }
   } }
 ```
-- **Output** `{ "type": "object", "required": ["detected", "backends", "message"], "properties": { "detected": { "type": "array", "items": { "type": "string" } }, "backends": { "type": "array", "items": { "type": "object", "required": ["sdk", "installed"], "properties": { "sdk": { "type": "string" }, "installed": { "type": "boolean" }, "method": { "type": ["string", "null"] }, "autoload": { "type": ["string", "null"] }, "addon_dir": { "type": ["string", "null"] }, "class_name": { "type": ["string", "null"] } } } }, "message": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["detected", "backends", "message"], "properties": { "detected": { "type": "array", "items": { "type": "string" } }, "backends": { "type": "array", "items": { "type": "object", "required": ["sdk", "installed"], "properties": { "sdk": { "type": "string" }, "installed": { "type": "boolean" }, "method": { "type": ["string", "null"] }, "autoload": { "type": ["string", "null"] }, "addon_dir": { "type": ["string", "null"] }, "class_name": { "type": ["string", "null"] } } } }, "message": { "type": "string" } } }
+```
 
 ### `backend_configure` ✅  (Plane A / Editor + host)  · writes file (gated) · feature-detected
 Generate a config/bootstrap GDScript for a backend SDK — constants (API key / game id / host / title id / app id) plus a `configure()` you register as an autoload. If the SDK is not installed, degrades to `status: "sdk_missing"` and writes nothing.
@@ -2932,8 +2935,14 @@ Read captured console output for a managed process.
 
 ### `godot_stop` ✅
 Terminate a managed process.
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["id"], "properties": { "id": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["id", "stopped"], "properties": { "id": { "type": "string" }, "stopped": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["id"], "properties": { "id": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["id", "stopped"], "properties": { "id": { "type": "string" }, "stopped": { "type": "boolean" } } }
+```
 
 ---
 
