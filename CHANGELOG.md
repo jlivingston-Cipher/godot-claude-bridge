@@ -6,6 +6,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`breakpoint-mcp doctor` — a CLI health-check for an install (the first half of the onboarding/adoption work).** The `bin` now dispatches on the first argument: `breakpoint-mcp doctor` and `breakpoint-mcp --help` are handled, while any other invocation — including no arguments, which is how every MCP client launches the server — falls through to the unchanged stdio MCP server, so the server's launch contract is untouched. `doctor` probes the Godot binary (`GODOT_BIN --version`), the editor addon (installed at `addons/breakpoint_mcp/plugin.cfg` and enabled in `project.godot`), and the four bridges (editor 9080, runtime 9081, GDScript LSP 6005, DAP 6006), printing an aligned status table with actionable hints or, with `--json`, a structured report. The four bridges are informational by default (the editor/game may legitimately not be running when you check an install); `--require-live` promotes them to required, and `--include-csharp` additionally probes OmniSharp / netcoredbg on PATH. The exit code is 0 iff no required check failed, so `doctor` doubles as a pre-flight gate. New host-only files `host/src/cli/args.ts` (a dependency-free flag parser) and `host/src/cli/doctor.ts`; +14 host tests (`cli_args.test.ts`, `cli_doctor.test.ts`) exercising the bridges against loopback TCP stubs and a POSIX shell Godot fixture; a new `ci.yml` build-job smoke runs the built `dist` and asserts the subcommand routes (marker `ONBOARD_DOCTOR_OK`). No new MCP tools — still **242 tools**; `contract_check.py` unchanged. (The `init` installer plus the README / User-Guide onboarding rewrite land next.)
+
 ## [1.1.0] — 2026-07-10
 
 ### Removed
