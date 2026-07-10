@@ -72,7 +72,7 @@ def host_bridge_calls(ts_files: list[Path]) -> set[str]:
 
 def registered_tools() -> list[str]:
     names: list[str] = []
-    for f in sorted(TOOLS.glob("*.ts")):
+    for f in sorted(TOOLS.rglob("*.ts")):
         text = f.read_text()
         # Plain tools: server.registerTool("name", ...)
         for m in re.finditer(r'registerTool\(\s*"([a-z_]+)"', text):
@@ -248,7 +248,7 @@ def input_schema_shapes() -> dict[str, set[str]]:
     bounded to its own registerTool/registerTaskTool call to avoid bleeding
     into the next tool's schema."""
     shapes: dict[str, set[str]] = {}
-    for f in sorted(TOOLS.glob("*.ts")):
+    for f in sorted(TOOLS.rglob("*.ts")):
         text = f.read_text()
         consts = _file_const_shapes(text)
         regs = list(re.finditer(r'register(?:Task)?Tool\(\s*(?:\w+\s*,\s*)?"([a-z_]+)"', text))
@@ -329,7 +329,7 @@ def catalog_shapes() -> tuple[dict[str, set[str]], dict[str, set[str]]]:
 editor_methods = dispatch_methods(ADDON / "operations.gd", ["dispatch"])
 runtime_methods = dispatch_methods(ADDON / "runtime_bridge.gd", ["_dispatch"])
 gd_all = editor_methods | runtime_methods
-host_calls = host_bridge_calls([TOOLS / "editor.ts", TOOLS / "runtime.ts", TOOLS / "resources.ts", TOOLS / "assetgen.ts", TOOLS / "netcode.ts", TOOLS / "backend.ts"])
+host_calls = host_bridge_calls([*sorted((TOOLS / "editor").glob("*.ts")), TOOLS / "runtime.ts", TOOLS / "resources.ts", TOOLS / "assetgen.ts", TOOLS / "netcode.ts", TOOLS / "backend.ts"])
 
 missing_in_gd = sorted(c for c in host_calls if c not in gd_all)
 if missing_in_gd:
