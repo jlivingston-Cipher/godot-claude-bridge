@@ -5,6 +5,12 @@ name: integration
 # (which mocks the sockets) deliberately cannot do, and that no competitor's CI
 # is known to do either.
 #
+#   * gdscript-unit — headless, deterministic. Runs the addon's editor-free GDScript unit suite
+#                     (example/tests/ops_unit_test.gd) directly under Godot: the variant_json codec
+#                     round-trips plus the pure operations.gd helpers (envelope, _resolve/_path_of,
+#                     _serialize_node/_descendants, doc-URL/type-name, _ping). No editor / bridge /
+#                     GUI — it complements the authoring-plane, which covers the editor-COUPLED
+#                     handlers. Gates on the OPS_UNIT_SUMMARY / OPS_UNIT_FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -68,6 +74,39 @@ env:
   GODOT_VERSION: "4.3-stable"
 
 jobs:
+  gdscript-unit:
+    name: GDScript unit tests (addon pure logic, headless)
+    runs-on: ubuntu-latest
+    # Pure, editor-free GDScript (the variant_json codec + operations.gd helpers):
+    # fully headless, no Xvfb/GPU, deterministic — the same tier as cli-plane. No
+    # host build needed; it runs the addon scripts directly under Godot.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot (standard linux build)
+        run: |
+          set -eux
+          curl -fL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          GODOT_BIN="$PWD/Godot_v${GODOT_VERSION}_linux.x86_64"
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --version
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+      - name: Import the example project (headless)
+        run: '"$GODOT_BIN" --headless --path "${{ github.workspace }}/example" --import || true'
+      - name: Run the addon unit suite
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/ops_unit_test.gd > /tmp/ops-unit.log 2>&1 || true
+          echo "=== ops_unit_test.gd output ==="
+          cat /tmp/ops-unit.log
+          echo "==============================="
+          # The OPS_UNIT_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "OPS_UNIT_SUMMARY" /tmp/ops-unit.log || { echo "::error::ops_unit_test.gd produced no OPS_UNIT_SUMMARY (script error?)"; exit 1; }
+          if grep -q "OPS_UNIT_FAIL" /tmp/ops-unit.log; then echo "::error::a GDScript unit assertion failed"; exit 1; fi
+          echo "GDScript unit suite passed: $(grep -o 'OPS_UNIT_SUMMARY.*' /tmp/ops-unit.log)"
+
   cli-plane:
     name: CLI plane vs real Godot (headless)
     runs-on: ubuntu-latest
