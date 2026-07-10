@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { envCompat, loadConfig } from "./config.js";
+import { loadConfig } from "./config.js";
 import { BridgeClient } from "./bridge.js";
 import { LspClient } from "./lsp.js";
 import { CsLspClient } from "./cslsp.js";
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   // D3: also advertise resources.subscribe so clients can subscribe to
   // godot://… resources and receive notifications/resources/updated.
   const server = new McpServer(
-    { name: "breakpoint-mcp", version: "1.0.0" },
+    { name: "breakpoint-mcp", version: "1.1.0" },
     { capabilities: { ...TASK_CAPABILITIES, ...RESOURCE_CAPABILITIES }, taskStore },
   );
 
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
   // subscribed godot://… resource changes (editor selection / edited scene, or
   // the running game's live SceneTree). Rapid changes are coalesced per-URI; the
   // trailing window is overridable via BREAKPOINT_RESOURCE_COALESCE_MS.
-  const coalesceRaw = envCompat("BREAKPOINT_RESOURCE_COALESCE_MS", "CLAUDE_RESOURCE_COALESCE_MS");
+  const coalesceRaw = process.env.BREAKPOINT_RESOURCE_COALESCE_MS;
   const coalesceMs = coalesceRaw ? Number.parseInt(coalesceRaw, 10) : undefined;
   registerResourceSubscriptions(server, bridge, runtime, undefined, { coalesceMs });
 

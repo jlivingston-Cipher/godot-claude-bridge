@@ -8,8 +8,7 @@ extends Node
 ##             {"id": "<string>", "ok": false, "error": {"code": ..., "message": ...}}
 ##
 ## Binds to 127.0.0.1 only. The port comes from the BREAKPOINT_BRIDGE_PORT env
-## var (default 9080; the legacy CLAUDE_BRIDGE_PORT is still honoured for one
-## deprecation cycle). The socket is polled from `_process`, so all request
+## var (default 9080). The socket is polled from `_process`, so all request
 ## handlers run on the editor's main thread.
 
 const Operations := preload("res://addons/breakpoint_mcp/operations.gd")
@@ -27,7 +26,7 @@ func setup(plugin: EditorPlugin) -> void:
 
 
 func _ready() -> void:
-	var env_port := _env_compat("BREAKPOINT_BRIDGE_PORT", "CLAUDE_BRIDGE_PORT")
+	var env_port := OS.get_environment("BREAKPOINT_BRIDGE_PORT")
 	if env_port != "" and env_port.is_valid_int():
 		_port = int(env_port)
 	_server = TCPServer.new()
@@ -36,19 +35,6 @@ func _ready() -> void:
 		push_error("[breakpoint_mcp] could not listen on 127.0.0.1:%d (error %d)" % [_port, err])
 	else:
 		print("[breakpoint_mcp] listening on 127.0.0.1:%d" % _port)
-
-
-## Read `new_name` from the environment, falling back to the deprecated
-## `old_name` (env vars were renamed CLAUDE_* → BREAKPOINT_* in the rebrand)
-## with a one-time warning. Returns "" when neither is set.
-static func _env_compat(new_name: String, old_name: String) -> String:
-	var v := OS.get_environment(new_name)
-	if v != "":
-		return v
-	var legacy := OS.get_environment(old_name)
-	if legacy != "":
-		push_warning("[breakpoint_mcp] env %s is deprecated; use %s instead" % [old_name, new_name])
-	return legacy
 
 
 func shutdown() -> void:

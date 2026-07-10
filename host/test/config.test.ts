@@ -4,8 +4,9 @@ import { pathToFileURL } from "node:url";
 import { loadConfig } from "../src/config.js";
 
 /** Keys loadConfig reads, so each test can restore the environment cleanly.
- *  Both the current BREAKPOINT_* names and the deprecated CLAUDE_* fallbacks are
- *  listed so withEnv() clears any that leaked in from the ambient environment. */
+ *  The CLAUDE_* names are listed only so withEnv() saves/clears/restores them —
+ *  loadConfig no longer reads them (the compat shim was removed in 1.1.0); the
+ *  regression test below asserts a set CLAUDE_* is ignored. */
 const ENV_KEYS = [
   "GODOT_PROJECT", "GODOT_BIN",
   "BREAKPOINT_BRIDGE_HOST", "BREAKPOINT_BRIDGE_PORT", "BREAKPOINT_BRIDGE_TIMEOUT_MS",
@@ -88,7 +89,7 @@ test("ports and timeouts are parsed as integers from the environment", () => {
   );
 });
 
-test("deprecated CLAUDE_* env vars still apply when the BREAKPOINT_* name is unset", () => {
+test("deprecated CLAUDE_* env vars are ignored (compat shim removed in 1.1.0)", () => {
   withEnv(
     {
       GODOT_PROJECT: "/tmp/proj",
@@ -101,29 +102,14 @@ test("deprecated CLAUDE_* env vars still apply when the BREAKPOINT_* name is uns
     },
     () => {
       const c = loadConfig();
-      assert.equal(c.bridgeHost, "10.0.0.1");
-      assert.equal(c.bridgePort, 18080);
-      assert.equal(c.bridgeTimeoutMs, 4000);
-      assert.equal(c.runtimeHost, "10.0.0.2");
-      assert.equal(c.runtimePort, 18081);
-      assert.equal(c.runtimeTimeoutMs, 4200);
-    },
-  );
-});
-
-test("BREAKPOINT_* takes precedence over a deprecated CLAUDE_* of the same var", () => {
-  withEnv(
-    {
-      GODOT_PROJECT: "/tmp/proj",
-      BREAKPOINT_BRIDGE_PORT: "20080",
-      CLAUDE_BRIDGE_PORT: "19080",
-      BREAKPOINT_RUNTIME_HOST: "192.168.0.5",
-      CLAUDE_RUNTIME_HOST: "10.0.0.9",
-    },
-    () => {
-      const c = loadConfig();
-      assert.equal(c.bridgePort, 20080);
-      assert.equal(c.runtimeHost, "192.168.0.5");
+      // BREAKPOINT_* is unset, so a set CLAUDE_* must NOT leak in: every value
+      // falls back to the documented default now that the shim is gone.
+      assert.equal(c.bridgeHost, "127.0.0.1");
+      assert.equal(c.bridgePort, 9080);
+      assert.equal(c.bridgeTimeoutMs, 15000);
+      assert.equal(c.runtimeHost, "127.0.0.1");
+      assert.equal(c.runtimePort, 9081);
+      assert.equal(c.runtimeTimeoutMs, 15000);
     },
   );
 });

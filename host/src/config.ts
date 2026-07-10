@@ -1,30 +1,4 @@
 import { pathToFileURL } from "node:url";
-import { log } from "./logger.js";
-
-/**
- * Env vars were renamed CLAUDE_* → BREAKPOINT_* as part of the project rebrand.
- * The old names still work for one deprecation cycle: BREAKPOINT_* takes
- * precedence, and a set CLAUDE_* is honoured as a fallback with a one-time
- * stderr deprecation warning. Drop the fallback (and this helper) once the
- * deprecation window closes. GODOT_* vars are unaffected.
- */
-const _warnedDeprecatedEnv = new Set<string>();
-export function envCompat(newName: string, oldName: string): string | undefined {
-  const current = process.env[newName];
-  if (current !== undefined) return current;
-  const legacy = process.env[oldName];
-  if (legacy !== undefined) {
-    if (!_warnedDeprecatedEnv.has(oldName)) {
-      _warnedDeprecatedEnv.add(oldName);
-      log(
-        `env ${oldName} is deprecated; use ${newName} instead ` +
-          `(${oldName} support will be removed in a future release)`,
-      );
-    }
-    return legacy;
-  }
-  return undefined;
-}
 
 /**
  * Runtime configuration, all overridable via environment variables so the same
@@ -122,10 +96,10 @@ export function loadConfig(): Config {
     godotBin: process.env.GODOT_BIN ?? "godot",
     projectPath,
     projectUri: pathToFileURL(projectPath).href,
-    bridgeHost: envCompat("BREAKPOINT_BRIDGE_HOST", "CLAUDE_BRIDGE_HOST") ?? "127.0.0.1",
-    bridgePort: Number.parseInt(envCompat("BREAKPOINT_BRIDGE_PORT", "CLAUDE_BRIDGE_PORT") ?? "9080", 10),
+    bridgeHost: process.env.BREAKPOINT_BRIDGE_HOST ?? "127.0.0.1",
+    bridgePort: Number.parseInt(process.env.BREAKPOINT_BRIDGE_PORT ?? "9080", 10),
     bridgeTimeoutMs: Number.parseInt(
-      envCompat("BREAKPOINT_BRIDGE_TIMEOUT_MS", "CLAUDE_BRIDGE_TIMEOUT_MS") ?? "15000",
+      process.env.BREAKPOINT_BRIDGE_TIMEOUT_MS ?? "15000",
       10,
     ),
     lspHost: process.env.GODOT_LSP_HOST ?? "127.0.0.1",
@@ -151,10 +125,10 @@ export function loadConfig(): Config {
     csDapTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_TIMEOUT_MS ?? "20000", 10),
     csDapSetVarTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_SETVAR_TIMEOUT_MS ?? "8000", 10),
     csDapEvaluateTimeoutMs: Number.parseInt(process.env.GODOT_CSDAP_EVALUATE_TIMEOUT_MS ?? "8000", 10),
-    runtimeHost: envCompat("BREAKPOINT_RUNTIME_HOST", "CLAUDE_RUNTIME_HOST") ?? "127.0.0.1",
-    runtimePort: Number.parseInt(envCompat("BREAKPOINT_RUNTIME_PORT", "CLAUDE_RUNTIME_PORT") ?? "9081", 10),
+    runtimeHost: process.env.BREAKPOINT_RUNTIME_HOST ?? "127.0.0.1",
+    runtimePort: Number.parseInt(process.env.BREAKPOINT_RUNTIME_PORT ?? "9081", 10),
     runtimeTimeoutMs: Number.parseInt(
-      envCompat("BREAKPOINT_RUNTIME_TIMEOUT_MS", "CLAUDE_RUNTIME_TIMEOUT_MS") ?? "15000",
+      process.env.BREAKPOINT_RUNTIME_TIMEOUT_MS ?? "15000",
       10,
     ),
     // Group J: asset generation is OFF by default (backend "none" → tools degrade).

@@ -366,10 +366,10 @@ Asset generation is **off by default**. See
 | `BREAKPOINT_RESOURCE_COALESCE_MS` | `50` | Coalescing window for pushed resource updates. `0` disables coalescing. |
 
 > **Renamed from `CLAUDE_*`:** the `BREAKPOINT_*`-prefixed variables (`BREAKPOINT_BRIDGE_*`,
-> `BREAKPOINT_RUNTIME_*`, `BREAKPOINT_RESOURCE_COALESCE_MS`) were previously named `CLAUDE_*`.
-> The old `CLAUDE_*` names still work for one deprecation cycle — both the host and the addon
-> fall back to them and emit a one-time deprecation warning — but migrate to the `BREAKPOINT_*`
-> names above. `GODOT_*` variables are unaffected.
+> `BREAKPOINT_RUNTIME_*`, `BREAKPOINT_RESOURCE_COALESCE_MS`) were named `CLAUDE_*` in earlier
+> versions. The legacy `CLAUDE_*` names were honoured with a one-time deprecation warning in
+> `1.0.0` and **removed in `1.1.0`** — use the `BREAKPOINT_*` names above. `GODOT_*` variables
+> are unaffected.
 
 **Ports at a glance:** `9080` editor bridge · `9081` runtime bridge · `6005` GDScript
 language server · `6006` debug adapter. If any is already in use, override the matching

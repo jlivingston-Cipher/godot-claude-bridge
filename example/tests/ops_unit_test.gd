@@ -8,8 +8,8 @@ extends SceneTree
 ##     _descendants), the doc-URL / type-name helpers, _resource_class_ok, and _ping,
 ##   * the pure helpers in runtime_bridge.gd exercised WITHOUT entering the tree
 ##     (so no TCP socket opens): the {ok}/{err} envelope, _dispatch's ping /
-##     unknown-method paths, _get_monitors key filtering, the CLAUDE_*→BREAKPOINT_*
-##     env-compat shim (_env_compat), and the push_log / _get_log ring buffer,
+##     unknown-method paths, _get_monitors key filtering, and the push_log /
+##     _get_log ring buffer,
 ##   * the _base()-dependent runtime_bridge.gd handlers (get_tree / resolve /
 ##     path_of / serialize / get_property / set_property / call_method /
 ##     emit_signal) via a subclass that overrides _base() with an in-memory
@@ -82,7 +82,6 @@ func _initialize() -> void:
 	_test_resource_class_ok(ops)
 	_test_ping(ops)
 	_test_runtime_envelope_and_dispatch()
-	_test_runtime_env_compat()
 	_test_runtime_log()
 	_test_runtime_tree_handlers()
 	_test_runtime_property_method_signal()
@@ -328,25 +327,6 @@ func _test_runtime_envelope_and_dispatch() -> void:
 	var mon2: Dictionary = rb._get_monitors({"keys": ["bogus/nope"]})
 	_eq("rb.monitors.unknown_empty", (mon2["result"]["monitors"] as Dictionary).size(), 0)
 	rb.free()
-
-
-# --- runtime_bridge.gd CLAUDE_* -> BREAKPOINT_* env-compat shim ------------
-func _test_runtime_env_compat() -> void:
-	var newn := "BREAKPOINT_MCP_UNITTEST_VAR"
-	var oldn := "CLAUDE_MCP_UNITTEST_VAR"
-	OS.set_environment(newn, "")
-	OS.set_environment(oldn, "")
-	_eq("rb.env.neither_empty", RB._env_compat(newn, oldn), "")
-	# new name wins over legacy
-	OS.set_environment(newn, "9091")
-	OS.set_environment(oldn, "legacy")
-	_eq("rb.env.new_precedence", RB._env_compat(newn, oldn), "9091")
-	# only legacy set -> legacy value returned (with a deprecation warning)
-	OS.set_environment(newn, "")
-	OS.set_environment(oldn, "legacy")
-	_eq("rb.env.legacy_fallback", RB._env_compat(newn, oldn), "legacy")
-	OS.set_environment(newn, "")
-	OS.set_environment(oldn, "")
 
 
 # --- runtime_bridge.gd push_log / _get_log ring buffer ---------------------

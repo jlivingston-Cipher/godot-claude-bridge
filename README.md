@@ -168,7 +168,7 @@ and wrapper key differ.
 | `BREAKPOINT_RUNTIME_HOST` / `BREAKPOINT_RUNTIME_PORT` | `127.0.0.1` / `9081` | In-game runtime bridge (must match the autoload) |
 | `BREAKPOINT_RUNTIME_TIMEOUT_MS` | `15000` | Runtime request timeout |
 
-> **Renamed in this release:** the `BREAKPOINT_*` variables above (plus `BREAKPOINT_RESOURCE_COALESCE_MS`) were previously named `CLAUDE_*`. The old `CLAUDE_*` names still work for one deprecation cycle — the host and addon fall back to them and print a one-time deprecation warning — but you should migrate to the `BREAKPOINT_*` names. `GODOT_*` variables are unchanged.
+> **Renamed from `CLAUDE_*`:** the `BREAKPOINT_*` variables above (plus `BREAKPOINT_RESOURCE_COALESCE_MS`) were named `CLAUDE_*` in earlier versions. The legacy `CLAUDE_*` names were honoured with a one-time deprecation warning in `1.0.0` and **removed in `1.1.0`** — use the `BREAKPOINT_*` names. `GODOT_*` variables are unchanged.
 
 The full, annotated configuration reference is in the [User Guide](docs/USER_GUIDE.md).
 

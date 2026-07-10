@@ -5,7 +5,7 @@ Loopback TCP/JSON bridge that exposes the live Godot editor (and, via the runtim
 ## Install
 1. Copy this `breakpoint_mcp/` folder into your project's `addons/` directory so the path is `res://addons/breakpoint_mcp/`.
 2. Enable it under **Project → Project Settings → Plugins → Breakpoint MCP**.
-3. On enable it listens on `127.0.0.1:9080`. Override the port by setting the `BREAKPOINT_BRIDGE_PORT` environment variable *before* launching Godot (the legacy `CLAUDE_BRIDGE_PORT` still works for now, with a deprecation warning).
+3. On enable it listens on `127.0.0.1:9080`. Override the port by setting the `BREAKPOINT_BRIDGE_PORT` environment variable *before* launching Godot.
 
 Requires **Godot 4.2+** (uses the `EditorInterface` singleton; 4.4+ recommended).
 

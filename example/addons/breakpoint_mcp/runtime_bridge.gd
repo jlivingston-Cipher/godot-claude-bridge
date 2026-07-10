@@ -3,8 +3,7 @@ extends Node
 ##
 ## The editor plugin auto-registers this as an autoload singleton
 ## ("BreakpointRuntimeBridge"), so it is present whenever the project runs. It opens
-## a loopback TCP server on 127.0.0.1:9081 (override BREAKPOINT_RUNTIME_PORT; the
-## legacy CLAUDE_RUNTIME_PORT is still honoured for one deprecation cycle) speaking
+## a loopback TCP server on 127.0.0.1:9081 (override BREAKPOINT_RUNTIME_PORT) speaking
 ## the SAME newline-delimited JSON protocol as the editor bridge, and exposes the
 ## live SceneTree: read/write properties, call methods, emit signals, inject
 ## input, read Performance monitors, capture frames, and read a log ring buffer.
@@ -60,7 +59,7 @@ var _in_capture: bool = false
 func _ready() -> void:
 	# Keep servicing requests even while the game is paused (e.g. at a breakpoint).
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	var env_port := _env_compat("BREAKPOINT_RUNTIME_PORT", "CLAUDE_RUNTIME_PORT")
+	var env_port := OS.get_environment("BREAKPOINT_RUNTIME_PORT")
 	if env_port != "" and env_port.is_valid_int():
 		_port = int(env_port)
 	_server = TCPServer.new()
@@ -78,19 +77,6 @@ func _ready() -> void:
 		tree.node_removed.connect(_on_tree_structure_changed)
 		tree.node_renamed.connect(_on_tree_structure_changed)
 	_install_log_capture()
-
-
-## Read `new_name` from the environment, falling back to the deprecated
-## `old_name` (env vars were renamed CLAUDE_* → BREAKPOINT_* in the rebrand)
-## with a one-time warning. Returns "" when neither is set.
-static func _env_compat(new_name: String, old_name: String) -> String:
-	var v := OS.get_environment(new_name)
-	if v != "":
-		return v
-	var legacy := OS.get_environment(old_name)
-	if legacy != "":
-		push_warning("[breakpoint_runtime] env %s is deprecated; use %s instead" % [old_name, new_name])
-	return legacy
 
 
 ## Public API: game code can route its own logs here for runtime.get_log to read.
