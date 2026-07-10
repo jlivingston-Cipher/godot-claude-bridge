@@ -306,11 +306,20 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 { "type": "object", "additionalProperties": false, "required": ["path"],
   "properties": { "path": { "type": "string", "pattern": "^res://" } } }
 ```
-- **Output** `{ "type": "object", "required": ["opened"], "properties": { "opened": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["opened"], "properties": { "opened": { "type": "string" } } }
+```
 
 ### `scene_save` ✅
-- **Input** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["saved"], "properties": { "saved": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["saved"], "properties": { "saved": { "type": "string" } } }
+```
 
 ### `scene_new` ✅ · destructive (writes a new file)
 - **Input**
@@ -322,33 +331,72 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
     "name": { "type": "string" }
   } }
 ```
-- **Output** `{ "type": "object", "required": ["created", "root_type"], "properties": { "created": { "type": "string" }, "root_type": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["created", "root_type"], "properties": { "created": { "type": "string" }, "root_type": { "type": "string" } } }
+```
 
 ### `scene_list_open` ✅
-- **Input** `{ "type": "object", "properties": {} }`
-- **Output** `{ "type": "object", "required": ["scenes", "current", "unsaved", "unsaved_supported"], "properties": { "scenes": { "type": "array", "items": { "type": "string" } }, "current": { "type": ["string", "null"] }, "unsaved": { "type": "array", "items": { "type": "string" } }, "unsaved_supported": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scenes", "current", "unsaved", "unsaved_supported"], "properties": { "scenes": { "type": "array", "items": { "type": "string" } }, "current": { "type": ["string", "null"] }, "unsaved": { "type": "array", "items": { "type": "string" } }, "unsaved_supported": { "type": "boolean" } } }
+```
 - **Note** `unsaved` enumeration uses `EditorInterface.get_unsaved_scenes()` (Godot 4.4+). On Godot 4.3 that API is absent, so `unsaved` comes back empty and `unsaved_supported` is `false`; `scenes` and `current` are unaffected.
 
 ### `scene_reload` ✅ · destructive (discards unsaved changes)
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }`
-- **Output** `{ "type": "object", "required": ["reloaded"], "properties": { "reloaded": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["reloaded"], "properties": { "reloaded": { "type": "string" } } }
+```
 
 ### `scene_close` ✅ · destructive (discards unsaved changes)
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "optional assertion of the current scene path" } } }`
-- **Output** `{ "type": "object", "required": ["closed"], "properties": { "closed": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "optional assertion of the current scene path" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["closed"], "properties": { "closed": { "type": "string" } } }
+```
 - **Note** Requires Godot 4.4+ (`EditorInterface.close_scene()`); on Godot 4.3 the tool returns an `unsupported` error instead of closing.
 
 ### `scene_pack` ✅ · destructive (writes a new file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" } } }`
-- **Output** `{ "type": "object", "required": ["packed", "branch"], "properties": { "packed": { "type": "string" }, "branch": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["packed", "branch"], "properties": { "packed": { "type": "string" }, "branch": { "type": "string" } } }
+```
 
 ### `scene_get_dependencies` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }`
-- **Output** `{ "type": "object", "required": ["path", "dependencies"], "properties": { "path": { "type": "string" }, "dependencies": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "omitted = current scene" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "dependencies"], "properties": { "path": { "type": "string" }, "dependencies": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `scene_save_as` ✅ · destructive (writes a new file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }`
-- **Output** `{ "type": "object", "required": ["saved_as"], "properties": { "saved_as": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["saved_as"], "properties": { "saved_as": { "type": "string" } } }
+```
 
 ### `node_add` ✅  (undoable)
 - **Input**
@@ -360,11 +408,20 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
     "name": { "type": "string" }
   } }
 ```
-- **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `node_delete` ✅ · destructive  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["deleted"], "properties": { "deleted": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["deleted"], "properties": { "deleted": { "type": "string" } } }
+```
 
 ### `node_rename` ✅  (undoable)
 - **Input**
@@ -372,7 +429,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 { "type": "object", "additionalProperties": false, "required": ["path", "new_name"],
   "properties": { "path": { "type": "string" }, "new_name": { "type": "string" } } }
 ```
-- **Output** `{ "type": "object", "required": ["path", "name"], "properties": { "path": { "type": "string" }, "name": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name"], "properties": { "path": { "type": "string" }, "name": { "type": "string" } } }
+```
 
 ### `node_reparent` ✅  (undoable)
 - **Input**
@@ -384,7 +444,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
     "keep_global_transform": { "type": "boolean", "default": true }
   } }
 ```
-- **Output** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
 
 ### `node_set_property` ✅  (undoable)
 - **Input**
@@ -403,60 +466,145 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 
 ### `node_get_property` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "property"], "properties": { "path": { "type": "string" }, "property": { "type": "string" } } }`
-- **Output** identical shape to `node_set_property` output.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "property"], "properties": { "path": { "type": "string" }, "property": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "property", "value"],
+  "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": { "$ref": "#/$defs/Variant" } } }
+```
 
 ### `node_duplicate` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `node_get_children` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "children"], "properties": { "path": { "type": "string" }, "children": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "path": { "type": "string" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "children"], "properties": { "path": { "type": "string" }, "children": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "path": { "type": "string" } } } } } }
+```
 
 ### `node_find` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "root_path": { "type": "string" }, "type": { "type": "string" }, "name_contains": { "type": "string" }, "limit": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["matches", "count"], "properties": { "matches": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "path": { "type": "string" } } } }, "count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "root_path": { "type": "string" }, "type": { "type": "string" }, "name_contains": { "type": "string" }, "limit": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["matches", "count"], "properties": { "matches": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "path": { "type": "string" } } } }, "count": { "type": "integer" } } }
+```
 
 ### `node_list_groups` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "groups"], "properties": { "path": { "type": "string" }, "groups": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "groups"], "properties": { "path": { "type": "string" }, "groups": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `node_add_to_group` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "group"], "properties": { "path": { "type": "string" }, "group": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "group", "added"], "properties": { "path": { "type": "string" }, "group": { "type": "string" }, "added": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "group"], "properties": { "path": { "type": "string" }, "group": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "group", "added"], "properties": { "path": { "type": "string" }, "group": { "type": "string" }, "added": { "type": "boolean" } } }
+```
 
 ### `node_remove_from_group` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "group"], "properties": { "path": { "type": "string" }, "group": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "group", "removed"], "properties": { "path": { "type": "string" }, "group": { "type": "string" }, "removed": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "group"], "properties": { "path": { "type": "string" }, "group": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "group", "removed"], "properties": { "path": { "type": "string" }, "group": { "type": "string" }, "removed": { "type": "boolean" } } }
+```
 
 ### `node_instantiate_scene` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "scene_path"], "properties": { "parent_path": { "type": "string", "description": "'.' for root" }, "scene_path": { "type": "string", "pattern": "^res://" }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "scene"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "scene": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "scene_path"], "properties": { "parent_path": { "type": "string", "description": "'.' for root" }, "scene_path": { "type": "string", "pattern": "^res://" }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "scene"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "scene": { "type": "string" } } }
+```
 
 ### `node_move_child` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_index"], "properties": { "path": { "type": "string" }, "to_index": { "type": "integer", "description": "0-based; negative counts from the end" } } }`
-- **Output** `{ "type": "object", "required": ["path", "index"], "properties": { "path": { "type": "string" }, "index": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "to_index"], "properties": { "path": { "type": "string" }, "to_index": { "type": "integer", "description": "0-based; negative counts from the end" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "index"], "properties": { "path": { "type": "string" }, "index": { "type": "integer" } } }
+```
 
 ### `node_change_type` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "type"], "properties": { "path": { "type": "string" }, "type": { "type": "string", "description": "new engine class" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "old_type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "old_type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "type"], "properties": { "path": { "type": "string" }, "type": { "type": "string", "description": "new engine class" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "old_type"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "old_type": { "type": "string" } } }
+```
 
 ### `node_set_owner` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "owner_path": { "type": "string", "description": "'.' or omitted = scene root" } } }`
-- **Output** `{ "type": "object", "required": ["path", "owner"], "properties": { "path": { "type": "string" }, "owner": { "type": ["string", "null"] } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "owner_path": { "type": "string", "description": "'.' or omitted = scene root" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "owner"], "properties": { "path": { "type": "string" }, "owner": { "type": ["string", "null"] } } }
+```
 
 ### `node_call_method` ✅ · destructive (arbitrary invocation, edit-time)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "method"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }`
-- **Output** `{ "type": "object", "required": ["path", "method", "result"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "result": { "$ref": "#/$defs/Variant" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "method"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "method", "result"], "properties": { "path": { "type": "string" }, "method": { "type": "string" }, "result": { "$ref": "#/$defs/Variant" } } }
+```
 
 ### `node_get_path` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "index", "child_count"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "index": { "type": "integer" }, "parent": { "type": ["string", "null"] }, "child_count": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "index", "child_count"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "index": { "type": "integer" }, "parent": { "type": ["string", "null"] }, "child_count": { "type": "integer" } } }
+```
 
 ### `node_list_properties` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "properties"], "properties": { "path": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "properties"], "properties": { "path": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }
+```
 
 ### `signal_list` ✅
 - **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
