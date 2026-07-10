@@ -109,6 +109,29 @@ launched lazily — if you do not use the C# tools, nothing is spawned and you p
 There are two halves to install: the **editor addon** into your Godot project, and the
 **host** that your MCP client runs.
 
+### 3.0 Quick start (one command)
+
+If you just want the fastest path, run this from your project folder — it installs and
+enables the addon and prints your MCP-client config:
+
+```bash
+npx breakpoint-mcp init
+```
+
+Then open the project in Godot and check everything is wired up:
+
+```bash
+npx breakpoint-mcp doctor
+```
+
+`init` copies the addon into `addons/breakpoint_mcp/`, enables it in `project.godot`, and
+prints the client config snippet — pass `--client claude-desktop|cursor|windsurf|vscode` to
+write it directly, or `--client claude-code` for the CLI command; `--dry-run` previews and
+`--force` overwrites an existing addon. `doctor` verifies the Godot binary, the addon, and
+the four bridges — add `--require-live` once the editor is open, or `--json` for a
+machine-readable report. The sections below explain each step in full if you would rather do
+it by hand or understand what `init` did.
+
 ### 3.1 Install the editor addon into your project
 
 1. Copy the `addons/breakpoint_mcp/` folder into your project's `addons/` directory

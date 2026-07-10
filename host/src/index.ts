@@ -149,8 +149,15 @@ function printUsage(): void {
       "",
       "Usage:",
       "  breakpoint-mcp             Start the MCP server on stdio (default; how MCP clients launch it).",
+      "  breakpoint-mcp init        Install + enable the editor addon in a project and wire the MCP client.",
       "  breakpoint-mcp doctor      Check the Godot binary, the editor addon, and the four bridges.",
       "  breakpoint-mcp --help      Show this help.",
+      "",
+      "init options:",
+      "  --project <dir>     Target Godot project (default: $GODOT_PROJECT or the current directory).",
+      "  --client <id>       Write the MCP config for a client: claude-code | claude-desktop | cursor | windsurf | vscode.",
+      "  --force             Overwrite an addon that is already installed.",
+      "  --dry-run           Print what would change without writing anything.",
       "",
       "doctor options:",
       "  --project <dir>     Project to check (default: $GODOT_PROJECT or the current directory).",
@@ -173,6 +180,10 @@ void (async () => {
   if (sub === "doctor") {
     const { runDoctor } = await import("./cli/doctor.js");
     process.exit(await runDoctor(process.argv.slice(3)));
+  }
+  if (sub === "init") {
+    const { runInit } = await import("./cli/init.js");
+    process.exit(await runInit(process.argv.slice(3)));
   }
   if (sub === "help" || sub === "--help" || sub === "-h") {
     printUsage();

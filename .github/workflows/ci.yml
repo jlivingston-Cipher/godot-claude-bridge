@@ -59,6 +59,23 @@ jobs:
           GODOT_BIN=/bin/echo node dist/index.js doctor --json > /tmp/doctor.json
           cat /tmp/doctor.json
           node -e "const r=JSON.parse(require('node:fs').readFileSync('/tmp/doctor.json','utf8')); const g=r.checks.find(c=>c.name==='godot-binary'); if(!g||g.status!=='ok'){console.error('::error::doctor: godot-binary check not ok');process.exit(1);} if(!r.checks.some(c=>c.name==='editor-bridge')){console.error('::error::doctor: missing bridge checks');process.exit(1);} console.log('ONBOARD_DOCTOR_OK');"
+      - name: Onboarding CLI smoke — init installs + enables the addon (host-only)
+        # Resolves the addon from the repo-root addons/ in a fresh checkout, copies
+        # it into a throwaway project, and enables it in project.godot.
+        run: |
+          tmp="$(mktemp -d)"
+          printf 'config_version=5\n\n[application]\n\nconfig/name="smoke"\n' > "$tmp/project.godot"
+          node dist/index.js init --project "$tmp" --client none
+          test -f "$tmp/addons/breakpoint_mcp/plugin.cfg" || { echo "::error::init: addon not copied"; exit 1; }
+          grep -q 'res://addons/breakpoint_mcp/plugin.cfg' "$tmp/project.godot" || { echo "::error::init: plugin not enabled"; exit 1; }
+          echo "ONBOARD_INIT_OK"
+      - name: Onboarding packaging — the addon is included in the npm tarball
+        # stage-addon copies the canonical addon into host/addon/ (files: addon/**),
+        # so the published tarball carries the addon that init installs.
+        run: |
+          npm run stage-addon
+          npm pack --dry-run 2>&1 | grep -q 'addon/breakpoint_mcp/plugin.cfg' || { echo "::error::pack: addon missing from tarball"; exit 1; }
+          echo "ONBOARD_PACK_OK"
       - name: Assert the resolved SDK is still 1.x
         # A v2 major changes the registerTool / import surface and needs the
         # migration in README before the package.json range is bumped.

@@ -2,6 +2,7 @@
 host/node_modules/
 host/dist/
 host/dist-test/
+host/addon/
 host/*.log
 npm-debug.log*
 

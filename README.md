@@ -91,7 +91,29 @@ editor selection, edited scene, or the live SceneTree changes.
 
 ## Installation
 
-### 1. Install the editor addon
+### Quick start (recommended)
+
+From your Godot project folder, one command installs and enables the editor addon and
+prints your MCP-client config:
+
+```bash
+npx breakpoint-mcp init
+```
+
+Then open the project in Godot and verify everything is wired up:
+
+```bash
+npx breakpoint-mcp doctor
+```
+
+`init` copies the addon into `addons/breakpoint_mcp/`, enables it in `project.godot`, and
+prints the client config snippet — pass `--client claude-desktop|cursor|windsurf|vscode`
+to write it into that client's config directly, or `--client claude-code` to get the
+`claude mcp add` command. `doctor` checks the Godot binary, the addon, and the four bridges
+(add `--require-live` once the editor is open to require them; `--json` for a machine-readable
+report). The manual steps below do the same thing by hand.
+
+### 1. Install the editor addon (manual)
 
 Copy `addons/breakpoint_mcp/` into your project's `addons/` folder, then enable it under
 **Project → Project Settings → Plugins → Breakpoint MCP**. On enable it listens on
