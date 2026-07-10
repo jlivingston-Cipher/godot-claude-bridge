@@ -913,52 +913,124 @@ Batch 2 (`tilemaplayer_create`, `tilemap_*`) is the other half: it authors a `Ti
 In-scene physics authoring. Every tool mutates the **edited scene** and is **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` / `tilemap_*` model, not the disk-writing gated `tileset_*` model. `body_create` adds a `StaticBody`/`RigidBody`/`CharacterBody`/`Area` node; `collisionshape_add` adds a `CollisionShape2D`/`CollisionShape3D` carrying a shape resource (`rect`→Rectangle/Box, `circle`→Circle/Sphere, `capsule`→Capsule 2D/3D, `polygon`→ConvexPolygon 2D/3D); `body_set_collision_layer` / `body_set_collision_mask` set the bitmasks on any body or area (`CollisionObject2D/3D`). `dim` selects 2D (default) or 3D. The API surface (bodies + `CollisionShape2D/3D` + the six shape resources) was probed live on Godot 4.7, and a `StaticBody2D → CollisionShape2D(RectangleShape2D)` scene was packed to a `.tscn`, saved, and reloaded — body `collision_layer` and the shape (type + `size`) survive the round-trip. This is the group that crosses godot-mcp-pro's 162-tool ceiling. Batch 1 added bodies, collision shapes, and layer/mask; **batch 2 completes the group** (now **165**): `area_set_monitoring` / `area_set_gravity` (Area monitoring + gravity zones), `joint_create` / `joint_set_bodies` (2D `PinJoint2D`/`GrooveJoint2D`/`DampedSpringJoint2D`, 3D `PinJoint3D`/`HingeJoint3D`/`SliderJoint3D`/`ConeTwistJoint3D`/`Generic6DOFJoint3D`), `collisionpolygon_add` (`CollisionPolygon2D/3D`), `rigidbody_set_properties`, `body_set_physics_material` (a `PhysicsMaterial` override), and the gated `physics_set_gravity` (project `default_gravity`). All node/property mutators are undoable and ungated; `physics_set_gravity` writes ProjectSettings and is gated like `project_set_setting`. Every joint/area/rigidbody/polygon/material API was probed live on Godot 4.7 before design.
 
 ### `body_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["static", "rigid", "character", "area"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "body", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "body": { "type": "string" }, "dim": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["static", "rigid", "character", "area"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "body", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "body": { "type": "string" }, "dim": { "type": "string" } } }
+```
 
 ### `collisionshape_add` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "shape"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string", "enum": ["rect", "circle", "capsule", "polygon"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "size": { "type": "array", "items": { "type": "number" } }, "radius": { "type": "number" }, "height": { "type": "number" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "shape", "shape_class", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" }, "shape_class": { "type": "string" }, "dim": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "shape"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string", "enum": ["rect", "circle", "capsule", "polygon"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "size": { "type": "array", "items": { "type": "number" } }, "radius": { "type": "number" }, "height": { "type": "number" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "shape", "shape_class", "dim"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" }, "shape_class": { "type": "string" }, "dim": { "type": "string" } } }
+```
 
 ### `body_set_collision_layer` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "layer"], "properties": { "path": { "type": "string" }, "layer": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "collision_layer"], "properties": { "path": { "type": "string" }, "collision_layer": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "layer"], "properties": { "path": { "type": "string" }, "layer": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "collision_layer"], "properties": { "path": { "type": "string" }, "collision_layer": { "type": "integer" } } }
+```
 
 ### `body_set_collision_mask` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "mask"], "properties": { "path": { "type": "string" }, "mask": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "collision_mask"], "properties": { "path": { "type": "string" }, "collision_mask": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "mask"], "properties": { "path": { "type": "string" }, "mask": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "collision_mask"], "properties": { "path": { "type": "string" }, "collision_mask": { "type": "integer" } } }
+```
 
 ### `area_set_monitoring` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "monitoring", "monitorable"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "monitoring", "monitorable"], "properties": { "path": { "type": "string" }, "monitoring": { "type": "boolean" }, "monitorable": { "type": "boolean" } } }
+```
 
 ### `area_set_gravity` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string", "enum": ["disabled", "combine", "combine_replace", "replace", "replace_combine"] }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "point": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "space_override", "gravity", "direction", "gravity_point", "dim"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string" }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "gravity_point": { "type": "boolean" }, "dim": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string", "enum": ["disabled", "combine", "combine_replace", "replace", "replace_combine"] }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "point": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "space_override", "gravity", "direction", "gravity_point", "dim"], "properties": { "path": { "type": "string" }, "space_override": { "type": "string" }, "gravity": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "gravity_point": { "type": "boolean" }, "dim": { "type": "string" } } }
+```
 
 ### `joint_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["pin", "groove", "spring", "hinge", "slider", "cone_twist", "generic6dof"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "joint", "dim", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "joint": { "type": "string" }, "dim": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "type"], "properties": { "parent_path": { "type": "string" }, "type": { "type": "string", "enum": ["pin", "groove", "spring", "hinge", "slider", "cone_twist", "generic6dof"] }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "joint", "dim", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "joint": { "type": "string" }, "dim": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }
+```
 
 ### `joint_set_bodies` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "node_a", "node_b"], "properties": { "path": { "type": "string" }, "node_a": { "type": "string" }, "node_b": { "type": "string" } } }
+```
 
 ### `collisionpolygon_add` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path", "points"], "properties": { "parent_path": { "type": "string" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "build_mode": { "type": "string", "enum": ["solids", "segments"] }, "depth": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "dim", "points"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "points": { "type": "integer" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path", "points"], "properties": { "parent_path": { "type": "string" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "dim": { "type": "string", "enum": ["2d", "3d"] }, "name": { "type": "string" }, "build_mode": { "type": "string", "enum": ["solids", "segments"] }, "depth": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "dim", "points"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "dim": { "type": "string" }, "points": { "type": "integer" } } }
+```
 
 ### `rigidbody_set_properties` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }`
-- **Output** `{ "type": "object", "required": ["path", "mass", "gravity_scale", "linear_damp", "angular_damp"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "mass", "gravity_scale", "linear_damp", "angular_damp"], "properties": { "path": { "type": "string" }, "mass": { "type": "number" }, "gravity_scale": { "type": "number" }, "linear_damp": { "type": "number" }, "angular_damp": { "type": "number" } } }
+```
 
 ### `body_set_physics_material` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "friction", "bounce", "rough", "absorbent"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "friction", "bounce", "rough", "absorbent"], "properties": { "path": { "type": "string" }, "friction": { "type": "number" }, "bounce": { "type": "number" }, "rough": { "type": "boolean" }, "absorbent": { "type": "boolean" } } }
+```
 
 ### `physics_set_gravity` ✅  (gated)
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "dim": { "type": "string", "enum": ["2d", "3d"] }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["dim", "magnitude", "direction", "saved"], "properties": { "dim": { "type": "string" }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "dim": { "type": "string", "enum": ["2d", "3d"] }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["dim", "magnitude", "direction", "saved"], "properties": { "dim": { "type": "string" }, "magnitude": { "type": "number" }, "direction": { "type": "array", "items": { "type": "number" } }, "saved": { "type": "boolean" } } }
+```
 
 ## Group F — VFX & audio (Plane A / Editor)
 
@@ -1157,44 +1229,104 @@ The user-interface authoring surface (now **195**). `control_create` and `contai
 The 3D authoring surface (now **205**). `meshinstance_create` adds a **MeshInstance3D** — optionally assigning a Mesh loaded from a `res://` path (e.g. a `primitive_mesh_create` output); `mesh_set_surface_material` assigns a `Material` (res:// path) to a MeshInstance3D, either the whole-instance `material_override` (default surface `-1`) or a specific surface's override slot, refusing a non-MeshInstance3D node or a non-`Material` resource; `light_create` adds a `DirectionalLight3D` / `OmniLight3D` / `SpotLight3D` (`kind` = dir/omni/spot); `camera_create` adds a `Camera3D` (optionally made `current`); `csg_create` adds a CSG primitive (`CSGBox3D` / `CSGSphere3D` / `CSGCylinder3D` / `CSGTorus3D` / `CSGPolygon3D` / `CSGMesh3D` / `CSGCombiner3D`); `navregion_create` adds a `NavigationRegion3D`, seeding a fresh empty `NavigationMesh` by default; `navagent_configure` adds a `NavigationAgent3D` and sets its steering/avoidance properties (radius, height, max_speed, path/target desired distances, avoidance_enabled). All seven mutate the edited scene and are **undoable** via `EditorUndoRedoManager` and **ungated** — the `node_*` model. Two families author a **resource on disk**: `primitive_mesh_create` writes a `PrimitiveMesh` (box/sphere/cylinder/plane/capsule/prism/torus/quad), and `environment_create` / `environment_set_sky` write and update an `Environment` (background mode + ambient light; attach a `Sky` with a Procedural / Physical / Panorama material and switch the background to SKY) — so, like the `resource_*` / `theme_*` writers, they are **gated** by confirmation. `navmesh_bake` is intentionally **deferred** — a real geometry bake is async and non-deterministic under a headless CI editor and awaits a maintainer semantics decision (like `scene_set_root`). The `MeshInstance3D` / `Light3D` / `Camera3D` / CSG / `NavigationRegion3D` / `NavigationAgent3D` and the `PrimitiveMesh` / `Environment` / `Sky` APIs were probed live on Godot 4.7 before design, and a `MeshInstance3D` carrying a primitive mesh + a `material_override` survives a `.tscn` save + fresh reload.
 
 ### `meshinstance_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "mesh_path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "mesh_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "mesh_path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "mesh_path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "mesh_path"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "mesh_path": { "type": "string" } } }
+```
 
 ### `mesh_set_surface_material` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "material_path"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "integer" } } }`
-- **Output** `{ "type": "object", "required": ["path", "material_path", "surface"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "number" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "material_path"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "integer" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "material_path", "surface"], "properties": { "path": { "type": "string" }, "material_path": { "type": "string" }, "surface": { "type": "number" } } }
+```
 
 ### `primitive_mesh_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "shape": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "type", "shape"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "shape": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "type", "shape"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }
+```
 
 ### `light_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "kind": { "type": "string", "enum": ["dir", "directional", "omni", "spot"] }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "kind"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "kind": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "kind": { "type": "string", "enum": ["dir", "directional", "omni", "spot"] }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "kind"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "kind": { "type": "string" } } }
+```
 
 ### `camera_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "current": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "current"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "current": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "current": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "current"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "current": { "type": "boolean" } } }
+```
 
 ### `csg_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string" }, "name": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "shape"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "shape": { "type": "string" }, "name": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "shape"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "shape": { "type": "string" } } }
+```
 
 ### `navregion_create` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "with_navmesh": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "has_navmesh"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "has_navmesh": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "with_navmesh": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "has_navmesh"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "has_navmesh": { "type": "boolean" } } }
+```
 
 ### `navagent_configure` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "name", "type", "config"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "config": { "type": "object", "required": ["radius", "height", "max_speed", "path_desired_distance", "target_desired_distance", "avoidance_enabled"], "properties": { "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent_path"], "properties": { "parent_path": { "type": "string" }, "name": { "type": "string" }, "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "name", "type", "config"], "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "type": { "type": "string" }, "config": { "type": "object", "required": ["radius", "height", "max_speed", "path_desired_distance", "target_desired_distance", "avoidance_enabled"], "properties": { "radius": { "type": "number" }, "height": { "type": "number" }, "max_speed": { "type": "number" }, "path_desired_distance": { "type": "number" }, "target_desired_distance": { "type": "number" }, "avoidance_enabled": { "type": "boolean" } } } } }
+```
 
 ### `environment_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "background": { "type": "string" }, "ambient_color": { "type": "array", "items": { "type": "number" } }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "type", "background_mode"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "background_mode": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["to_path"], "properties": { "to_path": { "type": "string" }, "background": { "type": "string" }, "ambient_color": { "type": "array", "items": { "type": "number" } }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "type", "background_mode"], "properties": { "created": { "type": "string" }, "type": { "type": "string" }, "background_mode": { "type": "string" } } }
+```
 
 ### `environment_set_sky` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "sky_material": { "type": "string", "enum": ["procedural", "physical", "panorama"] }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "background_mode", "sky_material"], "properties": { "path": { "type": "string" }, "background_mode": { "type": "string" }, "sky_material": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "sky_material": { "type": "string", "enum": ["procedural", "physical", "panorama"] }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "background_mode", "sky_material"], "properties": { "path": { "type": "string" }, "background_mode": { "type": "string" }, "sky_material": { "type": "string" } } }
+```
 
 ## Group I — Input, project config & testing (Plane A / Editor)
 
