@@ -169,7 +169,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 # Plane A — Editor Bridge  (✅ implemented; requires the editor open with the plugin enabled)
 
 ### `editor_ping` ✅
-- **Input** `{ "type": "object", "properties": {} }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["pong", "addon_version", "godot"],
@@ -181,7 +184,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 
 ### `editor_get_state` ✅
-- **Input** `{ "type": "object", "properties": {} }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["has_open_scene"],
@@ -238,7 +244,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 - Programmatic Ctrl-Shift-Z. Re-applies the most recently undone action on the same history. `performed` is `false` when there is nothing to redo.
 
 ### `project_get_info` ✅
-- **Input** `{ "type": "object", "properties": {} }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["name", "project_root"],
@@ -607,28 +616,64 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 
 ### `signal_list` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "signals"], "properties": { "path": { "type": "string" }, "signals": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "signals"], "properties": { "path": { "type": "string" }, "signals": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } } } } } } }
+```
 
 ### `signal_list_connections` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "connections"], "properties": { "path": { "type": "string" }, "connections": { "type": "array", "items": { "type": "object", "properties": { "signal": { "type": "string" }, "target": { "type": ["string", "null"] }, "method": { "type": "string" }, "flags": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "connections"], "properties": { "path": { "type": "string" }, "connections": { "type": "array", "items": { "type": "object", "properties": { "signal": { "type": "string" }, "target": { "type": ["string", "null"] }, "method": { "type": "string" }, "flags": { "type": "integer" } } } } } }
+```
 
 ### `signal_connect` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer", "default": 2 } } }`
-- **Output** `{ "type": "object", "required": ["signal", "source", "target", "method", "flags", "connected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer" }, "connected": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer", "default": 2 } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["signal", "source", "target", "method", "flags", "connected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "flags": { "type": "integer" }, "connected": { "type": "boolean" } } }
+```
 
 ### `signal_disconnect` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["signal", "source", "target", "method", "disconnected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "disconnected": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "signal", "target_path", "method"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "target_path": { "type": "string" }, "method": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["signal", "source", "target", "method", "disconnected"], "properties": { "signal": { "type": "string" }, "source": { "type": "string" }, "target": { "type": "string" }, "method": { "type": "string" }, "disconnected": { "type": "boolean" } } }
+```
 
 ### `signal_add_user_signal` ✅  (undoable)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" } } } } } }`
-- **Output** `{ "type": "object", "required": ["path", "signal", "added"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "added": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" } } } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "signal", "added"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "added": { "type": "boolean" } } }
+```
 
 ### `signal_emit` ✅ · destructive (edit-time side effects)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }`
-- **Output** `{ "type": "object", "required": ["path", "signal", "emitted"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "emitted": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "signal", "emitted"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "emitted": { "type": "boolean" } } }
+```
 
 ### `selection_get` ✅
 - **Input**
@@ -673,7 +718,10 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 
 ### `screenshot_editor` ✅  (returns MCP image content)
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "viewport": { "enum": ["2d", "3d"], "default": "3d" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "viewport": { "enum": ["2d", "3d"], "default": "3d" } } }
+```
 - **Output** — MCP `content: [{ type: "image", data, mimeType }, { type: "text" }]`. Bridge payload:
 ```json
 { "type": "object", "required": ["base64", "mime", "width", "height", "viewport"],
@@ -685,52 +733,124 @@ Run a GDScript headless (`godot --headless -s <script>`). Use for GdUnit4/GUT te
 ```
 
 ### `resource_create` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["class_name", "to_path"], "properties": { "class_name": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "properties": { "type": "object" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["created", "type"], "properties": { "created": { "type": "string" }, "type": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["class_name", "to_path"], "properties": { "class_name": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "properties": { "type": "object" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "type"], "properties": { "created": { "type": "string" }, "type": { "type": "string" } } }
+```
 
 ### `resource_load` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "type", "resource_name", "properties"], "properties": { "path": { "type": "string" }, "type": { "type": "string" }, "resource_name": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "type", "resource_name", "properties"], "properties": { "path": { "type": "string" }, "type": { "type": "string" }, "resource_name": { "type": "string" }, "properties": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "integer" }, "class_name": { "type": "string" }, "usage": { "type": "integer" } } } } } }
+```
 
 ### `resource_save` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["from_path"], "properties": { "from_path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "flags": { "type": "integer" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["saved", "from"], "properties": { "saved": { "type": "string" }, "from": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["from_path"], "properties": { "from_path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "flags": { "type": "integer" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["saved", "from"], "properties": { "saved": { "type": "string" }, "from": { "type": "string" } } }
+```
 
 ### `resource_duplicate` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "deep": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["duplicated", "from", "deep"], "properties": { "duplicated": { "type": "string" }, "from": { "type": "string" }, "deep": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "to_path"], "properties": { "path": { "type": "string" }, "to_path": { "type": "string", "pattern": "^res://" }, "deep": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["duplicated", "from", "deep"], "properties": { "duplicated": { "type": "string" }, "from": { "type": "string" }, "deep": { "type": "boolean" } } }
+```
 
 ### `resource_get_property` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "property"], "properties": { "path": { "type": "string" }, "property": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "property"], "properties": { "path": { "type": "string" }, "property": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }
+```
 
 ### `resource_set_property` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "property", "value"], "properties": { "path": { "type": "string" }, "property": { "type": "string" }, "value": {} } }
+```
 
 ### `resource_get_import_settings` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["path", "imported", "importer", "settings"], "properties": { "path": { "type": "string" }, "imported": { "type": "boolean" }, "importer": { "type": "string" }, "settings": { "type": "object" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "imported", "importer", "settings"], "properties": { "path": { "type": "string" }, "imported": { "type": "boolean" }, "importer": { "type": "string" }, "settings": { "type": "object" } } }
+```
 
 ### `resource_set_import_settings` ✅ · destructive (rewrites metadata + reimports)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path", "settings"], "properties": { "path": { "type": "string" }, "settings": { "type": "object" }, "reimport": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["path", "reimported", "settings"], "properties": { "path": { "type": "string" }, "reimported": { "type": "boolean" }, "settings": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "settings"], "properties": { "path": { "type": "string" }, "settings": { "type": "object" }, "reimport": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "reimported", "settings"], "properties": { "path": { "type": "string" }, "reimported": { "type": "boolean" }, "settings": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `filesystem_list` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "default res://" } } }`
-- **Output** `{ "type": "object", "required": ["path", "dirs", "files"], "properties": { "path": { "type": "string" }, "dirs": { "type": "array", "items": { "type": "string" } }, "files": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "description": "default res://" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["path", "dirs", "files"], "properties": { "path": { "type": "string" }, "dirs": { "type": "array", "items": { "type": "string" } }, "files": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ### `filesystem_scan` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": {} }`
-- **Output** `{ "type": "object", "required": ["scanning"], "properties": { "scanning": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scanning"], "properties": { "scanning": { "type": "boolean" } } }
+```
 
 ### `filesystem_move` ✅ · destructive (moves on disk; no reference remap)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["from_path", "to_path"], "properties": { "from_path": { "type": "string", "pattern": "^res://" }, "to_path": { "type": "string", "pattern": "^res://" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["moved", "from", "moved_import"], "properties": { "moved": { "type": "string" }, "from": { "type": "string" }, "moved_import": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["from_path", "to_path"], "properties": { "from_path": { "type": "string", "pattern": "^res://" }, "to_path": { "type": "string", "pattern": "^res://" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["moved", "from", "moved_import"], "properties": { "moved": { "type": "string" }, "from": { "type": "string" }, "moved_import": { "type": "boolean" } } }
+```
 
 ### `filesystem_create_dir` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }`
-- **Output** `{ "type": "object", "required": ["created", "existed"], "properties": { "created": { "type": "string" }, "existed": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "pattern": "^res://" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["created", "existed"], "properties": { "created": { "type": "string" }, "existed": { "type": "boolean" } } }
+```
 
 ## Group C — Animation (Plane A / Editor)
 
@@ -1495,52 +1615,124 @@ The 3D authoring surface (now **205**). `meshinstance_create` adds a **MeshInsta
 The project-authoring surface (now **217**). Four `inputmap_*` tools author the project's input actions in `ProjectSettings` (`input/<name>`): `inputmap_add_action` defines an action (deadzone + empty event list), `inputmap_add_event` appends an `InputEventKey` / `InputEventMouseButton` / `InputEventJoypadButton` / `InputEventJoypadMotion` built from a descriptor (`keycode`/`physical_keycode` accept a name like `"A"` via `OS.find_keycode_from_string` or an int), `inputmap_erase_action` removes one, and `inputmap_list` reads them all back (deadzone + each event's class and `as_text()`). Six project/editor-config tools follow: `project_add_autoload` / `project_remove_autoload` write `autoload/<name>` (a leading `*` marks an enabled global singleton) after checking the target `res://` path exists; `project_set_main_scene` writes `application/run/main_scene` (validated to be an existing `.tscn`/`.scn`); `project_list_settings` reads `ProjectSettings` keys+values filtered by a dotted prefix; `project_add_export_preset` appends a preset to `res://export_presets.cfg` via `ConfigFile`; and `editorsettings_get_set` reads an `EditorSettings` value, or writes it when a `value` is supplied. Two testing tools round out the family: `test_detect` reports an installed GUT / GdUnit4 framework (or `none`), and `test_list` enumerates `test_*.gd` / `*_test.gd` scripts under a directory. Every mutator that touches `ProjectSettings` or the editor config is **confirmation-gated** (the `project_set_setting` model, not the scene `EditorUndoRedoManager` history) and takes an optional `save` flag to persist to `project.godot`; the read-only `inputmap_list` / `project_list_settings` / `test_detect` / `test_list` are ungated. `test_run` and `test_result` are intentionally **deferred** — actually executing a framework's suite is async and non-deterministic under a headless CI editor and awaits a framework-bearing fixture project + a maintainer semantics decision (the same posture as `navmesh_bake` / `scene_set_root`). The `ProjectSettings` input/autoload/main-scene round-trips, `ConfigFile` export-preset write, and `EditorSettings` get/set were probed live on Godot 4.7.
 
 ### `inputmap_add_action` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["action", "deadzone", "saved"], "properties": { "action": { "type": "string" }, "deadzone": { "type": "number" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["action", "deadzone", "saved"], "properties": { "action": { "type": "string" }, "deadzone": { "type": "number" }, "saved": { "type": "boolean" } } }
+```
 
 ### `inputmap_add_event` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "event"], "properties": { "name": { "type": "string" }, "event": { "type": "object", "required": ["type"], "properties": { "type": { "type": "string", "enum": ["key", "mouse_button", "joy_button", "joy_motion"] }, "keycode": { "type": ["string", "number"] }, "physical_keycode": { "type": ["string", "number"] }, "button_index": { "type": "number" }, "axis": { "type": "number" }, "axis_value": { "type": "number" } } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["action", "event_count", "event_class", "saved"], "properties": { "action": { "type": "string" }, "event_count": { "type": "number" }, "event_class": { "type": "string" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name", "event"], "properties": { "name": { "type": "string" }, "event": { "type": "object", "required": ["type"], "properties": { "type": { "type": "string", "enum": ["key", "mouse_button", "joy_button", "joy_motion"] }, "keycode": { "type": ["string", "number"] }, "physical_keycode": { "type": ["string", "number"] }, "button_index": { "type": "number" }, "axis": { "type": "number" }, "axis_value": { "type": "number" } } }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["action", "event_count", "event_class", "saved"], "properties": { "action": { "type": "string" }, "event_count": { "type": "number" }, "event_class": { "type": "string" }, "saved": { "type": "boolean" } } }
+```
 
 ### `inputmap_list` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": {} }`
-- **Output** `{ "type": "object", "required": ["count", "actions"], "properties": { "count": { "type": "number" }, "actions": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "events": { "type": "array", "items": { "type": "object", "properties": { "class": { "type": "string" }, "text": { "type": "string" } } } } } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["count", "actions"], "properties": { "count": { "type": "number" }, "actions": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "deadzone": { "type": "number" }, "events": { "type": "array", "items": { "type": "object", "properties": { "class": { "type": "string" }, "text": { "type": "string" } } } } } } } } }
+```
 
 ### `inputmap_erase_action` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["erased", "action", "saved"], "properties": { "erased": { "type": "boolean" }, "action": { "type": "string" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["erased", "action", "saved"], "properties": { "erased": { "type": "boolean" }, "action": { "type": "string" }, "saved": { "type": "boolean" } } }
+```
 
 ### `project_add_autoload` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "path"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["autoload", "path", "enabled", "saved"], "properties": { "autoload": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name", "path"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["autoload", "path", "enabled", "saved"], "properties": { "autoload": { "type": "string" }, "path": { "type": "string" }, "enabled": { "type": "boolean" }, "saved": { "type": "boolean" } } }
+```
 
 ### `project_remove_autoload` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["removed", "autoload", "saved"], "properties": { "removed": { "type": "boolean" }, "autoload": { "type": "string" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["removed", "autoload", "saved"], "properties": { "removed": { "type": "boolean" }, "autoload": { "type": "string" }, "saved": { "type": "boolean" } } }
+```
 
 ### `project_add_export_preset` ✅ · destructive (writes a file)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name", "platform"], "properties": { "name": { "type": "string" }, "platform": { "type": "string" }, "runnable": { "type": "boolean" }, "export_path": { "type": "string" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["preset", "platform", "index", "path"], "properties": { "preset": { "type": "string" }, "platform": { "type": "string" }, "index": { "type": "number" }, "path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name", "platform"], "properties": { "name": { "type": "string" }, "platform": { "type": "string" }, "runnable": { "type": "boolean" }, "export_path": { "type": "string" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["preset", "platform", "index", "path"], "properties": { "preset": { "type": "string" }, "platform": { "type": "string" }, "index": { "type": "number" }, "path": { "type": "string" } } }
+```
 
 ### `project_set_main_scene` ✅ · destructive
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["main_scene", "saved"], "properties": { "main_scene": { "type": "string" }, "saved": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "save": { "type": "boolean" }, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["main_scene", "saved"], "properties": { "main_scene": { "type": "string" }, "saved": { "type": "boolean" } } }
+```
 
 ### `project_list_settings` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "prefix": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["prefix", "count", "settings"], "properties": { "prefix": { "type": "string" }, "count": { "type": "number" }, "settings": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": {} } } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "prefix": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["prefix", "count", "settings"], "properties": { "prefix": { "type": "string" }, "count": { "type": "number" }, "settings": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": {} } } } } }
+```
 
 ### `editorsettings_get_set` ✅ · destructive (on set)
-- **Input** `{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }`
-- **Output** `{ "type": "object", "required": ["name", "value", "mode"], "properties": { "name": { "type": "string" }, "value": {}, "mode": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "value": {}, "confirm": { "type": "boolean" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["name", "value", "mode"], "properties": { "name": { "type": "string" }, "value": {}, "mode": { "type": "string" } } }
+```
 
 ### `test_detect` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": {} }`
-- **Output** `{ "type": "object", "required": ["framework", "path", "version"], "properties": { "framework": { "type": "string" }, "path": { "type": "string" }, "version": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": {} }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["framework", "path", "version"], "properties": { "framework": { "type": "string" }, "path": { "type": "string" }, "version": { "type": "string" } } }
+```
 
 ### `test_list` ✅
-- **Input** `{ "type": "object", "additionalProperties": false, "properties": { "dir": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["dir", "count", "tests"], "properties": { "dir": { "type": "string" }, "count": { "type": "number" }, "tests": { "type": "array", "items": { "type": "string" } } } }`
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "properties": { "dir": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["dir", "count", "tests"], "properties": { "dir": { "type": "string" }, "count": { "type": "number" }, "tests": { "type": "array", "items": { "type": "string" } } } }
+```
 
 ---
 
