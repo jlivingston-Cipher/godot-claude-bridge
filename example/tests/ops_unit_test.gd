@@ -1,10 +1,15 @@
 extends SceneTree
 ## Headless unit tests for the PURE, editor-independent logic in the Breakpoint
 ## MCP addon — the parts a real editor is NOT needed to exercise:
-##   * the Variant <-> JSON codec (variant_json.gd), and
+##   * the Variant <-> JSON codec (variant_json.gd), including the tagged-object
+##     branches (Object/Resource/Unsupported/packed arrays) and decode fallbacks,
 ##   * the pure helpers in operations.gd: the {ok}/{err} envelope, node-path
 ##     resolution (_resolve/_path_of), SceneTree serialization (_serialize_node,
-##     _descendants), the doc-URL / type-name helpers, and _ping.
+##     _descendants), the doc-URL / type-name helpers, _resource_class_ok, and _ping,
+##   * the pure helpers in runtime_bridge.gd exercised WITHOUT entering the tree
+##     (so no TCP socket opens): the {ok}/{err} envelope, _dispatch's ping /
+##     unknown-method paths, _get_monitors key filtering, the CLAUDE_*→BREAKPOINT_*
+##     env-compat shim (_env_compat), and the push_log / _get_log ring buffer.
 ##
 ## The editor-COUPLED handlers (every mutator that drives EditorInterface /
 ## EditorUndoRedoManager) are already covered end-to-end by the authoring-plane
@@ -17,6 +22,7 @@ extends SceneTree
 
 const Ops := preload("res://addons/breakpoint_mcp/operations.gd")
 const Codec := preload("res://addons/breakpoint_mcp/variant_json.gd")
+const RB := preload("res://addons/breakpoint_mcp/runtime_bridge.gd")
 
 var _pass := 0
 var _fail := 0
@@ -25,12 +31,17 @@ var _fail := 0
 func _initialize() -> void:
 	var ops = Ops.new()  # untyped: only editor-free helpers are called (no setup(plugin))
 	_test_codec()
+	_test_codec_edges()
 	_test_envelope(ops)
 	_test_resolve_and_path(ops)
 	_test_serialize(ops)
 	_test_descendants(ops)
 	_test_doc_helpers(ops)
+	_test_resource_class_ok(ops)
 	_test_ping(ops)
+	_test_runtime_envelope_and_dispatch()
+	_test_runtime_env_compat()
+	_test_runtime_log()
 	print("OPS_UNIT_SUMMARY pass=%d/%d" % [_pass, _pass + _fail])
 	quit(0 if _fail == 0 else 1)
 
@@ -177,3 +188,133 @@ func _test_ping(ops) -> void:
 	_eq("ping.pong", p["pong"], true)
 	_eq("ping.version", p["addon_version"], Ops.ADDON_VERSION)
 	_check("ping.godot_nonempty", String(p["godot"]) != "")
+
+
+# --- variant_json.gd tagged-object + decode-fallback branches --------------
+func _test_codec_edges() -> void:
+	# non-Resource Object -> {__type__:"Object", class:<class>}
+	var n := Node.new()
+	var ne: Variant = Codec.encode(n)
+	_eq("codec.object.tag", ne.get("__type__"), "Object")
+	_eq("codec.object.class", ne.get("class"), "Node")
+	n.free()
+	# Resource -> {__type__:"Resource", class, path}
+	var r := Resource.new()
+	var re: Variant = Codec.encode(r)
+	_eq("codec.resource.tag", re.get("__type__"), "Resource")
+	_eq("codec.resource.class", re.get("class"), "Resource")
+	_eq("codec.resource.path_empty", re.get("path"), "")
+	# an unhandled Variant type -> {__type__:"Unsupported", repr, type_id}
+	var ue: Variant = Codec.encode(Transform3D())
+	_eq("codec.unsupported.tag", ue.get("__type__"), "Unsupported")
+	_eq("codec.unsupported.type_id", ue.get("type_id"), TYPE_TRANSFORM3D)
+	_check("codec.unsupported.has_repr", ue.has("repr"))
+	# Rect2 tagged fields
+	var r2: Variant = Codec.encode(Rect2(1, 2, 3, 4))
+	_eq("codec.rect2.tag", r2.get("__type__"), "Rect2")
+	_eq("codec.rect2.x", r2.get("x"), 1)
+	_eq("codec.rect2.y", r2.get("y"), 2)
+	_eq("codec.rect2.w", r2.get("w"), 3)
+	_eq("codec.rect2.h", r2.get("h"), 4)
+	# packed arrays encode element-wise to a plain JSON array
+	var pi: Variant = Codec.encode(PackedInt32Array([1, 2, 3]))
+	_check("codec.packed_int.is_array", pi is Array)
+	_eq("codec.packed_int.vals", pi, [1, 2, 3])
+	_eq("codec.packed_string.vals", Codec.encode(PackedStringArray(["a", "b"])), ["a", "b"])
+	var pv: Variant = Codec.encode(PackedVector2Array([Vector2(1, 2)]))
+	_eq("codec.packed_vec2.tag", pv[0].get("__type__"), "Vector2")
+	_eq("codec.packed_vec2.x", pv[0].get("x"), 1)
+	# decode fallbacks all resolve to null
+	_check("codec.decode.unknown_tag_null", Codec.decode({"__type__": "Bogus"}) == null)
+	_check("codec.decode.object_tag_null", Codec.decode({"__type__": "Object", "class": "Node"}) == null)
+	_check("codec.decode.resource_missing_null", Codec.decode({"__type__": "Resource", "path": "res://__nope__.tres"}) == null)
+	# decode defaults: Color alpha -> 1.0, Quaternion w -> 1.0
+	_eq("codec.decode.color_default_a", Codec.decode({"__type__": "Color", "r": 0.5, "g": 0.25, "b": 0.75}), Color(0.5, 0.25, 0.75, 1.0))
+	_eq("codec.decode.quat_default_w", Codec.decode({"__type__": "Quaternion"}), Quaternion(0, 0, 0, 1))
+	# decode int-casts Vector2i / Vector3i components
+	_eq("codec.decode.vec2i", Codec.decode({"__type__": "Vector2i", "x": 3, "y": 4}), Vector2i(3, 4))
+	_eq("codec.decode.vec3i", Codec.decode({"__type__": "Vector3i", "x": 1, "y": 2, "z": 3}), Vector3i(1, 2, 3))
+
+
+# --- operations.gd _resource_class_ok --------------------------------------
+func _test_resource_class_ok(ops) -> void:
+	_check("rclass.image_true", ops._resource_class_ok("Image") == true)
+	_check("rclass.node_false", ops._resource_class_ok("Node") == false)
+	_check("rclass.missing_false", ops._resource_class_ok("NotAClass_123") == false)
+
+
+# --- runtime_bridge.gd envelope + dispatch (no tree, no socket) -------------
+func _test_runtime_envelope_and_dispatch() -> void:
+	var rb = RB.new()  # NOT added to the tree: _ready() never runs, so no TCP server opens
+	var okd: Dictionary = rb._ok({"a": 1})
+	_eq("rb.ok.ok", okd["ok"], true)
+	_eq("rb.ok.result", okd["result"]["a"], 1)
+	var errd: Dictionary = rb._err("bad", "nope")
+	_eq("rb.err.ok", errd["ok"], false)
+	_eq("rb.err.code", errd["error"]["code"], "bad")
+	_eq("rb.err.msg", errd["error"]["message"], "nope")
+	var pong: Dictionary = rb._dispatch("ping", {})
+	_eq("rb.ping.ok", pong["ok"], true)
+	_eq("rb.ping.pong", pong["result"]["pong"], true)
+	_eq("rb.ping.runtime", pong["result"]["runtime"], true)
+	_eq("rb.ping.capture_false", pong["result"]["log_capture"], false)
+	_check("rb.ping.godot_nonempty", String(pong["result"]["godot"]) != "")
+	var un: Dictionary = rb._dispatch("does.not.exist", {})
+	_eq("rb.unknown.ok", un["ok"], false)
+	_eq("rb.unknown.code", un["error"]["code"], "unknown_method")
+	var mon: Dictionary = rb._get_monitors({"keys": ["time/fps"]})
+	_check("rb.monitors.has_fps", (mon["result"]["monitors"] as Dictionary).has("time/fps"))
+	var mon2: Dictionary = rb._get_monitors({"keys": ["bogus/nope"]})
+	_eq("rb.monitors.unknown_empty", (mon2["result"]["monitors"] as Dictionary).size(), 0)
+	rb.free()
+
+
+# --- runtime_bridge.gd CLAUDE_* -> BREAKPOINT_* env-compat shim ------------
+func _test_runtime_env_compat() -> void:
+	var newn := "BREAKPOINT_MCP_UNITTEST_VAR"
+	var oldn := "CLAUDE_MCP_UNITTEST_VAR"
+	OS.set_environment(newn, "")
+	OS.set_environment(oldn, "")
+	_eq("rb.env.neither_empty", RB._env_compat(newn, oldn), "")
+	# new name wins over legacy
+	OS.set_environment(newn, "9091")
+	OS.set_environment(oldn, "legacy")
+	_eq("rb.env.new_precedence", RB._env_compat(newn, oldn), "9091")
+	# only legacy set -> legacy value returned (with a deprecation warning)
+	OS.set_environment(newn, "")
+	OS.set_environment(oldn, "legacy")
+	_eq("rb.env.legacy_fallback", RB._env_compat(newn, oldn), "legacy")
+	OS.set_environment(newn, "")
+	OS.set_environment(oldn, "")
+
+
+# --- runtime_bridge.gd push_log / _get_log ring buffer ---------------------
+func _test_runtime_log() -> void:
+	var rb = RB.new()
+	rb.push_log("info", "first")
+	rb.push_log("warning", "second")
+	rb.push_log("error", "third")
+	var all: Dictionary = rb._get_log({})
+	_eq("rb.log.count", (all["result"]["entries"] as Array).size(), 3)
+	_eq("rb.log.latest_seq", all["result"]["latest_seq"], 3)
+	_eq("rb.log.capture_false", all["result"]["capture"], false)
+	_eq("rb.log.first_msg", all["result"]["entries"][0]["message"], "first")
+	# since_seq filter: only entries with seq > since
+	var since: Dictionary = rb._get_log({"since_seq": 2})
+	_eq("rb.log.since.count", (since["result"]["entries"] as Array).size(), 1)
+	_eq("rb.log.since.seq", since["result"]["entries"][0]["seq"], 3)
+	# levels filter
+	var lvl: Dictionary = rb._get_log({"levels": ["error"]})
+	_eq("rb.log.levels.count", (lvl["result"]["entries"] as Array).size(), 1)
+	_eq("rb.log.levels.msg", lvl["result"]["entries"][0]["message"], "third")
+	rb.free()
+	# ring buffer evicts oldest past LOG_CAP; latest_seq keeps counting
+	var rb2 = RB.new()
+	var total := RB.LOG_CAP + 5
+	for i in range(total):
+		rb2.push_log("info", "m%d" % i)
+	var cap: Dictionary = rb2._get_log({})
+	_eq("rb.log.cap.size", (cap["result"]["entries"] as Array).size(), RB.LOG_CAP)
+	_eq("rb.log.cap.latest_seq", cap["result"]["latest_seq"], total)
+	_eq("rb.log.cap.oldest_seq", cap["result"]["entries"][0]["seq"], total - RB.LOG_CAP + 1)
+	rb2.free()
