@@ -9,9 +9,16 @@ Loopback TCP/JSON bridge that exposes the live Godot editor (and, via the runtim
 
 Requires **Godot 4.2+** (uses the `EditorInterface` singleton; 4.4+ recommended).
 
+## Status dock
+On enable, a **Breakpoint MCP** panel is added to the editor dock. It reports the health of
+the editor / runtime / GDScript-LSP / DAP bridges, shows the configured ports and project
+path, and offers a one-click **Copy MCP-client config**. Connection / status / config only —
+not a chat UI; the AI assistant runs in your MCP client.
+
 ## Files
-- `plugin.gd` — `EditorPlugin` entry point; starts/stops the server.
+- `plugin.gd` — `EditorPlugin` entry point; starts/stops the server and adds the status dock.
 - `bridge_server.gd` — `TCPServer` polled from `_process`; newline-delimited JSON framing.
+- `status_dock.gd` — in-editor status/config dock (bridge health, ports, copy client config).
 - `operations.gd` — request handlers; every mutation is wrapped in `EditorUndoRedoManager`.
 - `variant_json.gd` — Variant ⇄ JSON codec (tagged rich types).
 

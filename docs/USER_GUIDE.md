@@ -155,6 +155,11 @@ On enable, the addon:
   BreakpointRuntimeBridge listening on 127.0.0.1:9081
   ```
 
+- Adds a **Breakpoint MCP** dock to the editor (right side). It reports the live health of
+  the editor / runtime / LSP / DAP bridges, shows the ports and project path, and has a
+  one-click **Copy MCP-client config** button — the in-editor twin of `doctor` + `init`.
+  Status/config only: the AI assistant runs in your MCP client, not the editor.
+
 Godot's **language server** (LSP, port 6005) and **debug adapter** (DAP, port 6006) are
 built into the editor and enabled by default while it is open. The semantic (`gd_*`) and
 debugging (`dbg_*`) tools use them directly — no addon required for those. You can review
