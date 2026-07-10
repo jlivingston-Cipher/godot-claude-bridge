@@ -142,7 +142,44 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
-main().catch((err) => {
+function printUsage(): void {
+  process.stdout.write(
+    [
+      "breakpoint-mcp — MCP server exposing Godot to AI coding assistants.",
+      "",
+      "Usage:",
+      "  breakpoint-mcp             Start the MCP server on stdio (default; how MCP clients launch it).",
+      "  breakpoint-mcp doctor      Check the Godot binary, the editor addon, and the four bridges.",
+      "  breakpoint-mcp --help      Show this help.",
+      "",
+      "doctor options:",
+      "  --project <dir>     Project to check (default: $GODOT_PROJECT or the current directory).",
+      "  --require-live      Also require the editor/runtime/LSP/DAP bridges to be reachable.",
+      "  --include-csharp    Also probe OmniSharp / netcoredbg on PATH (the C# planes).",
+      "  --timeout <ms>      Per-bridge connect timeout (default 1500).",
+      "  --json              Emit the report as JSON.",
+      "",
+      "All runtime configuration is via environment variables; see the README.",
+      "",
+    ].join("\n"),
+  );
+}
+
+// Subcommand dispatch. Anything that isn't a recognized subcommand — including
+// no arguments at all, which is how every MCP client launches this — falls
+// through to the stdio server, so the server's launch contract is unchanged.
+void (async () => {
+  const sub = process.argv[2];
+  if (sub === "doctor") {
+    const { runDoctor } = await import("./cli/doctor.js");
+    process.exit(await runDoctor(process.argv.slice(3)));
+  }
+  if (sub === "help" || sub === "--help" || sub === "-h") {
+    printUsage();
+    process.exit(0);
+  }
+  await main();
+})().catch((err) => {
   log("fatal:", err instanceof Error ? err.stack ?? err.message : String(err));
   process.exit(1);
 });

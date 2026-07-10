@@ -49,6 +49,16 @@ jobs:
         run: npm run build
       - name: Assert dist/index.js was emitted
         run: test -f dist/index.js
+      - name: Onboarding CLI smoke — doctor runs headless (host-only, no Godot)
+        # The bin dispatches `doctor` without touching the stdio server path.
+        # /bin/echo stands in for the Godot binary (prints a version, exits 0);
+        # no project.godot in host/ so the addon checks skip, and the four bridge
+        # probes fail fast (nothing listening) as informational — so the report is
+        # ok and exit code 0. Proves the built dist actually routes the subcommand.
+        run: |
+          GODOT_BIN=/bin/echo node dist/index.js doctor --json > /tmp/doctor.json
+          cat /tmp/doctor.json
+          node -e "const r=JSON.parse(require('node:fs').readFileSync('/tmp/doctor.json','utf8')); const g=r.checks.find(c=>c.name==='godot-binary'); if(!g||g.status!=='ok'){console.error('::error::doctor: godot-binary check not ok');process.exit(1);} if(!r.checks.some(c=>c.name==='editor-bridge')){console.error('::error::doctor: missing bridge checks');process.exit(1);} console.log('ONBOARD_DOCTOR_OK');"
       - name: Assert the resolved SDK is still 1.x
         # A v2 major changes the registerTool / import surface and needs the
         # migration in README before the package.json range is bumped.
