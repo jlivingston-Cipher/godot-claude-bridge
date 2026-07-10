@@ -6,6 +6,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-10
+
+Patch release — republishes the package so its npm page reflects the `init` / `doctor` onboarding docs. npm READMEs are immutable per published version, so the `host/README.md` parity fix only reaches npmjs.com on a new publish. No code, tool, schema, or configuration change — still **242 tools**; version `1.2.0` → `1.2.1`.
+
 ### Documentation
 - Brought the npm-published `host/README.md` to parity with the repository README: it now documents the `breakpoint-mcp init` and `doctor` onboarding commands and notes that the editor addon ships **inside the package** (so users who install from npm do not need the repository to get the addon). Also clarified in the root `README.md` that the by-hand "Install the editor addon (manual)" steps are the from-source route, and that npm users can use `init` instead. No code, tool, schema, or version change (still **242 tools** at 1.2.0). The npm package page reflects this on the next publish, since a version's README is immutable once published.
 
