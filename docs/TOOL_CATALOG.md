@@ -1760,7 +1760,10 @@ The project-authoring surface (now **217**). Four `inputmap_*` tools author the 
 
 ### `gd_hover` ✅
 - **Input** same `{ path, line, character }` as `gd_completion`.
-- **Output** `{ "type": "object", "properties": { "contents": { "type": "string" }, "range": { "type": "object" } } }`
+- **Output**
+```json
+{ "type": "object", "properties": { "contents": { "type": "string" }, "range": { "type": "object" } } }
+```
 
 ### `gd_definition` ✅
 - **Input** same `{ path, line, character }`.
@@ -1797,12 +1800,21 @@ The project-authoring surface (now **217**). Four `inputmap_*` tools author the 
 ```
 
 ### `gd_document_symbols` ✅
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }
+```
 
 ### `gd_workspace_symbols` ⚠️ · unsupported by Godot ≤ 4.7 (handled gracefully)
 > **Engine limitation (found in live validation):** Godot 4.7's GDScript language server replies `-32601 Method not found` to `workspace/symbol` (confirmed in CI on both 4.3-stable and 4.7-stable: 4.3 advertises `workspaceSymbolProvider: true` yet still replies `-32601` to every query, and 4.7 honestly advertises it `false` and likewise replies `-32601` — exactly why the tool keeps a belt-and-suspenders `-32601` catch). The gap is in the engine, not the host — the input/output contract below is correct and the tool is retained for forward compatibility (it will start returning results on a Godot build that implements the method). **As of v0.4.5** the host feature-detects this: it checks the server's advertised `workspaceSymbolProvider` capability (and still catches a `-32601` from builds that advertise it but don't honour it), returning an explicit `isError` "unsupported by the connected Godot build — use gd_document_symbols instead" message rather than leaking a raw JSON-RPC error. On the success path (a future capable build) the `symbols` output shape below is unchanged.
-- **Input** `{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }
+```
 - **Output** same `symbols` shape as `gd_document_symbols`, each with an added `uri`.
 
 ### `gd_diagnostics` ✅  (also exposed as a subscribable `diagnostics://` resource)
@@ -1872,7 +1884,10 @@ Resolve the declaration location(s) of the symbol at a position (coincides with 
 
 ### `gd_folding_ranges` ⚠️ · advertised `false` on Godot 4.3-stable (handled)
 List the foldable regions of a script (functions, blocks, comment/region markers) — the ranges an editor's fold gutter offers. Read-only. Godot 4.3-stable advertises `foldingRangeProvider: false` (confirmed live in CI), so the tool returns "unsupported" there; feature-detected with a `-32601` fallback for a future build that implements it.
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["ranges"], "properties": { "ranges": { "type": "array", "items": {
@@ -1882,7 +1897,10 @@ List the foldable regions of a script (functions, blocks, comment/region markers
 
 ### `gd_document_link` ✅ · confirmed live on Godot 4.3-stable
 List the links embedded in a script (res:// paths or URLs the language server recognizes) with their source ranges and targets. Read-only. Advertises `documentLinkProvider`; feature-detected with a `-32601` fallback. **Confirmed implemented live in CI on 4.3-stable (empty list for a link-free file).**
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["links"], "properties": { "links": { "type": "array", "items": {
@@ -1901,11 +1919,17 @@ Compute how the language server would reformat a whole script and return the for
   "tab_size": { "type": "integer", "minimum": 1, "default": 4 },
   "insert_spaces": { "type": "boolean", "default": false, "description": "Indent with spaces instead of tabs (Godot uses tabs)" } } }
 ```
-- **Output** `{ "type": "object", "required": ["edit_count", "formatted"], "properties": { "edit_count": { "type": "integer" }, "formatted": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["edit_count", "formatted"], "properties": { "edit_count": { "type": "integer" }, "formatted": { "type": "string" } } }
+```
 
 ### `gd_document_color` ⚠️ · advertised `false` on Godot 4.3-stable (handled)
 List the color literals the language server recognizes in a script — the `Color(...)` values an editor draws an inline swatch for — with each one's source range, its RGBA components (floats 0..1) and a convenience `#RRGGBBAA` hex (Godot's `Color.to_html()` ordering). Read-only. Godot 4.3-stable lists `colorProvider` among its `initialize` capability keys but with the value **`false`** (confirmed live in CI: `D7_CAPS2 … color=false`, tool returns "unsupported"), so it joins `document-highlight`/`type-definition`/`implementation`/`folding-ranges`/`formatting` in the advertised-but-not-honoured group; the tool feature-detects and returns a clear "unsupported" message there, and keeps a `-32601` belt-and-suspenders for a future build that implements it (the D7 lesson: advertised ≠ implemented).
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["colors"], "properties": { "colors": { "type": "array", "items": {
@@ -1932,7 +1956,10 @@ List the color literals the language server recognizes in a script — the `Colo
 
 ### `cs_hover` ✅
 - **Input** same `{ path, line, character }`.
-- **Output** `{ "type": "object", "required": ["contents"], "properties": { "contents": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["contents"], "properties": { "contents": { "type": "string" } } }
+```
 
 ### `cs_definition` ✅
 - **Input** same `{ path, line, character }`.
@@ -1956,12 +1983,21 @@ Rename a C# symbol project-wide via OmniSharp `textDocument/rename`. Returns the
 - **Output** same shape as `gd_rename`: `{ "changed_files": [string], "edit_count": integer, "applied": boolean, "written": [string] }` (`written` = absolute paths actually written, empty on a dry run).
 
 ### `cs_document_symbols` ✅
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }`
-- **Output** `{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["symbols"], "properties": { "symbols": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "line": { "type": "integer" } } } } } }
+```
 
 ### `cs_workspace_symbols` ✅
 Unlike Godot's GDScript server, OmniSharp implements LSP `workspace/symbol`, so this returns real project-wide results; it stays feature-detected (advertised `workspaceSymbolProvider` capability plus a `-32601` belt-and-suspenders) so a server lacking it degrades to an explicit "unsupported" message rather than a raw JSON-RPC error.
-- **Input** `{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["query"], "properties": { "query": { "type": "string" } } }
+```
 - **Output** same `symbols` shape as `cs_document_symbols`, each with an added `uri`.
 
 ### `cs_signature_help` ✅
@@ -1978,7 +2014,10 @@ Unlike Godot's GDScript server, OmniSharp implements LSP `workspace/symbol`, so 
 ```
 
 ### `cs_diagnostics` ✅
-- **Input** `{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" }, "wait_ms": { "type": "integer", "description": "Max time to wait for the first publish (default 2000; OmniSharp's first analysis can be slow)" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path"], "properties": { "path": { "type": "string" }, "wait_ms": { "type": "integer", "description": "Max time to wait for the first publish (default 2000; OmniSharp's first analysis can be slow)" } } }
+```
 - **Output**
 ```json
 { "type": "object", "required": ["uri", "diagnostics"],
