@@ -6,6 +6,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-07-10
+
+First stable public release. The tool surface — **242 tools + 5 MCP resources** — and all behaviour are identical to the built-but-never-published `0.17.0` tree; this cut only advances the version stamps and consolidates the accumulated `[Unreleased]` history into the 1.0 line. The project now commits to [Semantic Versioning](https://semver.org/): subsequent breaking changes to the tool surface, output schemas, or configuration will bump the major version. The `CLAUDE_*` → `BREAKPOINT_*` environment-variable migration ships with its backward-compatible deprecation shim intact — legacy names are still honoured for one release cycle with a one-time warning.
+
 ### Changed
 - Documentation and repository-readiness pass for the first public release. Rewrote the README with a self-focused overview and no third-party comparisons; added a full **User Guide** (`docs/USER_GUIDE.md`), a **SECURITY.md** trust model with a private disclosure channel, **CONTRIBUTING.md**, **CODE_OF_CONDUCT.md**, GitHub issue/PR templates, and a **Trademarks** notice. Reconciled tool counts and version references across both READMEs, fixed broken links, scrubbed internal shorthand from shipped text, narrowed the npm `files` glob to drop source maps, hardened `.gitignore`, and removed stale internal planning docs. No tool, schema, or version change (still 242 tools at 0.17.0).
 - Trimmed the public `docs/` to what users and contributors need: removed the internal `docs/D4_CSHARP_PLAN.md` (design plan) and `docs/DISTRIBUTION.md` (maintainer publishing steps), leaving the User Guide, Tool Catalog, and validation Runbook. Added `.gitignore` rules so internal design/development artifacts (handoffs, plans, backlogs) can't be committed.
