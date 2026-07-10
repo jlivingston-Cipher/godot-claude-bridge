@@ -523,6 +523,156 @@ test("gd_document_color maps a -32601 (advertised-but-unimplemented) reply to 'u
   await srv.close();
 });
 
+// ---- Phase 2 LSP-depth: call hierarchy + semantic tokens ------------------
+
+test("gd_call_hierarchy resolves callers (incoming) with prepare + incomingCalls, mapping items and call-site ranges", async () => {
+  const projectPath = tmpProject({ "player.gd": "func take_damage(n):\n\tpass\n" });
+  const { srv } = await startLsp({
+    capabilities: { callHierarchyProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/prepareCallHierarchy") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { name: "take_damage", kind: 6, uri: "res://player.gd", range: { start: { line: 0, character: 0 }, end: { line: 1, character: 5 } }, selectionRange: { start: { line: 0, character: 5 }, end: { line: 0, character: 16 } }, detail: "func take_damage(n)" },
+        ] });
+      }
+      if (msg.method === "callHierarchy/incomingCalls") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { from: { name: "_process", kind: 12, uri: "res://enemy.gd", selectionRange: { start: { line: 8, character: 5 } }, detail: "func _process(d)" }, fromRanges: [{ start: { line: 9, character: 8 }, end: { line: 9, character: 19 } }] },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_call_hierarchy")({ path: "player.gd", line: 0, character: 5 })) as ToolResultLike;
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(res.structuredContent, {
+    direction: "incoming",
+    items: [{
+      name: "take_damage", kind: "method", uri: "res://player.gd", line: 0, character: 5, detail: "func take_damage(n)",
+      calls: [{
+        name: "_process", kind: "function", uri: "res://enemy.gd", line: 8, character: 5, detail: "func _process(d)",
+        ranges: [{ line: 9, character: 8, end_line: 9, end_character: 19 }],
+      }],
+    }],
+  });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_call_hierarchy resolves callees (outgoing) via the `to` item and forwards direction", async () => {
+  const projectPath = tmpProject({ "player.gd": "func _ready():\n\ttake_damage(1)\n" });
+  const { srv } = await startLsp({
+    capabilities: { callHierarchyProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/prepareCallHierarchy") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { name: "_ready", kind: 12, uri: "res://player.gd", selectionRange: { start: { line: 0, character: 5 } } },
+        ] });
+      }
+      if (msg.method === "callHierarchy/outgoingCalls") {
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: [
+          { to: { name: "take_damage", kind: 6, uri: "res://player.gd", selectionRange: { start: { line: 10, character: 5 } } }, fromRanges: [{ start: { line: 1, character: 1 }, end: { line: 1, character: 12 } }] },
+        ] });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_call_hierarchy")({ path: "player.gd", line: 0, character: 5, direction: "outgoing" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, {
+    direction: "outgoing",
+    items: [{
+      name: "_ready", kind: "function", uri: "res://player.gd", line: 0, character: 5, detail: "",
+      calls: [{
+        name: "take_damage", kind: "method", uri: "res://player.gd", line: 10, character: 5, detail: "",
+        ranges: [{ line: 1, character: 1, end_line: 1, end_character: 12 }],
+      }],
+    }],
+  });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_call_hierarchy returns 'unsupported' WITHOUT sending prepareCallHierarchy when the capability is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "func a():\n\tpass\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_call_hierarchy")({ path: "player.gd", line: 0, character: 5 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.method === "textDocument/prepareCallHierarchy"), "must NOT send prepareCallHierarchy when the capability is absent");
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_call_hierarchy maps a -32601 (advertised-but-unimplemented) prepare reply to 'unsupported' — the D7 belt-and-suspenders", async () => {
+  const projectPath = tmpProject({ "player.gd": "func a():\n\tpass\n" });
+  const { srv } = await startLsp({
+    capabilities: { callHierarchyProvider: true },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/prepareCallHierarchy") writeFrame(s, { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_call_hierarchy")({ path: "player.gd", line: 0, character: 5 })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_semantic_tokens decodes the packed integer array through the legend into absolute tokens", async () => {
+  const projectPath = tmpProject({ "player.gd": "func hit():\n\tpass\n" });
+  const { srv } = await startLsp({
+    capabilities: { semanticTokensProvider: { legend: { tokenTypes: ["function", "variable", "keyword"], tokenModifiers: ["declaration", "readonly"] } } },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/semanticTokens/full") {
+        // Two 5-tuples [deltaLine, deltaChar, length, typeIdx, modBits]: a keyword at
+        // (0,0) then a function one line down (deltaChar is absolute across the line break).
+        writeFrame(s, { jsonrpc: "2.0", id: msg.id, result: { data: [0, 0, 4, 2, 0, 1, 2, 3, 0, 1] } });
+      }
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_semantic_tokens")({ path: "player.gd" })) as ToolResultLike;
+  assert.deepEqual(res.structuredContent, {
+    token_count: 2,
+    tokens: [
+      { line: 0, character: 0, length: 4, type: "keyword", modifiers: [] },
+      { line: 1, character: 2, length: 3, type: "function", modifiers: ["declaration"] },
+    ],
+  });
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_semantic_tokens returns 'unsupported' WITHOUT sending the request when semanticTokensProvider is absent", async () => {
+  const projectPath = tmpProject({ "player.gd": "func a():\n\tpass\n" });
+  const { srv, received } = await startLsp({ capabilities: {} });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_semantic_tokens")({ path: "player.gd" })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  assert.ok(!received.some((m) => m.method === "textDocument/semanticTokens/full"), "must NOT send semanticTokens/full when the capability is absent");
+  lsp.close();
+  await srv.close();
+});
+
+test("gd_semantic_tokens maps a -32601 (advertised-but-unimplemented) reply to 'unsupported' — the D7 belt-and-suspenders", async () => {
+  const projectPath = tmpProject({ "player.gd": "func a():\n\tpass\n" });
+  const { srv } = await startLsp({
+    capabilities: { semanticTokensProvider: { legend: { tokenTypes: [], tokenModifiers: [] } } },
+    onRequest: (msg, s) => {
+      if (msg.method === "textDocument/semanticTokens/full") writeFrame(s, { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } });
+    },
+  });
+  const { lsp, rec } = lspToolHarness(srv.port, projectPath);
+  const res = (await rec.handler("gd_semantic_tokens")({ path: "player.gd" })) as ToolResultLike;
+  assert.equal(res.isError, true);
+  assert.match(res.content![0].text!, /unsupported/i);
+  lsp.close();
+  await srv.close();
+});
+
 // ---- Direct LspClient protocol behavior -----------------------------------
 
 test("getServerCapabilities reflects the initialize handshake result", async () => {

@@ -353,6 +353,22 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
       red: z.number(), green: z.number(), blue: z.number(), alpha: z.number(), hex: z.string(),
     })),
   },
+  gd_call_hierarchy: {
+    direction: z.string(),
+    items: z.array(z.object({
+      name: z.string(), kind: z.string(), uri: z.string(), line: z.number(), character: z.number(), detail: z.string(),
+      calls: z.array(z.object({
+        name: z.string(), kind: z.string(), uri: z.string(), line: z.number(), character: z.number(), detail: z.string(),
+        ranges: z.array(z.object({ line: z.number(), character: z.number(), end_line: z.number(), end_character: z.number() })),
+      })),
+    })),
+  },
+  gd_semantic_tokens: {
+    token_count: z.number(),
+    tokens: z.array(z.object({
+      line: z.number(), character: z.number(), length: z.number(), type: z.string(), modifiers: z.array(z.string()),
+    })),
+  },
 
   // ---- Plane D: C# semantic / OmniSharp LSP (tools/cslsp.ts) ----
   cs_completion: { items: z.array(z.object({ label: z.string(), kind: z.string(), detail: z.string(), insertText: z.string() })) },

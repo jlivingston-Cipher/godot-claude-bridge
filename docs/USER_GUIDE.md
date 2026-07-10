@@ -7,7 +7,7 @@ knowledge of the Model Context Protocol (MCP) is assumed.
 
 - **Version:** 1.0.0
 - **License:** MIT
-- **What it exposes:** 242 tools + 5 MCP resources
+- **What it exposes:** 244 tools + 5 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
 
 ---
@@ -560,7 +560,7 @@ drive the live game → test.
 
 ## 8. Tool reference by family
 
-There are **242 tools** in total. This section summarizes them by family so you know what
+There are **244 tools** in total. This section summarizes them by family so you know what
 exists and where to look; for the exhaustive per-tool input/output JSON Schemas, see
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
@@ -649,7 +649,8 @@ Requires the game running. `runtime_get_tree`, `runtime_get_property`,
   `gd_diagnostics`, `gd_signature_help`, plus navigation/inspection tools
   (`gd_declaration`, `gd_document_link`, `gd_document_highlight`, `gd_type_definition`,
   `gd_implementation`, `gd_folding_ranges`, `gd_formatting`, `gd_document_color`,
-  `gd_workspace_symbols`, `gd_code_action`). Several of the latter are feature-detected and
+  `gd_workspace_symbols`, `gd_code_action`, `gd_call_hierarchy`,
+  `gd_semantic_tokens`). Several of the latter are feature-detected and
   return "unsupported" on builds that do not implement them.
 - **C# language server (`cs_*`)** — the same shape for C#: completion, hover, definition,
   references, rename *(destructive)*, document and workspace symbols, signature help,
@@ -856,7 +857,7 @@ deterministic in-engine stand-ins with no external model; the `command` backend 
 command you configure and should only point at trusted code.
 
 **How many tools are there, and where's the full list?**
-242 tools and 5 resources. The exhaustive per-tool schemas are in
+244 tools and 5 resources. The exhaustive per-tool schemas are in
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
 
 **What are those `{ "__type__": ... }` values I see in tool arguments?**

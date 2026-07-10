@@ -25,6 +25,12 @@ test("representative success shapes validate against their schema", () => {
   schemaOf("dbg_goto").parse({ targets: [{ id: 1, label: "line 12", line: 12 }], jumped: true, target_id: 1 });
   schemaOf("dbg_data_breakpoints").parse({ breakpoints: [{ name: "hp", data_id: "hp@1", verified: true }], unresolved: [] });
   schemaOf("gd_rename").parse({ changed_files: ["res://player.gd"], edit_count: 3, applied: true, written: ["/abs/player.gd"] });
+  schemaOf("gd_call_hierarchy").parse({
+    direction: "incoming",
+    items: [{ name: "take_damage", kind: "method", uri: "res://player.gd", line: 0, character: 5, detail: "func take_damage(n)",
+      calls: [{ name: "_process", kind: "function", uri: "res://enemy.gd", line: 8, character: 5, detail: "", ranges: [{ line: 9, character: 8, end_line: 9, end_character: 19 }] }] }],
+  });
+  schemaOf("gd_semantic_tokens").parse({ token_count: 1, tokens: [{ line: 0, character: 0, length: 4, type: "keyword", modifiers: [] }] });
   schemaOf("runtime_get_monitors").parse({ monitors: { "time/fps": 60, "memory/static": 1234 } });
   schemaOf("godot_output").parse({
     id: "run-1", exited: false, exit_code: null, latest_seq: 2,
