@@ -6,6 +6,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-10
+
+Feature release — the **LSP-depth tail**: two new read-only GDScript LSP tools (`gd_call_hierarchy`, `gd_semantic_tokens`), carrying the surface from **242 to 244 tools**. No addon logic, configuration, or existing-tool behaviour change; both new tools feature-detect their Godot capability and degrade gracefully, so no client sees a new failure mode. Version `1.2.1` → `1.3.0`.
+
 ### Added — LSP-depth tail: call hierarchy + semantic tokens (2 tools, 242 → 244)
 - **`gd_call_hierarchy` — find a function's callers or callees over the GDScript language server.** Resolves the symbol at a position with `textDocument/prepareCallHierarchy`, then queries `callHierarchy/incomingCalls` (who calls this — the default `direction`) or `callHierarchy/outgoingCalls` (`direction: "outgoing"`, what this calls), returning each related function (`name`, `kind`, `uri`, position, `detail`) with the call-site `ranges`. Read-only.
 - **`gd_semantic_tokens` — the semantic-highlighting tokens for a whole script.** Requests `textDocument/semanticTokens/full` and decodes the LSP packed-integer form (delta-encoded 5-tuples of line/char/length/type/modifiers) through the server's advertised legend into absolute tokens, each with its position, `length`, `type` and `modifiers`. Read-only.
