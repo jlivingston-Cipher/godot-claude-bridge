@@ -127,6 +127,12 @@ Enabling the plugin also auto-registers the **runtime autoload**
 (`BreakpointRuntimeBridge`), so the `runtime_*` tools work as soon as the project runs
 (it listens on `127.0.0.1:9081` inside the game). No manual autoload setup needed.
 
+Once enabled, a **Breakpoint MCP** dock appears on the right-hand side of the editor. It
+shows the live health of all four bridges (editor / runtime / GDScript LSP / DAP), the
+configured ports and project path, and a one-click **Copy MCP-client config** button — the
+in-editor twin of `doctor` + `init`. It is status/config only: the assistant still runs in
+your MCP client, not in the editor.
+
 Godot's **language server** (port 6005) and **debug adapter** (port 6006) are built in
 and enabled by default while the editor is open — the `gd_*` and `dbg_*` tools use them
 directly, no addon required. Ports are configurable under **Editor → Editor Settings →

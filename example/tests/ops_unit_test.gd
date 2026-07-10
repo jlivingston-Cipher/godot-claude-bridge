@@ -38,6 +38,7 @@ extends SceneTree
 const Ops := preload("res://addons/breakpoint_mcp/operations.gd")
 const Codec := preload("res://addons/breakpoint_mcp/variant_json.gd")
 const RB := preload("res://addons/breakpoint_mcp/runtime_bridge.gd")
+const Dock := preload("res://addons/breakpoint_mcp/status_dock.gd")
 
 ## A runtime_bridge subclass whose _base() returns a caller-set in-memory
 ## fixture root instead of get_tree().current_scene, so the _base()-dependent
@@ -81,6 +82,7 @@ func _initialize() -> void:
 	_test_doc_helpers(ops)
 	_test_resource_class_ok(ops)
 	_test_ping(ops)
+	_test_status_dock()                # pure dock helpers: config snippet + status text (hermetic)
 	_test_runtime_envelope_and_dispatch()
 	_test_runtime_log()
 	_test_runtime_tree_handlers()
@@ -121,6 +123,42 @@ func _eq(label: String, got: Variant, want: Variant) -> void:
 
 func _roundtrip(label: String, v: Variant) -> void:
 	_eq("codec.roundtrip.%s" % label, Codec.decode(Codec.encode(v)), v)
+
+
+# --- status_dock.gd (pure helpers: MCP-client config snippet + status text) -
+# Editor-free, socket-free: only the static helpers are called, so no Control is
+# instantiated and no EditorInterface / clipboard / TCP is touched. Guards that
+# the dock's copy-config snippet stays byte-compatible with the host `init` CLI.
+func _test_status_dock() -> void:
+	# Glyph vocabulary mirrors doctor's ✓ / ✗ / – (unknown states degrade to –).
+	_eq("dock.glyph.ok", Dock.plane_glyph("ok"), "✓")
+	_eq("dock.glyph.fail", Dock.plane_glyph("fail"), "✗")
+	_eq("dock.glyph.pending", Dock.plane_glyph("pending"), "–")
+	_eq("dock.glyph.unknown", Dock.plane_glyph("whatever"), "–")
+	# Row text is "<glyph> <name>  <detail>" (two spaces before the detail).
+	_eq("dock.line", Dock.plane_line("editor-bridge", "ok", "127.0.0.1:9080"), "✓ editor-bridge  127.0.0.1:9080")
+
+	# The stdio server entry matches the host clients.ts serverEntry() default:
+	# npx launcher, no GODOT_BIN (default), GODOT_PROJECT pointing at the project.
+	var entry: Dictionary = Dock.server_entry("/tmp/proj")
+	_eq("dock.entry.command", entry.get("command"), "npx")
+	_eq("dock.entry.args.len", (entry.get("args") as Array).size(), 2)
+	_eq("dock.entry.args0", entry["args"][0], "-y")
+	_eq("dock.entry.args1", entry["args"][1], "breakpoint-mcp")
+	_eq("dock.entry.project", (entry.get("env") as Dictionary).get("GODOT_PROJECT"), "/tmp/proj")
+	_check("dock.entry.no_godot_bin", not (entry.get("env") as Dictionary).has("GODOT_BIN"))
+
+	# The copy-pasteable snippet is valid JSON with the mcpServers → godot shape.
+	var text: String = Dock.client_snippet("/tmp/proj")
+	var parsed: Variant = JSON.parse_string(text)
+	_check("dock.snippet.is_dict", typeof(parsed) == TYPE_DICTIONARY)
+	if typeof(parsed) == TYPE_DICTIONARY:
+		var servers: Dictionary = (parsed as Dictionary).get("mcpServers", {})
+		_check("dock.snippet.has_godot", servers.has("godot"))
+		var g: Dictionary = servers.get("godot", {})
+		_eq("dock.snippet.command", g.get("command"), "npx")
+		_eq("dock.snippet.args0", (g.get("args") as Array)[0], "-y")
+		_eq("dock.snippet.project", (g.get("env") as Dictionary).get("GODOT_PROJECT"), "/tmp/proj")
 
 
 # --- variant_json.gd -------------------------------------------------------

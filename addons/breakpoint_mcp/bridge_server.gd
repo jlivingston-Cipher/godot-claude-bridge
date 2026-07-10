@@ -48,6 +48,19 @@ func shutdown() -> void:
 		_server = null
 
 
+## Read-only snapshot for the in-editor status dock. Pure — never mutates state.
+## `listening` reflects the live TCPServer; `clients` is the current peer count.
+## The dock lives inside this same process, so this is authoritative for the
+## editor-bridge plane (no TCP self-probe needed).
+func get_status() -> Dictionary:
+	return {
+		"listening": _server != null and _server.is_listening(),
+		"host": "127.0.0.1",
+		"port": _port,
+		"clients": _clients.size(),
+	}
+
+
 func _process(_delta: float) -> void:
 	if _server == null:
 		return

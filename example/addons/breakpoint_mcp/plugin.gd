@@ -12,10 +12,12 @@ extends EditorPlugin
 ## subscribed MCP host can emit notifications/resources/updated.
 
 const BridgeServer := preload("res://addons/breakpoint_mcp/bridge_server.gd")
+const StatusDock := preload("res://addons/breakpoint_mcp/status_dock.gd")
 const RUNTIME_AUTOLOAD := "BreakpointRuntimeBridge"
 const RUNTIME_SCRIPT := "res://addons/breakpoint_mcp/runtime_bridge.gd"
 
 var _server: Node = null
+var _dock: Control = null
 var _selection: EditorSelection = null
 
 
@@ -24,6 +26,13 @@ func _enter_tree() -> void:
 	_server.name = "BreakpointBridgeServer"
 	_server.setup(self)
 	add_child(_server)
+	# Phase-4 status/config dock: a thin panel that reports bridge health across
+	# the editor/runtime/LSP/DAP planes and offers a one-click MCP-client config.
+	# Connection/status/config only — not a chat UI. Reads the server in-process.
+	var dock := StatusDock.new()
+	dock.set_server(_server)
+	add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock)
+	_dock = dock
 	# Inject the runtime bridge into every run of the project so the runtime_*
 	# tools work as soon as the game starts. Removed cleanly on disable.
 	add_autoload_singleton(RUNTIME_AUTOLOAD, RUNTIME_SCRIPT)
@@ -38,6 +47,10 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if _dock:
+		remove_control_from_docks(_dock)
+		_dock.queue_free()
+		_dock = null
 	if _selection and _selection.selection_changed.is_connected(_on_selection_changed):
 		_selection.selection_changed.disconnect(_on_selection_changed)
 	_selection = null
