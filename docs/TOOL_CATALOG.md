@@ -2335,7 +2335,10 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
 # Plane C — Runtime Bridge  (✅ implemented — Phase 3; in-game autoload `BreakpointRuntimeBridge` over loopback TCP :9081, same JSON protocol as the editor bridge)
 
 ### `runtime_get_tree` ✅
-- **Input** `{ "type": "object", "properties": { "max_depth": { "type": "integer", "default": 64 } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "max_depth": { "type": "integer", "default": 64 } } }
+```
 - **Output** same recursive `SceneNode` shape as `scene_get_tree`, plus live `visible`/`process_mode` fields.
 
 ### `runtime_get_property` / `runtime_set_property` ✅ · (`set` is destructive)
@@ -2350,11 +2353,20 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
     "path": { "type": "string" }, "method": { "type": "string" },
     "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }
 ```
-- **Output** `{ "type": "object", "required": ["return"], "properties": { "return": { "$ref": "#/$defs/Variant" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["return"], "properties": { "return": { "$ref": "#/$defs/Variant" } } }
+```
 
 ### `runtime_emit_signal` ✅ · destructive
-- **Input** `{ "type": "object", "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }`
-- **Output** `{ "type": "object", "properties": { "emitted": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "required": ["path", "signal"], "properties": { "path": { "type": "string" }, "signal": { "type": "string" }, "args": { "type": "array", "items": { "$ref": "#/$defs/Variant" } } } }
+```
+- **Output**
+```json
+{ "type": "object", "properties": { "emitted": { "type": "boolean" } } }
+```
 
 ### `runtime_inject_input` ✅ · destructive
 - **Input**
@@ -2371,19 +2383,37 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
       "position": { "$ref": "#/$defs/Variant" },
       "relative": { "$ref": "#/$defs/Variant", "description": "relative motion (kind=mouse_motion)" } } } } }
 ```
-- **Output** `{ "type": "object", "required": ["injected", "kind"], "properties": { "injected": { "type": "boolean" }, "kind": { "type": "string" } } }`
+- **Output**
+```json
+{ "type": "object", "required": ["injected", "kind"], "properties": { "injected": { "type": "boolean" }, "kind": { "type": "string" } } }
+```
 
 ### `runtime_get_monitors` ✅
-- **Input** `{ "type": "object", "properties": { "keys": { "type": "array", "items": { "type": "string" }, "description": "e.g. time/fps, render/total_draw_calls_in_frame, audio/*" } } }`
-- **Output** `{ "type": "object", "required": ["monitors"], "properties": { "monitors": { "type": "object", "additionalProperties": { "type": "number" } } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "keys": { "type": "array", "items": { "type": "string" }, "description": "e.g. time/fps, render/total_draw_calls_in_frame, audio/*" } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["monitors"], "properties": { "monitors": { "type": "object", "additionalProperties": { "type": "number" } } } }
+```
 
 ### `runtime_screenshot` ✅  (returns MCP image content)
-- **Input** `{ "type": "object", "properties": {} }`
+- **Input**
+```json
+{ "type": "object", "properties": {} }
+```
 - **Output** same PNG bridge payload as `screenshot_editor`.
 
 ### `runtime_get_log` ✅  (also a subscribable `godot://runtime/log` resource)
-- **Input** `{ "type": "object", "properties": { "since_seq": { "type": "integer", "default": 0 }, "levels": { "type": "array", "items": { "enum": ["info", "warning", "error"] } } } }`
-- **Output** `{ "type": "object", "required": ["entries", "latest_seq"], "properties": { "entries": { "type": "array", "items": { "type": "object", "properties": { "seq": { "type": "integer" }, "level": { "type": "string" }, "message": { "type": "string" } } } }, "latest_seq": { "type": "integer" }, "capture": { "type": "boolean" } } }`
+- **Input**
+```json
+{ "type": "object", "properties": { "since_seq": { "type": "integer", "default": 0 }, "levels": { "type": "array", "items": { "enum": ["info", "warning", "error"] } } } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["entries", "latest_seq"], "properties": { "entries": { "type": "array", "items": { "type": "object", "properties": { "seq": { "type": "integer" }, "level": { "type": "string" }, "message": { "type": "string" } } } }, "latest_seq": { "type": "integer" }, "capture": { "type": "boolean" } } }
+```
 - **D6 zero-config capture (Godot 4.5+):** on 4.5 and newer the runtime bridge auto-registers a scriptable `Logger` (`OS.add_logger`) that funnels every `print()` / `push_warning` / `push_error` and engine message into this ring buffer — so the host reads the game's console with **no managed parent process**. Levels are `info` / `warning` / `error`. `capture` reports whether that hook is active; on Godot < 4.5 it is `false` and only explicit `BreakpointRuntimeBridge.push_log(...)` entries appear (unchanged behavior). Changes to the buffer push `godot://runtime/log` to subscribers (coalesced, one per frame).
 
 ---
