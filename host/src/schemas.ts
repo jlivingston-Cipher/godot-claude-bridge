@@ -691,6 +691,24 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     node_path: z.string(),
     animated: z.boolean(),
   },
+  interact_make_draggable: {
+    node_path: z.string(),
+    mode: z.string(),
+    script_path: z.string(),
+    payload_keys: z.array(z.string()),
+    action: z.string().nullable(),
+    connected: z.boolean(),
+  },
+  interact_add_drop_zone: {
+    node_path: z.string(),
+    mode: z.string(),
+    script_path: z.string(),
+    on_drop: z.string(),
+    accepts_key: z.string(),
+    accepts_values: z.array(z.string()),
+    notified: z.boolean(),
+    area_path: z.string().nullable(),
+  },
 };
 
 /**

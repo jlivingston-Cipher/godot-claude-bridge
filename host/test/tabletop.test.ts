@@ -24,6 +24,12 @@ import {
   emitPieceInstance,
   emitPieceMove,
   buildPieceScript,
+  emitMakeDraggable,
+  emitAddDropZone,
+  buildDraggableScript,
+  buildDropZoneScript,
+  gdDictLiteral,
+  gdQuote,
   type Emit,
 } from "../src/tools/tabletop.js";
 
@@ -676,6 +682,160 @@ test("buildPieceScript is valid-looking GDScript with the two setters; Back guar
   const twoSided = buildPieceScript("Control", { hasLabel: false, hasBack: true });
   assert.match(twoSided, /has_node\("Back"\)/);
   assert.doesNotMatch(twoSided, /has_node\("Label"\)/); // label:false → no Label branch
+});
+
+// ============================================================================
+// Group N — Interaction slice (Increment 4). Same offline crux: each composite
+// emits the exact ordered sequence of existing primitive ops. The generated
+// behaviour scripts are pure string builders, unit-tested directly; a headless
+// build smoke proves they compile + behave in real Godot.
+// ============================================================================
+
+test("gdQuote / gdDictLiteral render valid GDScript literals with escaping", () => {
+  assert.equal(gdQuote("a\"b\\c"), '"a\\"b\\\\c"');
+  assert.equal(gdDictLiteral({}), "{}");
+  assert.equal(gdDictLiteral({ kind: "x", n: 3, on: true }), '{"kind": "x", "n": 3, "on": true}');
+});
+
+test("interact_make_draggable control emits only resource.create + attach; no input/signal ops", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitMakeDraggable(emit, {
+    node: "Main/Card", script_path: "res://ui/interact/Draggable.gd", mode: "control",
+    payload: { kind: "x", n: 3 },
+  });
+  assert.deepEqual(methods(calls), ["resource.create", "node.set_property"]);
+  assert.equal(calls[0].params.class_name, "GDScript");
+  assert.equal(calls[0].params.to_path, "res://ui/interact/Draggable.gd");
+  const src = (calls[0].params.properties as Record<string, string>).source_code;
+  assert.match(src, /^extends Control/);
+  assert.match(src, /func _get_drag_data/);
+  assert.match(src, /\{"kind": "x", "n": 3\}/);
+  assert.doesNotMatch(src, /set_drag_preview/); // preview off
+  assert.deepEqual(calls[1].params.value, { __type__: "Resource", class: "GDScript", path: "res://ui/interact/Draggable.gd" });
+  assert.equal(res.mode, "control");
+  assert.equal(res.action, null);
+  assert.equal(res.connected, false);
+  assert.deepEqual(res.payload_keys.sort(), ["kind", "n"]);
+});
+
+test("interact_make_draggable control + preview emits the drag-preview helper", async () => {
+  const { calls, emit } = recorder();
+  await emitMakeDraggable(emit, {
+    node: ".", script_path: "res://ui/interact/D.gd", mode: "control", preview: true,
+  });
+  const src = (calls[0].params.properties as Record<string, string>).source_code;
+  assert.match(src, /set_drag_preview\(_make_drag_preview\(\)\)/);
+  assert.match(src, /func _make_drag_preview\(\) -> Control:/);
+});
+
+test("interact_make_draggable node2d emits action → event → script → attach → connect, in order", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitMakeDraggable(emit, {
+    node: "World/Token", script_path: "res://ui/interact/Drag2D.gd", mode: "node2d",
+  });
+  assert.deepEqual(methods(calls), [
+    "inputmap.add_action", "inputmap.add_event",
+    "resource.create", "node.set_property", "signal.connect",
+  ]);
+  assert.deepEqual(calls[0].params, { name: "drag", save: true });
+  assert.deepEqual(calls[1].params, { name: "drag", event: { type: "mouse_button", button_index: 1 }, save: true });
+  // The hit source defaults to the node itself; the target method is the handler.
+  assert.deepEqual(calls[4].params, { path: "World/Token", signal: "input_event", target_path: "World/Token", method: "_on_drag_input", flags: 0 });
+  const src = (calls[2].params.properties as Record<string, string>).source_code;
+  assert.match(src, /^extends Node2D/);
+  assert.match(src, /const DRAG_BUTTON := 1/);
+  assert.match(src, /func _on_drag_input/);
+  assert.equal(res.action, "drag");
+  assert.equal(res.connected, true);
+});
+
+test("interact_make_draggable node2d honours custom button / action / hit_area", async () => {
+  const { calls, emit } = recorder();
+  await emitMakeDraggable(emit, {
+    node: "World/Token", script_path: "res://ui/interact/Drag2D.gd", mode: "node2d",
+    button: 2, action: "grab", hit_area: "HitArea",
+  });
+  assert.equal(calls[0].params.name, "grab");
+  assert.deepEqual(calls[1].params.event, { type: "mouse_button", button_index: 2 });
+  assert.equal(calls[4].params.path, "World/Token/HitArea"); // hit source = node/hit_area
+  assert.equal(calls[4].params.target_path, "World/Token");  // handler still on the node
+  const src = (calls[2].params.properties as Record<string, string>).source_code;
+  assert.match(src, /const DRAG_BUTTON := 2/);
+});
+
+test("interact_add_drop_zone control emits script → attach → add_user_signal (accept predicate baked in)", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitAddDropZone(emit, {
+    node: "Main/Keep", script_path: "res://ui/interact/Zone.gd", mode: "control",
+    accepts: { key: "kind", values: ["x", "y"] },
+  });
+  assert.deepEqual(methods(calls), ["resource.create", "node.set_property", "signal.add_user_signal"]);
+  const src = (calls[0].params.properties as Record<string, string>).source_code;
+  assert.match(src, /^extends Control/);
+  assert.match(src, /func _can_drop_data/);
+  assert.match(src, /func _drop_data/);
+  assert.match(src, /const ACCEPT_KEY := "kind"/);
+  assert.match(src, /const ACCEPT_VALUES := \["x", "y"\]/);
+  assert.match(src, /const ON_DROP := "dropped"/);
+  assert.deepEqual(calls[2].params, { path: "Main/Keep", signal: "dropped", args: [{ name: "payload", type: 27 }] });
+  assert.equal(res.accepts_key, "kind");
+  assert.deepEqual(res.accepts_values, ["x", "y"]);
+  assert.equal(res.notified, false);
+  assert.equal(res.area_path, null);
+});
+
+test("interact_add_drop_zone accept-any (no key) + notify appends signal.connect", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitAddDropZone(emit, {
+    node: "Main/Keep", script_path: "res://ui/interact/Zone.gd", mode: "control",
+    on_drop: "chosen", notify: { target: "Main", method: "_on_chosen" },
+  });
+  assert.deepEqual(methods(calls), ["resource.create", "node.set_property", "signal.add_user_signal", "signal.connect"]);
+  const src = (calls[0].params.properties as Record<string, string>).source_code;
+  assert.match(src, /const ACCEPT_KEY := ""/);
+  assert.match(src, /const ACCEPT_VALUES := \[\]/);
+  assert.deepEqual(calls[3].params, { path: "Main/Keep", signal: "chosen", target_path: "Main", method: "_on_chosen", flags: 0 });
+  assert.equal(res.on_drop, "chosen");
+  assert.equal(res.accepts_key, "");
+  assert.deepEqual(res.accepts_values, []);
+  assert.equal(res.notified, true);
+});
+
+test("interact_add_drop_zone node2d builds an Area2D + sized shape before the script", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitAddDropZone(emit, {
+    node: "World/Slot", script_path: "res://ui/interact/Zone2D.gd", mode: "node2d",
+    size: { width: 80, height: 120 }, shape: "circle",
+  });
+  assert.deepEqual(methods(calls), [
+    "node.add", "resource.create", "node.add", "node.set_property", // DropArea + shape + CollisionShape2D + bind
+    "resource.create", "node.set_property", "signal.add_user_signal", // script + attach + user signal
+  ]);
+  assert.deepEqual(calls[0].params, { parent_path: "World/Slot", type: "Area2D", name: "DropArea" });
+  const shapeRes = calls.find((c) => c.method === "resource.create" && c.params.class_name === "CircleShape2D")!;
+  assert.equal((shapeRes.params.properties as Record<string, unknown>).radius, 40); // min(80,120)/2
+  assert.equal(shapeRes.params.to_path, "res://ui/interact/Zone2D.shape.tres");
+  assert.deepEqual(calls[2].params, { parent_path: "World/Slot/DropArea", type: "CollisionShape2D", name: "Shape" });
+  const src = (calls[4].params.properties as Record<string, string>).source_code;
+  assert.match(src, /^extends Node2D/);
+  assert.match(src, /func try_drop\(payload: Dictionary\) -> bool:/);
+  assert.equal(res.area_path, "World/Slot/DropArea");
+});
+
+test("buildDraggableScript / buildDropZoneScript are valid-looking GDScript for both modes", () => {
+  const dragControl = buildDraggableScript("control", { kind: "x" });
+  assert.match(dragControl, /^extends Control/);
+  assert.match(dragControl, /func get_drag_payload\(\) -> Dictionary:/);
+  const dragNode2d = buildDraggableScript("node2d", {}, { button: 3 });
+  assert.match(dragNode2d, /^extends Node2D/);
+  assert.match(dragNode2d, /signal drag_started\(payload\)/);
+  assert.match(dragNode2d, /const DRAG_BUTTON := 3/);
+  const zoneControl = buildDropZoneScript("control", { acceptKey: "", acceptValues: [], onDrop: "dropped" });
+  assert.match(zoneControl, /func _can_drop_data/);
+  assert.doesNotMatch(zoneControl, /func try_drop/); // control has no try_drop seam
+  const zoneNode2d = buildDropZoneScript("node2d", { acceptKey: "k", acceptValues: ["a"], onDrop: "dropped" });
+  assert.match(zoneNode2d, /func try_drop/);
+  assert.doesNotMatch(zoneNode2d, /func _can_drop_data/); // node2d has no Control override
 });
 
 // -------------------------------------------------- game-neutrality guardrail ----

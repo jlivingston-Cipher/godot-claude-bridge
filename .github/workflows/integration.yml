@@ -11,9 +11,10 @@ name: integration
 #                     _serialize_node/_descendants, doc-URL/type-name, _ping). No editor / bridge /
 #                     GUI — it complements the authoring-plane, which covers the editor-COUPLED
 #                     handlers. Also runs the Group N scene-construction smokes (card_build_smoke.gd,
-#                     board_build_smoke.gd, piece_build_smoke.gd) — build → pack → round-trip a
-#                     card / board / piece PackedScene.
-#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD _SUMMARY / _FAIL markers.
+#                     board_build_smoke.gd, piece_build_smoke.gd, interact_build_smoke.gd) — build → pack → round-trip a
+#                     card / board / piece PackedScene, and compile + round-trip the interaction
+#                     behaviour scripts.
+#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD _SUMMARY / _FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -148,6 +149,19 @@ jobs:
           grep -q "PIECE_BUILD_SUMMARY" /tmp/piece-smoke.log || { echo "::error::piece_build_smoke.gd produced no PIECE_BUILD_SUMMARY (script error?)"; exit 1; }
           if grep -q "PIECE_BUILD_FAIL" /tmp/piece-smoke.log; then echo "::error::a piece-build smoke assertion failed"; exit 1; fi
           echo "Piece-build smoke passed: $(grep -o 'PIECE_BUILD_SUMMARY.*' /tmp/piece-smoke.log)"
+      - name: Run the Group N interact-build smoke
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/interact_build_smoke.gd > /tmp/interact-smoke.log 2>&1 || true
+          echo "=== interact_build_smoke.gd output ==="
+          cat /tmp/interact-smoke.log
+          echo "====================================="
+          # INTERACT_BUILD_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "INTERACT_BUILD_SUMMARY" /tmp/interact-smoke.log || { echo "::error::interact_build_smoke.gd produced no INTERACT_BUILD_SUMMARY (script error?)"; exit 1; }
+          if grep -q "INTERACT_BUILD_FAIL" /tmp/interact-smoke.log; then echo "::error::an interact-build smoke assertion failed"; exit 1; fi
+          echo "Interact-build smoke passed: $(grep -o 'INTERACT_BUILD_SUMMARY.*' /tmp/interact-smoke.log)"
 
   cli-plane:
     name: CLI plane vs real Godot (headless)

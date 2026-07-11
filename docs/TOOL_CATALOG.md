@@ -3011,7 +3011,7 @@ Generate login/register/logout helpers against the installed SDK. Degrades to `u
 
 ## Group N — Card / board / piece authoring composites (Plane A / Editor + host)
 
-Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`). `card_template_create`, `board_create`, and `piece_template_create` write files and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop is authored from existing Group C `anim_*` primitives, so it stays purely additive. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
+Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` / `interact_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`, `signal.*`, `inputmap.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`, and drag/drop behaviour scripts) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`); Increment 4 is the **Interaction slice** (2 tools: `interact_make_draggable`, `interact_add_drop_zone`). `card_template_create`, `board_create`, `piece_template_create`, and the two `interact_*` tools write files (a scene / behaviour script) and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop is authored from existing Group C `anim_*` primitives, so it stays purely additive. The Interaction tools wire drag-and-drop in two general-purpose modes (`control` = Godot's built-in Control DnD; `node2d` = an Area2D hit region + pointer handler); a drop zone validates a neutral `payload` with a `key∈values` predicate and emits an `on_drop` signal. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
 
 ### `card_template_create` ✅  (Plane A / Editor + host)  · writes files (gated)
 Build a reusable card `PackedScene` from a slot spec, with a generated script-backed `set_data()` / `set_face()`. Named slots (`label` / `rich_text` / `texture` / `panel` / `badge`) become the card's regions; optional inline theme and a two-sided card back.
@@ -3344,6 +3344,70 @@ Move a piece onto a board cell by id (reparent + snap via `board_place`), option
     "to": { "type": "string" },
     "node_path": { "type": "string" },
     "animated": { "type": "boolean" }
+  } }
+```
+
+### `interact_make_draggable` ✅  (Plane A / Editor + host)  · writes files (gated)
+Wire an existing node for drag-and-drop by attaching a generated reusable drag script. `control` mode uses Godot's built-in Control drag-and-drop (`_get_drag_data` hands off `{payload, source}`, with an optional translucent preview); `node2d` mode carries the payload and follows the pointer from a button-driven handler, registering a drag input action (`inputmap_add_action` / `add_event`) and connecting the hit area's `input_event` to the handler. General-purpose — the drag carries a caller-supplied neutral `payload` Dictionary. Decomposes onto `resource.create` → `node.set_property` (+ the input/signal ops for node2d); no addon method is added. Destructive (writes a script) — gated.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["node", "script_path", "mode"],
+  "properties": {
+    "node": { "type": "string" },
+    "script_path": { "type": "string", "pattern": "^res://.*\\.gd$" },
+    "mode": { "type": "string", "enum": ["control", "node2d"] },
+    "payload": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+    "preview": { "type": "boolean" },
+    "button": { "type": "integer", "minimum": 0 },
+    "action": { "type": "string" },
+    "hit_area": { "type": "string" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["node_path", "mode", "script_path", "connected"],
+  "properties": {
+    "node_path": { "type": "string" },
+    "mode": { "type": "string" },
+    "script_path": { "type": "string" },
+    "payload_keys": { "type": "array", "items": { "type": "string" } },
+    "action": { "type": ["string", "null"] },
+    "connected": { "type": "boolean" }
+  } }
+```
+
+### `interact_add_drop_zone` ✅  (Plane A / Editor + host)  · writes files (gated)
+Mark a node as a drop target that validates an incoming payload and emits a signal on a valid drop. Attaches a generated validator/acceptor script, adds the `on_drop` user signal (`signal_add_user_signal`), and — for `node2d` — builds an `Area2D` + `CollisionShape2D` hit region; optionally connects `on_drop` to a handler (`signal_connect`). `accepts` is the neutral predicate `{key, values}` — accept any payload when omitted, else accept when `payload[key]` is one of `values`. `control` mode overrides `_can_drop_data` / `_drop_data`; `node2d` exposes a `try_drop(payload)` seam. General-purpose — no domain vocabulary. Destructive (writes a script) — gated.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["node", "script_path", "mode"],
+  "properties": {
+    "node": { "type": "string" },
+    "script_path": { "type": "string", "pattern": "^res://.*\\.gd$" },
+    "mode": { "type": "string", "enum": ["control", "node2d"] },
+    "accepts": { "type": "object", "properties": {
+      "key": { "type": "string" },
+      "values": { "type": "array", "items": { "type": "string" } } } },
+    "on_drop": { "type": "string" },
+    "notify": { "type": "object", "required": ["target", "method"], "properties": {
+      "target": { "type": "string" },
+      "method": { "type": "string" } } },
+    "size": { "type": "object", "properties": { "width": { "type": "integer", "exclusiveMinimum": 0 }, "height": { "type": "integer", "exclusiveMinimum": 0 } } },
+    "shape": { "type": "string", "enum": ["rectangle", "circle"] }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["node_path", "mode", "script_path", "on_drop", "notified"],
+  "properties": {
+    "node_path": { "type": "string" },
+    "mode": { "type": "string" },
+    "script_path": { "type": "string" },
+    "on_drop": { "type": "string" },
+    "accepts_key": { "type": "string" },
+    "accepts_values": { "type": "array", "items": { "type": "string" } },
+    "notified": { "type": "boolean" },
+    "area_path": { "type": ["string", "null"] }
   } }
 ```
 
@@ -3699,5 +3763,7 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `piece_template_create` | N / Editor | ✅ | ✔ writes files |
 | `piece_instance` | N / Editor | ✅ | – |
 | `piece_move` | N / Editor | ✅ | – |
+| `interact_make_draggable` | N / Editor | ✅ | ✔ writes files |
+| `interact_add_drop_zone` | N / Editor | ✅ | ✔ writes files |
 
 **70 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 18 LSP, 15 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**
