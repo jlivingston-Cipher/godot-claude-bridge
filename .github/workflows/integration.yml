@@ -106,6 +106,19 @@ jobs:
           grep -q "OPS_UNIT_SUMMARY" /tmp/ops-unit.log || { echo "::error::ops_unit_test.gd produced no OPS_UNIT_SUMMARY (script error?)"; exit 1; }
           if grep -q "OPS_UNIT_FAIL" /tmp/ops-unit.log; then echo "::error::a GDScript unit assertion failed"; exit 1; fi
           echo "GDScript unit suite passed: $(grep -o 'OPS_UNIT_SUMMARY.*' /tmp/ops-unit.log)"
+      - name: Run the Group N card-build smoke
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/card_build_smoke.gd > /tmp/card-smoke.log 2>&1 || true
+          echo "=== card_build_smoke.gd output ==="
+          cat /tmp/card-smoke.log
+          echo "=================================="
+          # CARD_BUILD_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "CARD_BUILD_SUMMARY" /tmp/card-smoke.log || { echo "::error::card_build_smoke.gd produced no CARD_BUILD_SUMMARY (script error?)"; exit 1; }
+          if grep -q "CARD_BUILD_FAIL" /tmp/card-smoke.log; then echo "::error::a card-build smoke assertion failed"; exit 1; fi
+          echo "Card-build smoke passed: $(grep -o 'CARD_BUILD_SUMMARY.*' /tmp/card-smoke.log)"
 
   cli-plane:
     name: CLI plane vs real Godot (headless)

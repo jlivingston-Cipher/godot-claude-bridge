@@ -20,6 +20,7 @@ import { registerKnowledgeTools } from "./tools/knowledge.js";
 import { registerAssetGenTools } from "./tools/assetgen.js";
 import { registerNetcodeTools } from "./tools/netcode.js";
 import { registerBackendTools } from "./tools/backend.js";
+import { registerTabletopTools } from "./tools/tabletop.js";
 import { registerResources } from "./tools/resources.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
@@ -109,6 +110,11 @@ async function main(): Promise<void> {
   // Detects the installed SDK (SilentWolf/Nakama/PlayFab/Photon) and generates gated
   // GDScript against it; degrades cleanly when the SDK is absent or lacks the feature.
   registerBackendTools(server, bridge, config);
+  // Group N: card/board/piece authoring composites (card_*). Host-side scripted
+  // sequences of existing editor-bridge primitives (scene/control/node/theme/
+  // resource) — they build + data-bind scenes, add no addon method, and invent
+  // no game rules or data.
+  registerTabletopTools(server, bridge, config);
   // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
   registerResources(server, bridge, runtime);
   // D3: resource subscriptions — push notifications/resources/updated when a

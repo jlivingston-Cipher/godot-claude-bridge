@@ -3009,6 +3009,166 @@ Generate login/register/logout helpers against the installed SDK. Degrades to `u
 
 ---
 
+## Group N — Card / board / piece authoring composites (Plane A / Editor + host)
+
+Composite authoring **on top of** the existing primitives. Each `card_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools). `card_template_create` writes files and is **destructive** (elicitation-gated); the other three are undoable node authoring in the open scene (ungated, the `node_*` model). Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink.
+
+### `card_template_create` ✅  (Plane A / Editor + host)  · writes files (gated)
+Build a reusable card `PackedScene` from a slot spec, with a generated script-backed `set_data()` / `set_face()`. Named slots (`label` / `rich_text` / `texture` / `panel` / `badge`) become the card's regions; optional inline theme and a two-sided card back.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "size", "slots"],
+  "properties": {
+    "path": { "type": "string", "pattern": "^res://.*\\.tscn$" },
+    "size": { "type": "object", "required": ["width", "height"],
+      "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } } },
+    "root_type": { "enum": ["PanelContainer", "Panel", "Control"] },
+    "slots": { "type": "array", "minItems": 1, "items": {
+      "type": "object", "required": ["name", "kind"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "enum": ["label", "rich_text", "texture", "panel", "badge"] },
+        "rect": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" } } },
+        "anchor_preset": { "type": "integer", "minimum": 0, "maximum": 15 },
+        "font_size": { "type": "integer", "minimum": 1 },
+        "align": { "enum": ["left", "center", "right"] },
+        "wrap": { "type": "boolean" },
+        "color_by": { "type": "string" },
+        "default_text": { "type": "string" }
+      } } },
+    "face": { "type": "array", "items": { "type": "string" } },
+    "back": { "type": "object", "properties": {
+      "art": { "type": "string" },
+      "color": { "type": "string", "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" } } },
+    "theme_path": { "type": "string" },
+    "theme": { "type": "object", "properties": {
+      "base_color": { "type": "string" }, "accent_color": { "type": "string" },
+      "font_path": { "type": "string" }, "font_size": { "type": "integer", "minimum": 1 },
+      "panel_stylebox": { "type": "object", "properties": {
+        "bg_color": { "type": "string" }, "corner_radius": { "type": "integer", "minimum": 0 },
+        "border_width": { "type": "integer", "minimum": 0 }, "border_color": { "type": "string" } } } } },
+    "script_path": { "type": "string", "pattern": "^res://.*\\.gd$" },
+    "overwrite": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scene_path", "slots", "saved"],
+  "properties": {
+    "scene_path": { "type": "string" },
+    "script_path": { "type": "string" },
+    "root_type": { "type": "string" },
+    "has_back": { "type": "boolean" },
+    "node_count": { "type": "integer" },
+    "saved": { "type": "boolean" },
+    "slots": { "type": "array", "items": {
+      "type": "object", "required": ["name", "node_path", "kind"],
+      "properties": { "name": { "type": "string" }, "node_path": { "type": "string" }, "kind": { "type": "string" } } } }
+  } }
+```
+
+### `card_instance` ✅  (Plane A / Editor)  · undoable
+Instance a card template into the open scene and bind data to its slots via the template's `set_data()`. Reports which data keys bound and which had no matching slot.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["template_path", "parent", "data"],
+  "properties": {
+    "template_path": { "type": "string", "pattern": "^res://.*\\.tscn$" },
+    "parent": { "type": "string" },
+    "data": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+    "position": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+    "face_up": { "type": "boolean" },
+    "name": { "type": "string" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["instance_path", "face_up"],
+  "properties": {
+    "instance_path": { "type": "string" },
+    "face_up": { "type": "boolean" },
+    "bound": { "type": "array", "items": { "type": "string" } },
+    "unbound": { "type": "array", "items": { "type": "string" } }
+  } }
+```
+
+### `card_hand_layout` ✅  (Plane A / Editor)  · undoable
+Instance N cards under a container and arrange them as a `row`, `fan`, `stack`, or `grid`. Each card carries its own data and face state.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["template_path", "parent", "cards", "mode"],
+  "properties": {
+    "template_path": { "type": "string", "pattern": "^res://.*\\.tscn$" },
+    "parent": { "type": "string" },
+    "cards": { "type": "array", "minItems": 1, "items": {
+      "type": "object", "required": ["data"],
+      "properties": {
+        "data": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+        "face_up": { "type": "boolean" } } } },
+    "mode": { "enum": ["row", "fan", "stack", "grid"] },
+    "spacing": { "type": "number" },
+    "overlap": { "type": "number" },
+    "fan_angle": { "type": "number" },
+    "columns": { "type": "integer", "minimum": 1 },
+    "align": { "enum": ["start", "center", "end"] },
+    "origin": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["container_path", "mode", "count", "instances"],
+  "properties": {
+    "container_path": { "type": "string" },
+    "mode": { "type": "string" },
+    "count": { "type": "integer" },
+    "instances": { "type": "array", "items": {
+      "type": "object", "required": ["index", "instance_path"],
+      "properties": { "index": { "type": "integer" }, "instance_path": { "type": "string" } } } }
+  } }
+```
+
+### `card_deck_from_table` ✅  (Plane A / Editor + host)  · undoable
+Read a CSV or JSON table and stamp one card per row, binding columns to slots via a column map. `column_map` values are bare `{column}` references or composed templates like `"{name} · {role}"`; an optional `filter` selects rows and an optional `layout` arranges them. Table columns no slot referenced are surfaced (never silently dropped).
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["template_path", "parent", "table_path", "column_map"],
+  "properties": {
+    "template_path": { "type": "string", "pattern": "^res://.*\\.tscn$" },
+    "parent": { "type": "string" },
+    "table_path": { "type": "string" },
+    "format": { "enum": ["csv", "json"] },
+    "column_map": { "type": "object", "additionalProperties": { "type": "string" } },
+    "filter": { "type": "object", "required": ["column", "equals"],
+      "properties": { "column": { "type": "string" }, "equals": { "type": ["string", "number", "boolean"] } } },
+    "art_column": { "type": "string" },
+    "limit": { "type": "integer", "minimum": 1 },
+    "face_up": { "type": "boolean" },
+    "layout": { "type": "object", "properties": {
+      "mode": { "enum": ["row", "fan", "stack", "grid"] },
+      "spacing": { "type": "number" }, "overlap": { "type": "number" }, "fan_angle": { "type": "number" },
+      "columns": { "type": "integer", "minimum": 1 },
+      "align": { "enum": ["start", "center", "end"] },
+      "origin": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } } } }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["deck_container", "count", "rows_read"],
+  "properties": {
+    "deck_container": { "type": "string" },
+    "count": { "type": "integer" },
+    "rows_read": { "type": "integer" },
+    "rows_skipped": { "type": "integer" },
+    "unmapped_columns": { "type": "array", "items": { "type": "string" } },
+    "instances": { "type": "array", "items": {
+      "type": "object", "required": ["row_index", "instance_path"],
+      "properties": { "row_index": { "type": "integer" }, "instance_path": { "type": "string" } } } }
+  } }
+```
+
+---
+
 ## Destructive-action gating (elicitation) — Phase 4
 
 Every tool flagged **destructive** accepts an optional `confirm: boolean`. When it is omitted, the host issues an MCP **elicitation** (a client-side confirmation prompt) before executing: on *accept* it proceeds; on *decline/cancel* it returns a non-error "cancelled" result. If the client does not support elicitation, the tool blocks and instructs the caller to re-invoke with `confirm: true` — so a destructive op is never executed silently. Gated tools: `node_delete`, `project_set_setting`, `scene_new`, `gd_rename` (when `apply=true`), `cs_rename` (when `apply=true`), `dbg_evaluate`, `dbg_set_variable`, `dbg_goto`, `runtime_set_property`, `runtime_call_method`, `runtime_emit_signal`, `runtime_inject_input`.
@@ -3350,5 +3510,9 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `leaderboard_scaffold` | M / Editor | ✅ | ✔ writes file |
 | `cloudsave_scaffold` | M / Editor | ✅ | ✔ writes file |
 | `auth_scaffold` | M / Editor | ✅ | ✔ writes file |
+| `card_template_create` | N / Editor | ✅ | ✔ writes files |
+| `card_instance` | N / Editor | ✅ | – |
+| `card_hand_layout` | N / Editor | ✅ | – |
+| `card_deck_from_table` | N / Editor | ✅ | – |
 
 **70 tools + 5 MCP resources implemented across Phases 0–4: 6 CLI, 3 managed-process, 19 editor, 18 LSP, 15 DAP, 9 runtime. Destructive tools are elicitation-gated; long jobs stream progress. All four planes live.**

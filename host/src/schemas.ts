@@ -617,6 +617,37 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
       auth_scaffold: backendScaffold,
     };
   })(),
+
+  // ---- Group N: card/board/piece authoring composites (tools/tabletop.ts) ----
+  card_template_create: {
+    scene_path: z.string(),
+    script_path: z.string(),
+    root_type: z.string(),
+    has_back: z.boolean(),
+    node_count: z.number(),
+    saved: z.boolean(),
+    slots: z.array(z.object({ name: z.string(), node_path: z.string(), kind: z.string() })),
+  },
+  card_instance: {
+    instance_path: z.string(),
+    face_up: z.boolean(),
+    bound: z.array(z.string()),
+    unbound: z.array(z.string()),
+  },
+  card_hand_layout: {
+    container_path: z.string(),
+    mode: z.string(),
+    count: z.number(),
+    instances: z.array(z.object({ index: z.number(), instance_path: z.string() })),
+  },
+  card_deck_from_table: {
+    deck_container: z.string(),
+    count: z.number(),
+    rows_read: z.number(),
+    rows_skipped: z.number(),
+    unmapped_columns: z.array(z.string()),
+    instances: z.array(z.object({ row_index: z.number(), instance_path: z.string() })),
+  },
 };
 
 /**
