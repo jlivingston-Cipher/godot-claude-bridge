@@ -7,7 +7,7 @@ project is laid out and how to get a change from your machine into a pull
 request with confidence.
 
 Breakpoint MCP is a [Model Context Protocol](https://modelcontextprotocol.io)
-server that exposes the Godot game engine to Claude. It currently ships **253
+server that exposes the Godot game engine to Claude. It currently ships **255
 tools** across the editor, runtime, and language/debug surfaces. The codebase is
 released under the [MIT License](LICENSE); by contributing you agree that your
 work is offered under the same terms.

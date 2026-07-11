@@ -7,7 +7,7 @@ knowledge of the Model Context Protocol (MCP) is assumed.
 
 - **Version:** 1.0.0
 - **License:** MIT
-- **What it exposes:** 253 tools + 5 MCP resources
+- **What it exposes:** 255 tools + 5 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
 
 ---
@@ -565,7 +565,7 @@ drive the live game → test.
 
 ## 8. Tool reference by family
 
-There are **253 tools** in total. This section summarizes them by family so you know what
+There are **255 tools** in total. This section summarizes them by family so you know what
 exists and where to look; for the exhaustive per-tool input/output JSON Schemas, see
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
@@ -862,7 +862,7 @@ deterministic in-engine stand-ins with no external model; the `command` backend 
 command you configure and should only point at trusted code.
 
 **How many tools are there, and where's the full list?**
-253 tools and 5 resources. The exhaustive per-tool schemas are in
+255 tools and 5 resources. The exhaustive per-tool schemas are in
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
 
 **What are those `{ "__type__": ... }` values I see in tool arguments?**

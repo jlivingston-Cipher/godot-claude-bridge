@@ -3,7 +3,7 @@
 The MCP **host** for [Breakpoint MCP](https://github.com/jlivingston-Cipher/godot-breakpoint-mcp) —
 a [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the
 Godot game engine to AI coding assistants across four planes: headless CLI, the live
-editor, Godot's own LSP + DAP, and a runtime bridge inside the running game. **253 tools
+editor, Godot's own LSP + DAP, and a runtime bridge inside the running game. **255 tools
 + 5 MCP resources**, built against the stable `@modelcontextprotocol/sdk` 1.x API.
 Developed and tested with **Claude**; because MCP is an open protocol, other clients can
 connect too (currently untested — reports welcome).

@@ -6,7 +6,7 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **v1.0.0 · 253 tools + 5 MCP resources · MIT.** The host builds against the stable
+> **v1.0.0 · 255 tools + 5 MCP resources · MIT.** The host builds against the stable
 > `@modelcontextprotocol/sdk` 1.x API and is exercised by a 223-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
@@ -22,7 +22,7 @@ reimplementing them, so behavior tracks the engine you already have.
 
 ## What it does
 
-Breakpoint MCP is organized into four capability **planes** (253 tools + 5 resources):
+Breakpoint MCP is organized into four capability **planes** (255 tools + 5 resources):
 
 - **Plane A — Live Editor Bridge** (~145 tools: `editor_*`, `scene_*`, `node_*`,
   `signal_*`, `resource_*`, `filesystem_*`, `anim_*`, and more): a Godot `EditorPlugin`
