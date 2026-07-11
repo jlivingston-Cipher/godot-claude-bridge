@@ -89,7 +89,7 @@ test("godot_version degrades (no throw) when the binary is missing", { skip: !PO
 });
 
 test("godot_version records a non-zero exit code without throwing", { skip: !POSIX }, async () => {
-  const tools = setup("/bin/false", dir);
+  const tools = setup("/usr/bin/false", dir);
   const r = await tools.get("godot_version")!({});
   assert.notEqual(r.isError, true);
   assert.equal((sc(r).raw as { code: number | null }).code, 1);
