@@ -18,6 +18,11 @@ var _server: TCPServer
 var _ops: Operations
 var _clients: Array = [] # Array of {peer: StreamPeerTCP, buf: String}
 var _port: int = DEFAULT_PORT
+## Re-entrancy guard for `_process` (Finding D). True while a request dispatch is
+## on the stack, so a handler that pumps the editor main loop (e.g. `scene.save`
+## triggers a filesystem rescan/reimport) cannot re-enter `_process` and re-drain
+## the same still-buffered line, which would recurse until the stack overflows.
+var _dispatching: bool = false
 
 
 func setup(plugin: EditorPlugin) -> void:
@@ -64,6 +69,16 @@ func get_status() -> Dictionary:
 func _process(_delta: float) -> void:
 	if _server == null:
 		return
+	# Finding D: a request handler can pump the editor main loop (e.g. scene.save
+	# runs a filesystem rescan/reimport), which makes the engine call _process
+	# again *inside* the current dispatch. A client's line is only cleared from
+	# c["buf"] after _drain_lines returns, so a re-entrant tick would re-read and
+	# re-dispatch the SAME line, recursing until the stack overflows
+	# (operations.gd:512 _scene_save <-> _drain_lines/_handle_line here). Skip
+	# re-entrant ticks; buffered bytes are serviced on the next top-level tick.
+	if _dispatching:
+		return
+	_dispatching = true
 	# Accept new connections.
 	while _server.is_connection_available():
 		var peer := _server.take_connection()
@@ -86,6 +101,7 @@ func _process(_delta: float) -> void:
 		_drain_lines(c)
 		still_alive.append(c)
 	_clients = still_alive
+	_dispatching = false
 
 
 func _drain_lines(c: Dictionary) -> void:

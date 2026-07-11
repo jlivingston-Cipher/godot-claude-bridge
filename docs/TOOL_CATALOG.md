@@ -3446,7 +3446,7 @@ Move a piece onto a board cell by id (reparent + snap via `board_place`), option
 ```
 
 ### `interact_make_draggable` ✅  (Plane A / Editor + host)  · writes files (gated)
-Wire an existing node for drag-and-drop by attaching a generated reusable drag script. `control` mode uses Godot's built-in Control drag-and-drop (`_get_drag_data` hands off `{payload, source}`, with an optional translucent preview); `node2d` mode carries the payload and follows the pointer from a button-driven handler, registering a drag input action (`inputmap_add_action` / `add_event`) and connecting the hit area's `input_event` to the handler. General-purpose — the drag carries a caller-supplied neutral `payload` Dictionary. Decomposes onto `resource.create` → `node.set_property` (+ the input/signal ops for node2d); no addon method is added. Destructive (writes a script) — gated.
+Wire an existing node for drag-and-drop by attaching a generated reusable drag script. **Composes** with the node's existing script: when it already has one, the drag script `extends` it, so an authored card keeps its `set_data`/`set_face` and merely *gains* drag (the script is never overwritten — `composed`/`base_script` report what happened). `control` mode uses Godot's built-in Control drag-and-drop (`_get_drag_data` hands off `{payload, source}`, with an optional translucent preview); `node2d` mode carries the payload and follows the pointer from a button-driven handler, registering a drag input action (`inputmap_add_action` / `add_event`) and connecting the hit area's `input_event` to the handler. General-purpose — the drag carries a caller-supplied neutral `payload` Dictionary, written as a **per-node `@export`** so one script serves many draggables. Decomposes onto `node.get_property` → `resource.create` → `node.set_property` (script + payload) (+ the input/signal ops for node2d); no addon method is added. Destructive (writes a script) — gated.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false, "required": ["node", "script_path", "mode"],
@@ -3463,19 +3463,21 @@ Wire an existing node for drag-and-drop by attaching a generated reusable drag s
 ```
 - **Output**
 ```json
-{ "type": "object", "required": ["node_path", "mode", "script_path", "connected"],
+{ "type": "object", "required": ["node_path", "mode", "script_path", "connected", "composed", "base_script"],
   "properties": {
     "node_path": { "type": "string" },
     "mode": { "type": "string" },
     "script_path": { "type": "string" },
     "payload_keys": { "type": "array", "items": { "type": "string" } },
     "action": { "type": ["string", "null"] },
-    "connected": { "type": "boolean" }
+    "connected": { "type": "boolean" },
+    "composed": { "type": "boolean" },
+    "base_script": { "type": ["string", "null"] }
   } }
 ```
 
 ### `interact_add_drop_zone` ✅  (Plane A / Editor + host)  · writes files (gated)
-Mark a node as a drop target that validates an incoming payload and emits a signal on a valid drop. Attaches a generated validator/acceptor script, adds the `on_drop` user signal (`signal_add_user_signal`), and — for `node2d` — builds an `Area2D` + `CollisionShape2D` hit region; optionally connects `on_drop` to a handler (`signal_connect`). `accepts` is the neutral predicate `{key, values}` — accept any payload when omitted, else accept when `payload[key]` is one of `values`. `control` mode overrides `_can_drop_data` / `_drop_data`; `node2d` exposes a `try_drop(payload)` seam. General-purpose — no domain vocabulary. Destructive (writes a script) — gated.
+Mark a node as a drop target that validates an incoming payload and emits a signal on a valid drop. Attaches a generated validator/acceptor script that **declares the `on_drop` signal in-script** (so it survives a scene reload — no runtime-only `add_user_signal`), and — for `node2d` — builds an `Area2D` + `CollisionShape2D` hit region; optionally connects `on_drop` to a handler with a **persisted** connection (`signal_connect`, `CONNECT_PERSIST`, written into the `.tscn`). `accepts` is the neutral predicate `{key, values}` — accept any payload when omitted, else accept when `payload[key]` is one of `values`. `control` mode overrides `_can_drop_data` / `_drop_data`; `node2d` exposes a `try_drop(payload)` seam. General-purpose — no domain vocabulary. Destructive (writes a script) — gated.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false, "required": ["node", "script_path", "mode"],

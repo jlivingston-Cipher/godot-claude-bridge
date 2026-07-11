@@ -731,6 +731,8 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     payload_keys: z.array(z.string()),
     action: z.string().nullable(),
     connected: z.boolean(),
+    composed: z.boolean(),
+    base_script: z.string().nullable(),
   },
   interact_add_drop_zone: {
     node_path: z.string(),

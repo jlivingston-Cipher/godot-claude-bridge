@@ -33,6 +33,8 @@ const DRAG_CTRL_PREVIEW_PATH := "res://tests/_interact_drag_ctrl_preview_gen.gd"
 const DRAG_N2D_PATH := "res://tests/_interact_drag_n2d_gen.gd"
 const ZONE_CTRL_PATH := "res://tests/_interact_zone_ctrl_gen.gd"
 const ZONE_N2D_PATH := "res://tests/_interact_zone_n2d_gen.gd"
+const COMPOSE_BASE_PATH := "res://tests/_interact_compose_base_gen.gd"
+const COMPOSE_DRAG_PATH := "res://tests/_interact_compose_drag_gen.gd"
 
 
 func _check(label: String, cond: bool) -> void:
@@ -65,8 +67,9 @@ class Receiver extends RefCounted:
 func _drag_control_source(preview: bool) -> String:
 	var lines := PackedStringArray([
 		'extends Control',
+		'@export var payload: Dictionary = {"kind": "x", "n": 3}',
 		'func get_drag_payload() -> Dictionary:',
-		'\treturn {"kind": "x", "n": 3}.duplicate(true)',
+		'\treturn payload.duplicate(true)',
 		'func _get_drag_data(_at_position: Vector2) -> Variant:',
 		'\tvar data := {"payload": get_drag_payload(), "source": self}',
 	])
@@ -88,9 +91,10 @@ func _drag_node2d_source() -> String:
 		'signal drag_started(payload)',
 		'signal drag_ended(payload)',
 		'const DRAG_BUTTON := 1',
+		'@export var payload: Dictionary = {"kind": "y"}',
 		'var _dragging := false',
 		'func get_drag_payload() -> Dictionary:',
-		'\treturn {"kind": "y"}.duplicate(true)',
+		'\treturn payload.duplicate(true)',
 		'func _on_drag_input(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:',
 		'\tif event is InputEventMouseButton and event.button_index == DRAG_BUTTON and event.pressed:',
 		'\t\t_dragging = true',
@@ -109,6 +113,7 @@ func _drag_node2d_source() -> String:
 func _zone_source(mode_control: bool) -> String:
 	var lines := PackedStringArray([
 		'extends Control' if mode_control else 'extends Node2D',
+		'signal dropped(payload)',
 		'const ACCEPT_KEY := "kind"' if mode_control else 'const ACCEPT_KEY := ""',
 		'const ACCEPT_VALUES := ["x"]' if mode_control else 'const ACCEPT_VALUES := []',
 		'const ON_DROP := "dropped"',
@@ -164,6 +169,9 @@ func _run() -> void:
 				var payload = data.get("payload", {})
 				_check("drag_ctrl.payload_bound", payload is Dictionary and payload.get("kind", "") == "x" and int(payload.get("n", 0)) == 3)
 				_check("drag_ctrl.source_is_self", data.get("source", null) == node)
+		# Finding C: the payload is a per-node @export -- overriding it per node works.
+		node.set("payload", {"kind": "z"})
+		_check("drag_ctrl.payload_per_node", node.get_drag_payload().get("kind", "") == "z")
 		node.free()
 
 	# The preview variant must also compile and expose the preview helper.
@@ -197,7 +205,8 @@ func _run() -> void:
 	if zone_ctrl != null:
 		var zone := Control.new()
 		zone.set_script(zone_ctrl)
-		zone.add_user_signal("dropped", [{"name": "payload", "type": TYPE_DICTIONARY}])
+		# Finding E: the signal is declared IN the generated script -- no add_user_signal.
+		_check("zone_ctrl.declares_signal", zone.has_signal("dropped"))
 		var rec2 := Receiver.new()
 		zone.connect("dropped", rec2.on_payload)
 		_check("zone_ctrl.has_can_drop", zone.has_method("_can_drop_data"))
@@ -230,7 +239,8 @@ func _run() -> void:
 		_check("zone_n2d.hit_area_is_area2d", zone2.has_node("DropArea") and zone2.get_node("DropArea") is Area2D)
 		_check("zone_n2d.shape_is_collisionshape2d", zone2.has_node("DropArea/Shape") and zone2.get_node("DropArea/Shape") is CollisionShape2D)
 		_check("zone_n2d.shape_is_rectangle", zone2.has_node("DropArea/Shape") and zone2.get_node("DropArea/Shape").shape is RectangleShape2D)
-		zone2.add_user_signal("dropped", [{"name": "payload", "type": TYPE_DICTIONARY}])
+		# Finding E: the signal is declared IN the generated script -- no add_user_signal.
+		_check("zone_n2d.declares_signal", zone2.has_signal("dropped"))
 		var rec3 := Receiver.new()
 		zone2.connect("dropped", rec3.on_payload)
 		_check("zone_n2d.has_try_drop", zone2.has_method("try_drop"))
@@ -240,8 +250,46 @@ func _run() -> void:
 			_check("zone_n2d.try_drop_emits", rec3.got.size() == 1)
 		zone2.free()
 
+	# --- Finding B: compose onto an existing script ------------------------
+	# A drag script generated with `extends "<card>.gd"` KEEPS the card's set_data
+	# (inherited) and GAINS _get_drag_data (added) -- the authored-card-draggable
+	# flow the session-83 dogfood had to hand-patch. Also exercises @export payload.
+	var base_src := "\n".join(PackedStringArray([
+		'extends Control',
+		'func set_data(data: Dictionary) -> Dictionary:',
+		'\tif has_node("Label"): get_node("Label").text = str(data.get("title", ""))',
+		'\treturn {"bound": data.keys()}',
+		'',
+	]))
+	var _cbase := _make_script("compose_base", base_src, COMPOSE_BASE_PATH)
+	var compose_src := "\n".join(PackedStringArray([
+		'extends "%s"' % COMPOSE_BASE_PATH,
+		'@export var payload: Dictionary = {"id": "one"}',
+		'func get_drag_payload() -> Dictionary:',
+		'\treturn payload.duplicate(true)',
+		'func _get_drag_data(_at_position: Vector2) -> Variant:',
+		'\treturn {"payload": get_drag_payload(), "source": self}',
+		'',
+	]))
+	var compose := _make_script("compose_drag", compose_src, COMPOSE_DRAG_PATH)
+	if compose != null:
+		var card := Control.new()
+		var label := Label.new()
+		label.name = "Label"
+		card.add_child(label)
+		card.set_script(compose)
+		_check("compose.keeps_set_data", card.has_method("set_data"))
+		_check("compose.gains_drag", card.has_method("_get_drag_data"))
+		if card.has_method("set_data"):
+			card.set_data({"title": "Hello"})
+			_check("compose.set_data_binds", String(label.text) == "Hello")
+		if card.has_method("_get_drag_data"):
+			var dd = card._get_drag_data(Vector2.ZERO)
+			_check("compose.drag_payload", dd is Dictionary and dd.get("payload", {}).get("id", "") == "one")
+		card.free()
+
 
 func _cleanup() -> void:
-	for p in [DRAG_CTRL_PATH, DRAG_CTRL_PREVIEW_PATH, DRAG_N2D_PATH, ZONE_CTRL_PATH, ZONE_N2D_PATH]:
+	for p in [DRAG_CTRL_PATH, DRAG_CTRL_PREVIEW_PATH, DRAG_N2D_PATH, ZONE_CTRL_PATH, ZONE_N2D_PATH, COMPOSE_BASE_PATH, COMPOSE_DRAG_PATH]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))

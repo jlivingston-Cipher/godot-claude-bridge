@@ -15,7 +15,7 @@ name: integration
 #                     board_tile_smoke.gd) — build → pack → round-trip a card / board / piece / tile-board PackedScene,
 #                     compile + round-trip the interaction behaviour scripts, round-trip + play the card-flip animation,
 #                     and check board_tile_place's coordinate math against the engine's map_to_local.
-#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE / BOARD_TILE _SUMMARY / _FAIL markers.
+#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE / BOARD_TILE / BRIDGE_REENTRANCY _SUMMARY / _FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -191,6 +191,20 @@ jobs:
           grep -q "BOARD_TILE_SUMMARY" /tmp/board-tile-smoke.log || { echo "::error::board_tile_smoke.gd produced no BOARD_TILE_SUMMARY (script error?)"; exit 1; }
           if grep -q "BOARD_TILE_FAIL" /tmp/board-tile-smoke.log; then echo "::error::a board-tile smoke assertion failed"; exit 1; fi
           echo "Board-tile smoke passed: $(grep -o 'BOARD_TILE_SUMMARY.*' /tmp/board-tile-smoke.log)"
+
+      - name: Run the bridge re-entrancy regression (Finding D — scene.save crash guard)
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/bridge_reentrancy_smoke.gd > /tmp/bridge-reentrancy.log 2>&1 || true
+          echo "=== bridge_reentrancy_smoke.gd output ==="
+          cat /tmp/bridge-reentrancy.log
+          echo "====================================="
+          # BRIDGE_REENTRANCY_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "BRIDGE_REENTRANCY_SUMMARY" /tmp/bridge-reentrancy.log || { echo "::error::bridge_reentrancy_smoke.gd produced no BRIDGE_REENTRANCY_SUMMARY (script error?)"; exit 1; }
+          if grep -q "BRIDGE_REENTRANCY_FAIL" /tmp/bridge-reentrancy.log; then echo "::error::a bridge re-entrancy assertion failed"; exit 1; fi
+          echo "Bridge re-entrancy regression passed: $(grep -o 'BRIDGE_REENTRANCY_SUMMARY.*' /tmp/bridge-reentrancy.log)"
 
   cli-plane:
     name: CLI plane vs real Godot (headless)
