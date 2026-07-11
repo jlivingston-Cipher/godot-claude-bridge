@@ -1,6 +1,6 @@
 {
   "name": "breakpoint-mcp",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "MCP server exposing Godot to AI coding assistants over the Model Context Protocol — developed and tested with Claude — across four planes (CLI, live editor, LSP+DAP, runtime) with elicitation-gated destructive tools, long jobs on the formal MCP task model, captured console output, and MCP resources.",
   "type": "module",
   "license": "MIT",
