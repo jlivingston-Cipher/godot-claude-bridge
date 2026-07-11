@@ -18,6 +18,8 @@ import {
   parseHexColor,
   emitBoardCreate,
   emitBoardPlace,
+  emitBoardTileCreate,
+  emitBoardTilePlace,
   computeRingCells,
   computeGridCells,
   resolveBoardCells,
@@ -493,6 +495,99 @@ test("computeRingCells places the first cell at the top and sweeps clockwise", (
 
 test("resolveBoardCells rejects an empty grid", () => {
   assert.throws(() => resolveBoardCells({ mode: "grid", rows: 0, cols: 2 }), /rows >= 1/);
+});
+
+// --------------------------------------------------------- tile-backed board ----
+
+test("board_tile_create (no tileset) emits scene.new → tileset.create → tilemaplayer.create → save; frame only", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitBoardTileCreate(emit, { path: "res://ui/board/Tiles.tscn", rows: 3, cols: 4 });
+
+  assert.deepEqual(methods(calls), ["scene.new", "tileset.create", "tilemaplayer.create", "scene.save"]);
+  assert.deepEqual(calls[0].params, { root_type: "Node2D", path: "res://ui/board/Tiles.tscn", name: "Tiles" });
+  assert.deepEqual(calls[1].params, { to_path: "res://ui/board/Tiles_tiles.tres", tile_size: [64, 64] });
+  assert.deepEqual(calls[2].params, { parent_path: ".", name: "Cells", tileset_path: "res://ui/board/Tiles_tiles.tres" });
+
+  assert.equal(res.layer_path, "Cells");
+  assert.equal(res.rows, 3);
+  assert.equal(res.cols, 4);
+  assert.deepEqual(res.tile_size, [64, 64]);
+  assert.equal(res.tileset_path, "res://ui/board/Tiles_tiles.tres");
+  assert.equal(res.tileset_created, true);
+  assert.equal(res.cell_count, 12);
+  assert.equal(res.painted, false);
+  assert.equal(res.node_count, 2);
+  assert.equal(res.saved, true);
+});
+
+test("board_tile_create with a supplied tileset + paint binds it and fills the whole grid, no tileset.create", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitBoardTileCreate(emit, {
+    path: "res://b/Grid.tscn", rows: 2, cols: 5, tile_size: [32, 48],
+    tileset: "res://tiles/world.tres", paint: { source_id: 0, atlas_coords: [1, 2] }, layer_name: "Floor",
+  });
+
+  assert.deepEqual(methods(calls), ["scene.new", "tilemaplayer.create", "tilemap.set_cells_rect", "scene.save"]);
+  assert.deepEqual(calls[1].params, { parent_path: ".", name: "Floor", tileset_path: "res://tiles/world.tres" });
+  assert.deepEqual(calls[2].params, { path: "Floor", rect: [0, 0, 5, 2], source_id: 0, atlas_coords: [1, 2] });
+  assert.equal(res.tileset_created, false);
+  assert.equal(res.painted, true);
+  assert.equal(res.layer_name, "Floor");
+  assert.deepEqual(res.tile_size, [32, 48]);
+  assert.equal(res.cell_count, 10);
+});
+
+test("board_tile_create paint defaults atlas_coords to [0,0]", async () => {
+  const { calls, emit } = recorder();
+  await emitBoardTileCreate(emit, {
+    path: "res://b.tscn", rows: 1, cols: 1, tileset: "res://t.tres", paint: { source_id: 3 },
+  });
+  const fill = calls.find((c) => c.method === "tilemap.set_cells_rect");
+  assert.deepEqual(fill?.params.atlas_coords, [0, 0]);
+});
+
+test("board_tile_create rejects bad dims, a bad tile_size, and paint without a tileset", async () => {
+  const { emit } = recorder();
+  await assert.rejects(emitBoardTileCreate(emit, { path: "res://b.tscn", rows: 0, cols: 2 }), /rows must be an integer/);
+  await assert.rejects(emitBoardTileCreate(emit, { path: "res://b.tscn", rows: 2, cols: 2, tile_size: [16] }), /tile_size must be/);
+  await assert.rejects(emitBoardTileCreate(emit, { path: "res://b.tscn", rows: 2, cols: 2, paint: { source_id: 0 } }), /paint. needs an existing .tileset/);
+});
+
+test("board_tile_place (center, default reparent) snaps to the cell centre under the layer", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitBoardTilePlace(emit, { layer: "Board/Cells", node: "Main/Token", coord: [2, 1], tile_size: [32, 32] });
+
+  assert.deepEqual(methods(calls), ["node.reparent", "node.set_property"]);
+  assert.deepEqual(calls[0].params, { path: "Main/Token", new_parent_path: "Board/Cells", keep_global_transform: false });
+  // centre of cell (2,1) with 32px tiles: ((2+0.5)*32, (1+0.5)*32) = (80, 48).
+  assert.deepEqual(calls[1].params, { path: "Board/Cells/Token", property: "position", value: { __type__: "Vector2", x: 80, y: 48 } });
+  assert.equal(res.node_path, "Board/Cells/Token");
+  assert.deepEqual(res.local_pos, { x: 80, y: 48 });
+  assert.equal(res.anchor, "center");
+  assert.equal(res.reparented, true);
+  assert.deepEqual(res.coord, [2, 1]);
+});
+
+test("board_tile_place corner + align + no reparent sets position on the node in place", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitBoardTilePlace(emit, {
+    layer: "Cells", node: "Cells/Token", coord: [3, 0], tile_size: [16, 16],
+    anchor: "corner", align: { x: 2, y: -4 }, reparent: false,
+  });
+  assert.deepEqual(methods(calls), ["node.set_property"]);
+  // corner of cell (3,0) with 16px tiles: (48, 0), plus align (2,-4) = (50, -4).
+  assert.deepEqual(calls[0].params, { path: "Cells/Token", property: "position", value: { __type__: "Vector2", x: 50, y: -4 } });
+  assert.equal(res.node_path, "Cells/Token");
+  assert.equal(res.reparented, false);
+  assert.equal(res.anchor, "corner");
+  assert.deepEqual(res.align, { x: 2, y: -4 });
+});
+
+test("board_tile_place defaults tile_size to 64 and rejects a bad coord", async () => {
+  const { calls, emit } = recorder();
+  await emitBoardTilePlace(emit, { layer: "Cells", node: "Token", coord: [0, 0] });
+  assert.deepEqual(calls[1].params.value, { __type__: "Vector2", x: 32, y: 32 }); // (0+0.5)*64
+  await assert.rejects(emitBoardTilePlace(emit, { layer: "Cells", node: "T", coord: [1] }), /coord must be/);
 });
 
 // ============================================================================

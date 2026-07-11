@@ -11,10 +11,11 @@ name: integration
 #                     _serialize_node/_descendants, doc-URL/type-name, _ping). No editor / bridge /
 #                     GUI — it complements the authoring-plane, which covers the editor-COUPLED
 #                     handlers. Also runs the Group N scene-construction smokes (card_build_smoke.gd,
-#                     board_build_smoke.gd, piece_build_smoke.gd, interact_build_smoke.gd, card_setface_smoke.gd) —
-#                     build → pack → round-trip a card / board / piece PackedScene, compile + round-trip the
-#                     interaction behaviour scripts, and round-trip + play the card-flip animation.
-#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE _SUMMARY / _FAIL markers.
+#                     board_build_smoke.gd, piece_build_smoke.gd, interact_build_smoke.gd, card_setface_smoke.gd,
+#                     board_tile_smoke.gd) — build → pack → round-trip a card / board / piece / tile-board PackedScene,
+#                     compile + round-trip the interaction behaviour scripts, round-trip + play the card-flip animation,
+#                     and check board_tile_place's coordinate math against the engine's map_to_local.
+#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE / BOARD_TILE _SUMMARY / _FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -176,6 +177,20 @@ jobs:
           grep -q "CARD_SETFACE_SUMMARY" /tmp/setface-smoke.log || { echo "::error::card_setface_smoke.gd produced no CARD_SETFACE_SUMMARY (script error?)"; exit 1; }
           if grep -q "CARD_SETFACE_FAIL" /tmp/setface-smoke.log; then echo "::error::a card-set-face smoke assertion failed"; exit 1; fi
           echo "Card-set-face smoke passed: $(grep -o 'CARD_SETFACE_SUMMARY.*' /tmp/setface-smoke.log)"
+
+      - name: Run the Group N board-tile smoke
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/board_tile_smoke.gd > /tmp/board-tile-smoke.log 2>&1 || true
+          echo "=== board_tile_smoke.gd output ==="
+          cat /tmp/board-tile-smoke.log
+          echo "====================================="
+          # BOARD_TILE_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "BOARD_TILE_SUMMARY" /tmp/board-tile-smoke.log || { echo "::error::board_tile_smoke.gd produced no BOARD_TILE_SUMMARY (script error?)"; exit 1; }
+          if grep -q "BOARD_TILE_FAIL" /tmp/board-tile-smoke.log; then echo "::error::a board-tile smoke assertion failed"; exit 1; fi
+          echo "Board-tile smoke passed: $(grep -o 'BOARD_TILE_SUMMARY.*' /tmp/board-tile-smoke.log)"
 
   cli-plane:
     name: CLI plane vs real Godot (headless)

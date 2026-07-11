@@ -922,6 +922,159 @@ export async function emitBoardPlace(emit: Emit, args: PlaceArgs): Promise<Place
 }
 
 // =============================================================================
+// Group N — Board-slice fast-follow: tile-backed board cells
+// (`board_tile_create`, `board_tile_place`)
+//
+// A marker board addresses cells through per-cell `cell_<id>` anchor nodes and
+// `board_place` reparents onto one. A *tile* board is the other Group D idiom:
+// a `TileMapLayer` grid whose cells are addressed by integer `[x, y]` tile
+// coordinates — no per-cell anchor node exists, so `board_tile_place` snaps a
+// node onto a coordinate by computing the cell's local position from the layer's
+// `tile_size` (the same value `TileMapLayer.map_to_local` uses: a cell's centre
+// is `(coord + 0.5) * tile_size`; its corner is `coord * tile_size`). Both tools
+// stay host-side scripted sequences of already-audited primitives — `scene.new`,
+// `tileset.create`, `tilemaplayer.create`, `tilemap.set_cells_rect`,
+// `node.reparent`, `node.set_property`, `scene.save` — emitted through the same
+// injectable sink, so the whole op-sequence is unit-tested offline. Nothing here
+// is domain-specific: cells carry only integer coordinates.
+// =============================================================================
+
+const DEFAULT_TILE_SIZE = 64;
+
+/** Normalise an optional `[w, h]` tile size to two positive integers. */
+function normTileSize(ts?: number[]): [number, number] {
+  if (ts === undefined) return [DEFAULT_TILE_SIZE, DEFAULT_TILE_SIZE];
+  if (ts.length !== 2 || !ts.every((v) => Number.isInteger(v) && v > 0)) {
+    throw new ComposeError("bad_params", "tile_size must be [width, height] positive integers");
+  }
+  return [ts[0], ts[1]];
+}
+
+/** Normalise a `[x, y]` tile coordinate to two integers. */
+function normCoord(c: number[]): [number, number] {
+  if (!Array.isArray(c) || c.length !== 2 || !c.every((v) => Number.isInteger(v))) {
+    throw new ComposeError("bad_params", "coord must be [x, y] integers");
+  }
+  return [c[0], c[1]];
+}
+
+/** Derive a sibling TileSet path from a `res://…/Foo.tscn` scene path. */
+function deriveTilesetPath(scenePath: string): string {
+  return scenePath.replace(/\.tscn$/, "_tiles.tres");
+}
+
+interface TileBoardSpec {
+  path: string;
+  rows: number;
+  cols: number;
+  tile_size?: number[];
+  tileset?: string;
+  paint?: { source_id: number; atlas_coords?: number[] };
+  layer_name?: string;
+  overwrite?: boolean;
+}
+
+interface TileBoardResult {
+  scene_path: string; layer_path: string; layer_name: string;
+  rows: number; cols: number; tile_size: number[];
+  tileset_path: string; tileset_created: boolean;
+  cell_count: number; painted: boolean; node_count: number; saved: boolean;
+}
+
+/**
+ * Emit the op-sequence that builds + saves a tile-backed board: a `TileMapLayer`
+ * bound to a TileSet (created here unless `tileset` is supplied) that establishes
+ * a rows×cols coordinate frame at `tile_size`, optionally filled with one tile.
+ */
+export async function emitBoardTileCreate(emit: Emit, spec: TileBoardSpec): Promise<TileBoardResult> {
+  if (!Number.isInteger(spec.rows) || spec.rows < 1) throw new ComposeError("bad_params", "rows must be an integer >= 1");
+  if (!Number.isInteger(spec.cols) || spec.cols < 1) throw new ComposeError("bad_params", "cols must be an integer >= 1");
+  const tile = normTileSize(spec.tile_size);
+  const layerName = spec.layer_name ?? "Cells";
+  assertNodeName(layerName);
+  if (spec.paint && spec.tileset === undefined) {
+    throw new ComposeError("bad_params", "`paint` needs an existing `tileset` (with a painted source) to fill the grid from");
+  }
+  const rootName = sceneRootName(spec.path);
+  const tilesetCreated = spec.tileset === undefined;
+  const tilesetPath = spec.tileset ?? deriveTilesetPath(spec.path);
+
+  // 1. fresh Node2D scene rooted at the board node.
+  await emit("scene.new", { root_type: "Node2D", path: spec.path, name: rootName });
+
+  // 2. the coordinate frame: bind a supplied TileSet, or create a fresh one so
+  //    the layer has a real tile_size (map_to_local reads it) even when unpainted.
+  if (tilesetCreated) {
+    await emit("tileset.create", { to_path: tilesetPath, tile_size: tile });
+  }
+
+  // 3. the TileMapLayer that holds the cells.
+  await emit("tilemaplayer.create", { parent_path: ".", name: layerName, tileset_path: tilesetPath });
+
+  // 4. optional: fill the whole grid with one tile in a single undoable action.
+  const painted = spec.paint !== undefined;
+  if (spec.paint) {
+    const atlas = spec.paint.atlas_coords ?? [0, 0];
+    await emit("tilemap.set_cells_rect", {
+      path: layerName, rect: [0, 0, spec.cols, spec.rows], source_id: spec.paint.source_id, atlas_coords: atlas,
+    });
+  }
+
+  // 5. persist.
+  await emit("scene.save", {});
+
+  return {
+    scene_path: spec.path, layer_path: layerName, layer_name: layerName,
+    rows: spec.rows, cols: spec.cols, tile_size: tile,
+    tileset_path: tilesetPath, tileset_created: tilesetCreated,
+    cell_count: spec.rows * spec.cols, painted, node_count: 2, saved: true,
+  };
+}
+
+// ------------------------------------------------- composite: place on a tile ----
+
+interface TilePlaceArgs {
+  layer: string; node: string; coord: number[];
+  tile_size?: number[]; anchor?: "center" | "corner"; align?: { x?: number; y?: number }; reparent?: boolean;
+}
+interface TilePlaceResult {
+  placed: boolean; coord: number[]; layer_path: string; node_path: string;
+  local_pos: { x: number; y: number }; tile_size: number[]; anchor: string;
+  align: { x: number; y: number }; reparented: boolean;
+}
+
+/**
+ * Snap an existing node onto a tile coordinate of a `TileMapLayer`. The cell's
+ * local position is computed host-side from `tile_size` — cell centre is
+ * `(coord + 0.5) * tile_size`, corner is `coord * tile_size` — matching Godot's
+ * `TileMapLayer.map_to_local`, plus an optional `align` offset. With `reparent`
+ * (default) the node is moved under the layer so the coordinate is layer-local.
+ */
+export async function emitBoardTilePlace(emit: Emit, args: TilePlaceArgs): Promise<TilePlaceResult> {
+  if (args.layer === "") throw new ComposeError("bad_params", "Missing 'layer' (the TileMapLayer node path)");
+  if (args.node === "") throw new ComposeError("bad_params", "Missing 'node' (the node to place)");
+  const coord = normCoord(args.coord);
+  const [tw, th] = normTileSize(args.tile_size);
+  const anchor = args.anchor ?? "center";
+  const reparent = args.reparent ?? true;
+  const ax = args.align?.x ?? 0;
+  const ay = args.align?.y ?? 0;
+  const frac = anchor === "center" ? 0.5 : 0;
+  const px = (coord[0] + frac) * tw + ax;
+  const py = (coord[1] + frac) * th + ay;
+  const nodeName = args.node.split("/").pop() ?? args.node;
+  const dest = reparent ? joinPath(args.layer, nodeName) : args.node;
+  if (reparent) {
+    await emit("node.reparent", { path: args.node, new_parent_path: args.layer, keep_global_transform: false });
+  }
+  await emit("node.set_property", { path: dest, property: "position", value: vec2(px, py) });
+  return {
+    placed: true, coord: [coord[0], coord[1]], layer_path: args.layer, node_path: dest,
+    local_pos: { x: px, y: py }, tile_size: [tw, th], anchor, align: { x: ax, y: ay }, reparented: reparent,
+  };
+}
+
+// =============================================================================
 // Group N — Increment 3: the Piece slice (`piece_template_create`,
 // `piece_instance`, `piece_move`)
 //
@@ -1758,6 +1911,72 @@ export function registerTabletopTools(server: McpServer, bridge: BridgeClient, c
       const a = raw as unknown as PlaceArgs;
       try {
         return ok(await emitBoardPlace(emit, a) as unknown as Record<string, unknown>);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // ----------------------------------------------------------- board_tile_create ----
+  server.registerTool(
+    "board_tile_create",
+    {
+      title: "Create tile-backed board",
+      description:
+        "Build a tile-backed board scene: a TileMapLayer grid whose cells are addressable by integer [x, y] tile coordinates (cols wide × rows tall). " +
+        "The layer binds a TileSet — a supplied `tileset` .tres, or a fresh empty one created at <scene>_tiles.tres — so it has a real tile_size (the coordinate frame placement uses); `paint` optionally fills the whole grid with one tile from the bound tileset. " +
+        "General-purpose — cells carry only coordinates. Adds no addon method — decomposes onto scene.new → tileset.create → tilemaplayer.create → tilemap.set_cells_rect → scene.save. DESTRUCTIVE (writes a scene, and a TileSet .tres unless `tileset` is supplied) — gated by confirmation. Returns the layer path + grid dimensions + tile size.",
+      inputSchema: {
+        path: z.string().describe("Where to save the board scene, e.g. res://ui/board/TileBoard.tscn"),
+        rows: z.number().int().positive().describe("Grid row count (cell y ranges 0..rows-1)"),
+        cols: z.number().int().positive().describe("Grid column count (cell x ranges 0..cols-1)"),
+        tile_size: z.array(z.number().int().positive()).length(2).optional().describe("Tile cell size [w, h] in px (default [64, 64]); the coordinate frame board_tile_place snaps to"),
+        tileset: z.string().optional().describe("Existing TileSet res:// .tres to bind; omitted → a fresh empty TileSet is created at <scene>_tiles.tres to establish the tile size"),
+        paint: z.object({
+          source_id: z.number().int().nonnegative().describe("Atlas source id in the bound tileset to fill the grid with"),
+          atlas_coords: z.array(z.number().int()).length(2).optional().describe("Tile atlas coordinates [x, y] within the source (default [0, 0])"),
+        }).optional().describe("Fill the whole grid with one tile (needs an existing `tileset` that has the source); omitted → cells stay empty (a coordinate frame only)"),
+        layer_name: z.string().optional().describe("TileMapLayer node name (default \"Cells\")"),
+        overwrite: z.boolean().optional().describe("Overwrite an existing board at `path` (default false)"),
+        confirm: z.boolean().optional().describe("Auto-approve this destructive action (skip the confirmation prompt)"),
+      },
+    },
+    async (raw) => {
+      const a = raw as unknown as TileBoardSpec & { confirm?: boolean };
+      if (!a.path.startsWith("res://") || !a.path.endsWith(".tscn")) return fail({ code: "bad_params", message: "'path' must be a res:// .tscn path" });
+      if (a.tileset !== undefined && !(a.tileset.startsWith("res://") && a.tileset.endsWith(".tres"))) return fail({ code: "bad_params", message: "'tileset' must be a res:// .tres path" });
+      const blocked = await gate(server, a.confirm, `Create tile-backed board scene at ${a.path}`);
+      if (blocked) return blocked;
+      try {
+        return ok(await emitBoardTileCreate(emit, a) as unknown as Record<string, unknown>);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // ------------------------------------------------------------ board_tile_place ----
+  server.registerTool(
+    "board_tile_place",
+    {
+      title: "Place a node on a tile coordinate",
+      description:
+        "Snap an existing node (a card or piece instance) onto a TileMapLayer cell by integer [x, y] tile coordinate. Undoable node authoring. " +
+        "The cell's local position is computed from `tile_size` — centre `(coord + 0.5) × tile_size` (default) or corner `coord × tile_size` — matching Godot's TileMapLayer.map_to_local, plus an optional `align` offset. With `reparent` (default true) the node is moved under the layer so the coordinate is layer-local. Decomposes onto node.reparent + node.set_property. Returns the node's new path and local position.",
+      inputSchema: {
+        layer: z.string().describe("TileMapLayer node path in the open scene"),
+        node: z.string().describe("Node path of the node to place (a card / piece already in the scene)"),
+        coord: z.array(z.number().int()).length(2).describe("Tile coordinate [x, y] (in cells)"),
+        tile_size: z.array(z.number().int().positive()).length(2).optional().describe("The layer's tile cell size [w, h] in px (default [64, 64]); must match the board's tile_size"),
+        anchor: z.enum(["center", "corner"]).optional().describe("Snap to the cell centre (default) or its top-left corner"),
+        align: z.object({ x: z.number(), y: z.number() }).optional().describe("Offset from the anchor in px (default 0,0)"),
+        reparent: z.boolean().optional().describe("Reparent the node under the layer so the coordinate is layer-local (default true)"),
+      },
+    },
+    async (raw) => {
+      const a = raw as unknown as TilePlaceArgs;
+      try {
+        return ok(await emitBoardTilePlace(emit, a) as unknown as Record<string, unknown>);
       } catch (err) {
         return fail(err);
       }

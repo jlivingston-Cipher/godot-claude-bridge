@@ -3011,7 +3011,7 @@ Generate login/register/logout helpers against the installed SDK. Degrades to `u
 
 ## Group N — Card / board / piece authoring composites (Plane A / Editor + host)
 
-Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` / `interact_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`, `signal.*`, `inputmap.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`, and drag/drop behaviour scripts) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools, plus the `card_set_face` fast-follow); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`); Increment 4 is the **Interaction slice** (2 tools: `interact_make_draggable`, `interact_add_drop_zone`). `card_template_create`, `board_create`, `piece_template_create`, and the two `interact_*` tools write files (a scene / behaviour script) and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop and `card_set_face`'s optional flip clip are authored from existing Group C `anim_*` primitives, so they stay purely additive. `card_set_face` flips a card between its face and back — instantly, or via an authored flip clip whose `method` key swaps the side at the edge-on midpoint. The Interaction tools wire drag-and-drop in two general-purpose modes (`control` = Godot's built-in Control DnD; `node2d` = an Area2D hit region + pointer handler); a drop zone validates a neutral `payload` with a `key∈values` predicate and emits an `on_drop` signal. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
+Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` / `interact_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`, `signal.*`, `inputmap.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`, and drag/drop behaviour scripts) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools, plus the `card_set_face` fast-follow); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`, plus the tile-backed fast-follow `board_tile_create` / `board_tile_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`); Increment 4 is the **Interaction slice** (2 tools: `interact_make_draggable`, `interact_add_drop_zone`). `card_template_create`, `board_create`, `board_tile_create`, `piece_template_create`, and the two `interact_*` tools write files (a scene / behaviour script / TileSet) and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop and `card_set_face`'s optional flip clip are authored from existing Group C `anim_*` primitives, so they stay purely additive. `card_set_face` flips a card between its face and back — instantly, or via an authored flip clip whose `method` key swaps the side at the edge-on midpoint. The Interaction tools wire drag-and-drop in two general-purpose modes (`control` = Godot's built-in Control DnD; `node2d` = an Area2D hit region + pointer handler); a drop zone validates a neutral `payload` with a `key∈values` predicate and emits an `on_drop` signal. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
 
 ### `card_template_create` ✅  (Plane A / Editor + host)  · writes files (gated)
 Build a reusable card `PackedScene` from a slot spec, with a generated script-backed `set_data()` / `set_face()`. Named slots (`label` / `rich_text` / `texture` / `panel` / `badge`) become the card's regions; optional inline theme and a two-sided card back.
@@ -3197,7 +3197,7 @@ Flip an instanced card (or any node exposing `set_face(bool)` — the generated 
 ```
 
 ### `board_create` ✅  (Plane A / Editor + host)  · writes files (gated)
-Build a board scene whose children are addressable **cells** — each a `cell_<id>` node in the `board_cells` group — from one of three general-purpose layouts: a `ring` of ids, a `grid` of `rows`×`cols` (ids `"<row>_<col>"`), or an explicit `cells` list of `{id, x, y}`. Cells are `Marker2D` (or `Control`) anchors positioned by pure ring/grid math; an optional `background` (solid `color` or a `res://` `art` texture) is drawn behind them. Adds **no** addon method — decomposes onto `scene.new` → `node.add` → `node.set_property` → `node.add_to_group` → `scene.save`. **Destructive** (writes a scene) — elicitation-gated. Returns the `cell_id → node_path + position` map. `tile`-backed cells (Group D `TileMapLayer`) are a deferred fast-follow.
+Build a board scene whose children are addressable **cells** — each a `cell_<id>` node in the `board_cells` group — from one of three general-purpose layouts: a `ring` of ids, a `grid` of `rows`×`cols` (ids `"<row>_<col>"`), or an explicit `cells` list of `{id, x, y}`. Cells are `Marker2D` (or `Control`) anchors positioned by pure ring/grid math; an optional `background` (solid `color` or a `res://` `art` texture) is drawn behind them. Adds **no** addon method — decomposes onto `scene.new` → `node.add` → `node.set_property` → `node.add_to_group` → `scene.save`. **Destructive** (writes a scene) — elicitation-gated. Returns the `cell_id → node_path + position` map. For `tile`-backed cells (a `TileMapLayer` grid addressed by `[x, y]` coordinates) see `board_tile_create` / `board_tile_place`.
 - **Input**
 ```json
 { "type": "object", "additionalProperties": false, "required": ["path", "layout"],
@@ -3270,6 +3270,75 @@ Reparent an existing node (a card or piece instance) onto a board cell by id and
     "cell_path": { "type": "string" },
     "node_path": { "type": "string" },
     "align": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+  } }
+```
+
+### `board_tile_create` ✅  (Plane A / Editor + host)  · writes files (gated)
+Build a **tile-backed** board scene: a `TileMapLayer` grid whose cells are addressable by integer `[x, y]` tile coordinates (`cols` wide × `rows` tall) — the other Group D idiom to `board_create`'s per-cell `Marker2D` anchors. The layer binds a `TileSet`: a supplied `tileset` `.tres`, or a fresh empty one created at `<scene>_tiles.tres`, so the layer has a real `tile_size` (the coordinate frame `board_tile_place` snaps to). `paint` optionally fills the whole grid with one tile from the bound tileset in a single action; omitted, the cells stay empty and the layer is a coordinate frame only. Adds **no** addon method — decomposes onto `scene.new` → `tileset.create` → `tilemaplayer.create` → `tilemap.set_cells_rect` → `scene.save`. **Destructive** (writes a scene, and a `TileSet` `.tres` unless `tileset` is supplied) — elicitation-gated. General-purpose — cells carry only coordinates. Returns the layer path + grid dimensions + tile size.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "rows", "cols"],
+  "properties": {
+    "path": { "type": "string", "pattern": "^res://.*\\.tscn$" },
+    "rows": { "type": "integer", "minimum": 1 },
+    "cols": { "type": "integer", "minimum": 1 },
+    "tile_size": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 },
+    "tileset": { "type": "string", "pattern": "^res://.*\\.tres$" },
+    "paint": { "type": "object", "required": ["source_id"], "properties": {
+      "source_id": { "type": "integer", "minimum": 0 },
+      "atlas_coords": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 } } },
+    "layer_name": { "type": "string" },
+    "overwrite": { "type": "boolean" },
+    "confirm": { "type": "boolean" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["scene_path", "layer_path", "rows", "cols", "tile_size", "saved"],
+  "properties": {
+    "scene_path": { "type": "string" },
+    "layer_path": { "type": "string" },
+    "layer_name": { "type": "string" },
+    "rows": { "type": "integer" },
+    "cols": { "type": "integer" },
+    "tile_size": { "type": "array", "items": { "type": "integer" } },
+    "tileset_path": { "type": "string" },
+    "tileset_created": { "type": "boolean" },
+    "cell_count": { "type": "integer" },
+    "painted": { "type": "boolean" },
+    "node_count": { "type": "integer" },
+    "saved": { "type": "boolean" }
+  } }
+```
+
+### `board_tile_place` ✅  (Plane A / Editor)  · undoable
+Snap an existing node (a card or piece instance) onto a `TileMapLayer` cell by integer `[x, y]` tile `coord`. The cell's local position is computed from `tile_size` — centre `(coord + 0.5) × tile_size` (default `anchor`) or corner `coord × tile_size` — matching Godot's `TileMapLayer.map_to_local`, plus an optional `align` offset. With `reparent` (default `true`) the node is moved under the layer so the coordinate is layer-local; with `false` its `position` is set in place. Decomposes onto `node.reparent` + `node.set_property`. Returns the node's new path and local position.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["layer", "node", "coord"],
+  "properties": {
+    "layer": { "type": "string" },
+    "node": { "type": "string" },
+    "coord": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+    "tile_size": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 },
+    "anchor": { "enum": ["center", "corner"] },
+    "align": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+    "reparent": { "type": "boolean" }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["placed", "coord", "node_path", "local_pos"],
+  "properties": {
+    "placed": { "type": "boolean" },
+    "coord": { "type": "array", "items": { "type": "integer" } },
+    "layer_path": { "type": "string" },
+    "node_path": { "type": "string" },
+    "local_pos": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+    "tile_size": { "type": "array", "items": { "type": "integer" } },
+    "anchor": { "type": "string" },
+    "align": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+    "reparented": { "type": "boolean" }
   } }
 ```
 
@@ -3790,6 +3859,8 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `card_set_face` | N / Editor | ✅ | – |
 | `board_create` | N / Editor | ✅ | ✔ writes files |
 | `board_place` | N / Editor | ✅ | – |
+| `board_tile_create` | N / Editor | ✅ | ✔ writes files |
+| `board_tile_place` | N / Editor | ✅ | – |
 | `piece_template_create` | N / Editor | ✅ | ✔ writes files |
 | `piece_instance` | N / Editor | ✅ | – |
 | `piece_move` | N / Editor | ✅ | – |
