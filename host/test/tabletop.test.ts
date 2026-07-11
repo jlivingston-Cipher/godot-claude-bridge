@@ -7,6 +7,7 @@ import {
   emitCardInstance,
   emitCardHand,
   emitDeckFromTable,
+  emitCardSetFace,
   resolveColumnExpr,
   computeLayout,
   parseCsv,
@@ -682,6 +683,89 @@ test("buildPieceScript is valid-looking GDScript with the two setters; Back guar
   const twoSided = buildPieceScript("Control", { hasLabel: false, hasBack: true });
   assert.match(twoSided, /has_node\("Back"\)/);
   assert.doesNotMatch(twoSided, /has_node\("Label"\)/); // label:false → no Label branch
+});
+
+// ============================================================================
+// Group N — Card-slice fast-follow: card_set_face. Instant flips call the setter
+// directly; animated flips author a reusable scale-pinch + method-key clip from
+// Group C anim primitives, and must stay additive (only node.* / anim.* ops).
+// ============================================================================
+
+test("card_set_face (instant) emits a single set_face call — additive, target echoed", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitCardSetFace(emit, { node: "Main/Hand/Card_0", face_up: false });
+  assert.deepEqual(methods(calls), ["node.call_method"]);
+  assert.deepEqual(calls[0].params, { path: "Main/Hand/Card_0", method: "set_face", args: [false] });
+  assert.equal(res.animated, false);
+  assert.equal(res.face_up, false);
+  assert.equal(res.method, "set_face");
+  assert.equal(res.node_path, "Main/Hand/Card_0");
+  assert.equal(res.player_path, null);
+  assert.equal(res.anim, null);
+});
+
+test("card_set_face honours a custom setter method name", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitCardSetFace(emit, { node: "P", face_up: true, method: "reveal" });
+  assert.deepEqual(calls[0].params, { path: "P", method: "reveal", args: [true] });
+  assert.equal(res.method, "reveal");
+});
+
+test("card_set_face animated authors a scale-pinch + method-key flip from Group C anim primitives, still additive", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitCardSetFace(emit, {
+    node: "Main/Card", face_up: false,
+    animate: { duration: 0.4 },
+  });
+  // No immediate call_method — the method key inside the clip owns the swap.
+  assert.deepEqual(methods(calls), [
+    "anim.player_create", "anim.create", "anim.add_track",
+    "anim.insert_key", "anim.insert_key", "anim.insert_key",
+    "anim.add_track", "anim.insert_key", "anim.set_length",
+  ]);
+  // Additivity: every emitted method is an existing node.* / anim.* primitive.
+  const allowed = new Set([
+    "node.call_method",
+    "anim.player_create", "anim.create", "anim.add_track", "anim.insert_key", "anim.set_length",
+  ]);
+  assert.ok(methods(calls).every((m) => allowed.has(m)), "card_set_face must emit no new engine call");
+  // The player is added under the card; the two tracks target the node itself.
+  const player = calls.find((c) => c.method === "anim.player_create")!;
+  assert.deepEqual(player.params, { parent_path: "Main/Card", name: "FlipFX" });
+  const tracks = calls.filter((c) => c.method === "anim.add_track");
+  assert.deepEqual(tracks.map((t) => [t.params.path, t.params.type]), [[".:scale", "value"], [".", "method"]]);
+  // The scale track pinches x to 0 at the midpoint (edge-on), back to 1 at the end.
+  const keys = calls.filter((c) => c.method === "anim.insert_key");
+  const scaleKeys = keys.filter((k) => k.params.track === 0);
+  assert.deepEqual(scaleKeys.map((k) => k.params.time), [0, 0.2, 0.4]);
+  assert.deepEqual(scaleKeys.map((k) => k.params.value), [
+    { __type__: "Vector2", x: 1, y: 1 },
+    { __type__: "Vector2", x: 0, y: 1 },
+    { __type__: "Vector2", x: 1, y: 1 },
+  ]);
+  // The method key fires the setter at the midpoint with the target face state.
+  const methodKey = keys.find((k) => k.params.track === 1)!;
+  assert.equal(methodKey.params.time, 0.2);
+  assert.deepEqual(methodKey.params.value, { method: "set_face", args: [false] });
+  const len = calls.find((c) => c.method === "anim.set_length")!;
+  assert.equal(len.params.length, 0.4);
+  assert.equal(res.animated, true);
+  assert.equal(res.player_path, "Main/Card/FlipFX");
+  assert.equal(res.anim, "flip");
+});
+
+test("card_set_face animated respects custom player / anim / method names", async () => {
+  const { calls, emit } = recorder();
+  const res = await emitCardSetFace(emit, {
+    node: ".", face_up: true, method: "reveal",
+    animate: { player: "Flipper", anim: "turn", duration: 0.2 },
+  });
+  const player = calls.find((c) => c.method === "anim.player_create")!;
+  assert.deepEqual(player.params, { parent_path: ".", name: "Flipper" });
+  const methodKey = calls.filter((c) => c.method === "anim.insert_key").find((k) => k.params.track === 1)!;
+  assert.deepEqual(methodKey.params.value, { method: "reveal", args: [true] });
+  assert.equal(res.player_path, "Flipper"); // joinPath(".", "Flipper")
+  assert.equal(res.anim, "turn");
 });
 
 // ============================================================================

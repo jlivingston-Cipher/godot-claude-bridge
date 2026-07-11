@@ -3011,7 +3011,7 @@ Generate login/register/logout helpers against the installed SDK. Degrades to `u
 
 ## Group N — Card / board / piece authoring composites (Plane A / Editor + host)
 
-Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` / `interact_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`, `signal.*`, `inputmap.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`, and drag/drop behaviour scripts) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`); Increment 4 is the **Interaction slice** (2 tools: `interact_make_draggable`, `interact_add_drop_zone`). `card_template_create`, `board_create`, `piece_template_create`, and the two `interact_*` tools write files (a scene / behaviour script) and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop is authored from existing Group C `anim_*` primitives, so it stays purely additive. The Interaction tools wire drag-and-drop in two general-purpose modes (`control` = Godot's built-in Control DnD; `node2d` = an Area2D hit region + pointer handler); a drop zone validates a neutral `payload` with a `key∈values` predicate and emits an `on_drop` signal. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
+Composite authoring **on top of** the existing primitives. Each `card_*` / `board_*` / `piece_*` / `interact_*` tool is a host-side scripted sequence of already-audited editor-bridge ops (`scene.new`, `control.create`, `node.add`, `node.set_property`, `resource.create`, `theme.*`, `node.instantiate_scene`, `node.call_method`, `node.add_to_group`, `node.reparent`, `anim.*`, `signal.*`, `inputmap.*`) — it adds **no** addon method, so the host↔addon contract is unchanged. The composites build **structure** (scenes, nodes, a small script-backed `set_data()` / `set_face()`, and drag/drop behaviour scripts) and bind data a caller passes in; they never invent card values, names, or rules. Increment 1 is the **Card slice** (4 tools, plus the `card_set_face` fast-follow); Increment 2 is the **Board slice** (2 tools: `board_create`, `board_place`); Increment 3 is the **Piece slice** (3 tools: `piece_template_create`, `piece_instance`, `piece_move`); Increment 4 is the **Interaction slice** (2 tools: `interact_make_draggable`, `interact_add_drop_zone`). `card_template_create`, `board_create`, `piece_template_create`, and the two `interact_*` tools write files (a scene / behaviour script) and are **destructive** (elicitation-gated); the rest are undoable node authoring in the open scene (ungated, the `node_*` model). `piece_instance` can `place_on` a cell and `piece_move` reparents onto a cell — both reuse `board_place`; `piece_move`'s optional pop and `card_set_face`'s optional flip clip are authored from existing Group C `anim_*` primitives, so they stay purely additive. `card_set_face` flips a card between its face and back — instantly, or via an authored flip clip whose `method` key swaps the side at the edge-on midpoint. The Interaction tools wire drag-and-drop in two general-purpose modes (`control` = Godot's built-in Control DnD; `node2d` = an Area2D hit region + pointer handler); a drop zone validates a neutral `payload` with a `key∈values` predicate and emits an `on_drop` signal. Because every op is an existing primitive, the whole surface is unit-tested offline against an injected emit-sink. Everything here is **general-purpose** — the tools carry no game-specific vocabulary; a guardrail test fails CI if any appears.
 
 ### `card_template_create` ✅  (Plane A / Editor + host)  · writes files (gated)
 Build a reusable card `PackedScene` from a slot spec, with a generated script-backed `set_data()` / `set_face()`. Named slots (`label` / `rich_text` / `texture` / `panel` / `badge`) become the card's regions; optional inline theme and a two-sided card back.
@@ -3164,6 +3164,35 @@ Read a CSV or JSON table and stamp one card per row, binding columns to slots vi
     "instances": { "type": "array", "items": {
       "type": "object", "required": ["row_index", "instance_path"],
       "properties": { "row_index": { "type": "integer" }, "instance_path": { "type": "string" } } } }
+  } }
+```
+
+### `card_set_face` ✅  (Plane A / Editor)  · undoable
+Flip an instanced card (or any node exposing `set_face(bool)` — the generated card **and** piece scripts both do) between its face and back. **Instant** by default: calls the setter now, so the visible side changes immediately. With `animate`, instead authors a reusable **flip clip** under the node from Group C `anim_*` primitives — a horizontal "pinch" on the node's own `scale` (1 → edge-on `(0, 1)` → 1) plus a **method** key that calls the setter at the edge-on midpoint, so playing the clip performs a believable flip and swaps the side exactly when the card is thinnest. Purely additive — it emits only existing `node.*` / `anim.*` ops, never a new engine call; the clip is played on demand (the current face is unchanged until it plays). Returns the target state and any authored player / anim.
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["node", "face_up"],
+  "properties": {
+    "node": { "type": "string" },
+    "face_up": { "type": "boolean" },
+    "method": { "type": "string" },
+    "animate": { "type": "object", "properties": {
+      "duration": { "type": "number", "exclusiveMinimum": 0 },
+      "player": { "type": "string" },
+      "anim": { "type": "string" },
+      "transition": { "type": "number" } } }
+  } }
+```
+- **Output**
+```json
+{ "type": "object", "required": ["node_path", "face_up", "method", "animated"],
+  "properties": {
+    "node_path": { "type": "string" },
+    "face_up": { "type": "boolean" },
+    "method": { "type": "string" },
+    "animated": { "type": "boolean" },
+    "player_path": { "type": ["string", "null"] },
+    "anim": { "type": ["string", "null"] }
   } }
 ```
 
@@ -3758,6 +3787,7 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `card_instance` | N / Editor | ✅ | – |
 | `card_hand_layout` | N / Editor | ✅ | – |
 | `card_deck_from_table` | N / Editor | ✅ | – |
+| `card_set_face` | N / Editor | ✅ | – |
 | `board_create` | N / Editor | ✅ | ✔ writes files |
 | `board_place` | N / Editor | ✅ | – |
 | `piece_template_create` | N / Editor | ✅ | ✔ writes files |

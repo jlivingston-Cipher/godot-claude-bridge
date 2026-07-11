@@ -11,10 +11,10 @@ name: integration
 #                     _serialize_node/_descendants, doc-URL/type-name, _ping). No editor / bridge /
 #                     GUI — it complements the authoring-plane, which covers the editor-COUPLED
 #                     handlers. Also runs the Group N scene-construction smokes (card_build_smoke.gd,
-#                     board_build_smoke.gd, piece_build_smoke.gd, interact_build_smoke.gd) — build → pack → round-trip a
-#                     card / board / piece PackedScene, and compile + round-trip the interaction
-#                     behaviour scripts.
-#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD _SUMMARY / _FAIL markers.
+#                     board_build_smoke.gd, piece_build_smoke.gd, interact_build_smoke.gd, card_setface_smoke.gd) —
+#                     build → pack → round-trip a card / board / piece PackedScene, compile + round-trip the
+#                     interaction behaviour scripts, and round-trip + play the card-flip animation.
+#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE _SUMMARY / _FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -162,6 +162,20 @@ jobs:
           grep -q "INTERACT_BUILD_SUMMARY" /tmp/interact-smoke.log || { echo "::error::interact_build_smoke.gd produced no INTERACT_BUILD_SUMMARY (script error?)"; exit 1; }
           if grep -q "INTERACT_BUILD_FAIL" /tmp/interact-smoke.log; then echo "::error::an interact-build smoke assertion failed"; exit 1; fi
           echo "Interact-build smoke passed: $(grep -o 'INTERACT_BUILD_SUMMARY.*' /tmp/interact-smoke.log)"
+
+      - name: Run the Group N card-set-face smoke
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/card_setface_smoke.gd > /tmp/setface-smoke.log 2>&1 || true
+          echo "=== card_setface_smoke.gd output ==="
+          cat /tmp/setface-smoke.log
+          echo "====================================="
+          # CARD_SETFACE_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "CARD_SETFACE_SUMMARY" /tmp/setface-smoke.log || { echo "::error::card_setface_smoke.gd produced no CARD_SETFACE_SUMMARY (script error?)"; exit 1; }
+          if grep -q "CARD_SETFACE_FAIL" /tmp/setface-smoke.log; then echo "::error::a card-set-face smoke assertion failed"; exit 1; fi
+          echo "Card-set-face smoke passed: $(grep -o 'CARD_SETFACE_SUMMARY.*' /tmp/setface-smoke.log)"
 
   cli-plane:
     name: CLI plane vs real Godot (headless)

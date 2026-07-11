@@ -654,6 +654,71 @@ export async function emitDeckFromTable(emit: Emit, readFile: ReadFile, args: De
   };
 }
 
+// ------------------------------------------------- composite: card set face ----
+
+interface CardSetFaceAnimate { duration?: number; player?: string; anim?: string; transition?: number }
+interface CardSetFaceArgs {
+  node: string;
+  face_up: boolean;
+  method?: string;
+  animate?: CardSetFaceAnimate;
+}
+interface CardSetFaceResult {
+  node_path: string; face_up: boolean; method: string; animated: boolean;
+  player_path: string | null; anim: string | null;
+}
+
+/**
+ * Flip an instanced card (or any node exposing a `set_face(bool)` setter — the
+ * generated card AND piece scripts both do) between its face and back.
+ *
+ * Instant (default): calls the setter now, so the visible side changes at once.
+ *
+ * Animated: instead authors a reusable flip *clip* under the node from existing
+ * Group C anim primitives — a horizontal "pinch" on the node's own `scale`
+ * (1 → edge-on `(0, 1)` → 1) plus a `method` key that calls the setter at the
+ * edge-on midpoint, so playing the clip performs a believable flip and swaps the
+ * side exactly when the card is thinnest. Purely additive: it emits only existing
+ * `node.*` / `anim.*` ops — no new bridge method — so it stays offline-testable
+ * and out of the host↔addon parity scan, exactly like `piece_move`. The clip is
+ * played on demand (like `piece_move`'s pop); the current face is unchanged until
+ * it plays. The method track path is `.` (the node itself, via the player's
+ * default `root_node` of `..`), matching `piece_move`'s `.:scale` convention.
+ */
+export async function emitCardSetFace(emit: Emit, args: CardSetFaceArgs): Promise<CardSetFaceResult> {
+  if (args.node === "") throw new ComposeError("bad_params", "Missing 'node' (the card to flip)");
+  const method = args.method ?? "set_face";
+  assertNodeName(method);
+
+  if (!args.animate) {
+    await emit("node.call_method", { path: args.node, method, args: [args.face_up] });
+    return { node_path: args.node, face_up: args.face_up, method, animated: false, player_path: null, anim: null };
+  }
+
+  const player = args.animate.player ?? "FlipFX";
+  const animName = args.animate.anim ?? "flip";
+  const duration = args.animate.duration ?? 0.3;
+  const transition = args.animate.transition ?? 1.0;
+  const mid = duration / 2;
+  const playerPath = joinPath(args.node, player);
+
+  // Track 0 — a horizontal pinch on the node's own scale: 1 → edge-on → 1. Keyed
+  // relative to the node (`.:scale`), so it needs no world-transform knowledge.
+  await emit("anim.player_create", { parent_path: args.node, name: player });
+  await emit("anim.create", { player_path: playerPath, name: animName, library: "" });
+  await emit("anim.add_track", { player_path: playerPath, name: animName, path: ".:scale", type: "value", library: "" });
+  await emit("anim.insert_key", { player_path: playerPath, name: animName, track: 0, time: 0, value: vec2(1, 1), transition, library: "" });
+  await emit("anim.insert_key", { player_path: playerPath, name: animName, track: 0, time: mid, value: vec2(0, 1), transition, library: "" });
+  await emit("anim.insert_key", { player_path: playerPath, name: animName, track: 0, time: duration, value: vec2(1, 1), transition, library: "" });
+
+  // Track 1 — a method key that swaps the visible side at the edge-on midpoint.
+  await emit("anim.add_track", { player_path: playerPath, name: animName, path: ".", type: "method", library: "" });
+  await emit("anim.insert_key", { player_path: playerPath, name: animName, track: 1, time: mid, value: { method, args: [args.face_up] }, transition, library: "" });
+  await emit("anim.set_length", { player_path: playerPath, name: animName, length: duration, library: "" });
+
+  return { node_path: args.node, face_up: args.face_up, method, animated: true, player_path: playerPath, anim: animName };
+}
+
 // =============================================================================
 // Group N — Increment 2: the Board slice (`board_create`, `board_place`)
 //
@@ -1578,6 +1643,36 @@ export function registerTabletopTools(server: McpServer, bridge: BridgeClient, c
       const a = raw as unknown as DeckArgs;
       try {
         return ok(await emitDeckFromTable(emit, readFile, a) as unknown as Record<string, unknown>);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------- card_set_face ----
+  server.registerTool(
+    "card_set_face",
+    {
+      title: "Flip a card's face",
+      description:
+        "Flip an instanced card (or any node exposing set_face(bool) — the generated card and piece scripts both do) between its face and back. " +
+        "Instant by default: calls the setter now, so the visible side changes immediately. With `animate`, instead authors a reusable flip clip under the node from Group C anim primitives — a scale pinch (1 → edge-on → 1) plus a method key that calls the setter at the edge-on midpoint — played on demand; purely additive (only existing node.* / anim.* ops, never a new engine call). Undoable node authoring. Returns the target state and any authored player / anim.",
+      inputSchema: {
+        node: z.string().describe("Node path of the card instance to flip (in the open scene); \".\" for the root"),
+        face_up: z.boolean().describe("Target face state: true shows the face, false the back"),
+        method: z.string().optional().describe("Setter method invoked with face_up (default \"set_face\"; the generated card/piece scripts expose it)"),
+        animate: z.object({
+          duration: z.number().positive().optional().describe("Flip duration in seconds (default 0.3)"),
+          player: z.string().optional().describe("AnimationPlayer node name added under the card (default FlipFX)"),
+          anim: z.string().optional().describe("Animation name (default flip)"),
+          transition: z.number().optional().describe("Key transition curve exponent (default 1.0)"),
+        }).optional().describe("Optional flip animation; omitted → an instant set_face"),
+      },
+    },
+    async (raw) => {
+      const a = raw as unknown as Parameters<typeof emitCardSetFace>[1];
+      try {
+        return ok(await emitCardSetFace(emit, a) as unknown as Record<string, unknown>);
       } catch (err) {
         return fail(err);
       }

@@ -648,6 +648,14 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     unmapped_columns: z.array(z.string()),
     instances: z.array(z.object({ row_index: z.number(), instance_path: z.string() })),
   },
+  card_set_face: {
+    node_path: z.string(),
+    face_up: z.boolean(),
+    method: z.string(),
+    animated: z.boolean(),
+    player_path: z.string().nullable(),
+    anim: z.string().nullable(),
+  },
   board_create: {
     scene_path: z.string(),
     root_type: z.string(),
