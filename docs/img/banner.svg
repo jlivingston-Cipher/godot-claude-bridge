@@ -1,0 +1,51 @@
+<svg width="720" height="220" viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Breakpoint MCP logo lockup with tagline: Now Godot waits for you.">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E1B33"/>
+      <stop offset="1" stop-color="#0A1424"/>
+    </linearGradient>
+    <linearGradient id="ihead" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3DE9CE"/>
+      <stop offset="1" stop-color="#22B9C9"/>
+    </linearGradient>
+    <radialGradient id="ibp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FF8A8A"/>
+      <stop offset="1" stop-color="#FF5D5D"/>
+    </radialGradient>
+    <linearGradient id="wm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#EAF6FF"/>
+      <stop offset="1" stop-color="#BFE9E2"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="720" height="220" rx="26" fill="url(#panel)"/>
+
+  <!-- icon (same mark you approved), scaled to 132 at left -->
+  <g transform="translate(40,44) scale(1.03)">
+    <g stroke="#6C8CFF" stroke-width="4" stroke-linecap="round">
+      <line x1="12" y1="64" x2="30" y2="64"/><line x1="116" y1="64" x2="98" y2="64"/>
+    </g>
+    <circle cx="12" cy="64" r="4.5" fill="#6C8CFF"/><circle cx="116" cy="64" r="4.5" fill="#6C8CFF"/>
+    <line x1="64" y1="30" x2="64" y2="20" stroke="#3DE9CE" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="64" cy="16" r="4.5" fill="#3DE9CE"/>
+    <rect x="30" y="30" width="68" height="60" rx="18" fill="url(#ihead)"/>
+    <rect x="24" y="52" width="8" height="18" rx="3" fill="#22B9C9"/>
+    <rect x="96" y="52" width="8" height="18" rx="3" fill="#22B9C9"/>
+    <rect x="40" y="44" width="48" height="34" rx="11" fill="#0B1524"/>
+    <circle cx="55" cy="60" r="6" fill="#3DE9CE"/>
+    <circle cx="75" cy="60" r="8.5" fill="none" stroke="url(#ibp)" stroke-width="3.5"/>
+    <circle cx="75" cy="60" r="3" fill="url(#ibp)"/>
+    <path d="M52 70 Q64 76 76 70" fill="none" stroke="#3DE9CE" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="212" y="112" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="66" font-weight="700" letter-spacing="-1.5" fill="url(#wm)">Breakpoint</text>
+
+  <!-- MCP technical descriptor as a tag -->
+  <rect x="566" y="58" width="86" height="40" rx="9" fill="none" stroke="#6C8CFF" stroke-width="2.5"/>
+  <text x="609" y="86" text-anchor="middle" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="2" fill="#8CA6FF">MCP</text>
+
+  <!-- tagline: the Beckett inversion -->
+  <circle cx="216" cy="150" r="4.5" fill="url(#ibp)"/>
+  <text x="230" y="157" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="27" font-style="italic" font-weight="500" fill="#86E4D6">Now Godot waits for you.</text>
+</svg>
