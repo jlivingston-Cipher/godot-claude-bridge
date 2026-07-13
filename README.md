@@ -6,7 +6,7 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.12.0 · addon 1.4.2 · 270 tools + 5 MCP resources · MIT.** The host builds against
+> **npm 1.12.1 · addon 1.4.2 · 270 tools + 5 MCP resources · MIT.** The host builds against
 > the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 366-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
@@ -188,7 +188,7 @@ claude mcp add godot -- npx -y breakpoint-mcp
 }
 ```
 
-Using a different MCP client (Cursor, VS Code, Windsurf, …)? See
+Using a different MCP client (Cursor, VS Code, Windsurf, etc.)? See
 [Compatibility](#compatibility) below — the command is the same, only the config file
 and wrapper key differ.
 

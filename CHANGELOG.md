@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.1] — 2026-07-13
+
+Documentation + republish — a human-readable doc cycle stamping everything to the current about-to-be-pushed versions (host `1.12.1`, addon `1.4.2`, **270 tools**), plus a republish so the npm package page reflects it. The 270-tool README / User-Guide landed in `14cd843` *after* the `1.12.0` publish, and npm READMEs are immutable per version — so npmjs.com still showed the pre-Group-L README. No code, tool, schema, or addon change — still **270 tools**; both `addons/breakpoint_mcp/` copies are byte-identical to 1.12.0. Version `1.12.0` → `1.12.1`.
+
+### Documentation
+- **README badge** stamped `npm 1.12.0` → `npm 1.12.1` (`addon 1.4.2 · 270 tools + 5 MCP resources` unchanged).
+- **User Guide** version stamp corrected `1.0.0` → `host 1.12.1 · addon 1.4.2` (it had never been bumped from the initial release).
+- **Compatibility section** — the trailing ellipsis in the MCP-client list (`Cursor, VS Code, Windsurf, …`) is now `… Windsurf, etc.`.
+- Swept every human-readable repo doc for currency: tool count (**270**), addon version (**1.4.2**), and the install / registration steps (`npx breakpoint-mcp init` / `doctor`, `npm i -g breakpoint-mcp`, `claude mcp add`) are all current. Republished so `host/README.md` on npmjs.com reflects the 270-tool surface and the Group L `vcs_*` family. Mirrors the `1.2.1` doc-republish precedent.
+
 ## [1.12.0] — 2026-07-11
 
 Feature release — **Group L version control (`vcs_*`)**: a net-new host-side tool group that reads the project's git repository and performs safe local git actions, taking the surface from **258 to 270 tools**. The `vcs_*` tools are host-only (no addon change) and fully cloud/CI-verifiable end-to-end. This release also fixes the first Asset Library packaging report (#102) — the addon moves `1.4.1` → `1.4.2`. Host version `1.11.0` → `1.12.0`; **`npm breakpoint-mcp@1.12.0` live as `latest`**.
