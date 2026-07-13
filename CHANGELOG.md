@@ -6,8 +6,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.14.1] — 2026-07-13
+
+Patch release — silences the Godot 4.5+ `UNUSED_PARAMETER` warnings the runtime-compiled `Logger` subclass emitted whenever log capture is installed, by underscore-prefixing the three unused `_log_error()` override parameters. Cosmetic only: no behavior change, **no new tool (still 271)**, no schema change; both `addons/breakpoint_mcp/` copies stay byte-identical. Host version `1.14.0` → `1.14.1`; addon `1.4.2` → `1.4.3` (the deferred addon-version honesty bump rides this addon-touching release). First externally-contributed fix — thanks [@PierreTurnbull](https://github.com/PierreTurnbull) (PR #113).
+
 ### Fixed
-- **Runtime log capture** — prefix unused `_log_error()` override parameters with underscores in the runtime-compiled `Logger` subclass so Godot 4.5+ no longer emits `UNUSED_PARAMETER` warnings when log capture is installed.
+- **Runtime log capture** — prefix unused `_log_error()` override parameters with underscores in the runtime-compiled `Logger` subclass so Godot 4.5+ no longer emits `UNUSED_PARAMETER` warnings when log capture is installed. ([#113](https://github.com/jlivingston-Cipher/godot-breakpoint-mcp/pull/113) by @PierreTurnbull)
 
 ## [1.14.0] — 2026-07-13
 
