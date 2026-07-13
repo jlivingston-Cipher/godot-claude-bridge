@@ -22,7 +22,7 @@ var sink: Callable
 func _log_message(message: String, error: bool) -> void:
 	if sink.is_valid():
 		sink.call("error" if error else "info", message)
-func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array) -> void:
+func _log_error(_function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, error_type: int, _script_backtraces: Array) -> void:
 	if sink.is_valid():
 		var lvl := "warning" if error_type == 1 else "error"
 		var detail := rationale if rationale != "" else code

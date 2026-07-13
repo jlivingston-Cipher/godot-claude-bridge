@@ -6,6 +6,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Runtime log capture** — prefix unused `_log_error()` override parameters with underscores in the runtime-compiled `Logger` subclass so Godot 4.5+ no longer emits `UNUSED_PARAMETER` warnings when log capture is installed.
+
 ## [1.14.0] — 2026-07-13
 
 Feature release — the `card_instance` **`persist`** save-persistence flag (Finding-A, shipped in `1.13.0`) is extended to the three remaining tabletop composites: **`card_hand_layout`**, **`card_deck_from_table`**, and **`piece_instance`**. Opt-in and default-off — pass `persist: true` to bake bound slot data into the saved scene via Editable Children (reusing the existing `node.set_editable_instance` op) so authored values survive a reload; each result reports a new `persisted` field. Host-only and additive — no addon change, **no new tool (still 271)**, no schema-count change. Host version `1.13.0` → `1.14.0`; addon stays `1.4.2`.
