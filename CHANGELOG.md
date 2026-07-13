@@ -6,6 +6,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-07-13
+
+Finding-A save-persistence — authored `card_instance` slot data can now be baked into the saved scene. Adds **`node_set_editable_instance`** (270 → **271 tools**): toggles "Editable Children" on an instanced sub-scene so property overrides on its internal nodes serialize on save, instead of reverting on reload (a sealed sub-scene otherwise discards them). `card_instance` gains an opt-in **`persist`** flag (default `false`) that enables editable children on the instance so its bound slot data survives a reload; the result reports a new `persisted` field. Default behavior is unchanged — cards stay runtime-bound via `set_data` unless `persist: true` is passed. Both `addons/breakpoint_mcp/` copies stay byte-identical (the new op is added to the shared `operations.gd`). New headless `editable_instance_smoke.gd` (wired into `integration.yml`) proves a sealed instance reverts its override on reload while an editable instance persists it through a pack → save → reload round-trip; verified live against Godot 4.7. Version `1.12.1` → `1.13.0`; addon stays `1.4.2`.
+
 ## [1.12.1] — 2026-07-13
 
 Documentation + republish — a human-readable doc cycle stamping everything to the current about-to-be-pushed versions (host `1.12.1`, addon `1.4.2`, **270 tools**), plus a republish so the npm package page reflects it. The 270-tool README / User-Guide landed in `14cd843` *after* the `1.12.0` publish, and npm READMEs are immutable per version — so npmjs.com still showed the pre-Group-L README. No code, tool, schema, or addon change — still **270 tools**; both `addons/breakpoint_mcp/` copies are byte-identical to 1.12.0. Version `1.12.0` → `1.12.1`.

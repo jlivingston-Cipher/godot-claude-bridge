@@ -5,9 +5,9 @@ Welcome. This guide walks you, start to finish, through installing and using
 It is written for a Godot developer who has never seen the tool before. No prior
 knowledge of the Model Context Protocol (MCP) is assumed.
 
-- **Version:** host 1.12.1 · addon 1.4.2
+- **Version:** host 1.13.0 · addon 1.4.2
 - **License:** MIT
-- **What it exposes:** 270 tools + 5 MCP resources
+- **What it exposes:** 271 tools + 5 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
 
 ---
@@ -565,7 +565,7 @@ drive the live game → test.
 
 ## 8. Tool reference by family
 
-There are **270 tools** in total. This section summarizes them by family so you know what
+There are **271 tools** in total. This section summarizes them by family so you know what
 exists and where to look; for the exhaustive per-tool input/output JSON Schemas, see
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
@@ -581,9 +581,9 @@ undo system unless noted.
   autoloads, export presets, the main scene, and list all settings.
 - **`scene_*`** — get the tree; open, save, save-as, create, reload, close, pack, and list
   open scenes; read dependencies.
-- **`node_*`** — add, delete, rename, reparent, duplicate, move, change type, set owner;
-  get/set/list properties; find nodes; manage groups; instantiate scenes; call methods
-  *(destructive)*.
+- **`node_*`** — add, delete, rename, reparent, duplicate, move, change type, set owner,
+  set editable-instance; get/set/list properties; find nodes; manage groups; instantiate
+  scenes; call methods *(destructive)*.
 - **`signal_*`** — list signals and connections; connect, disconnect, add user signals,
   and emit *(emit is destructive)*.
 - **`selection_*`** — get and set the editor selection.
@@ -868,7 +868,7 @@ deterministic in-engine stand-ins with no external model; the `command` backend 
 command you configure and should only point at trusted code.
 
 **How many tools are there, and where's the full list?**
-270 tools and 5 resources. The exhaustive per-tool schemas are in
+271 tools and 5 resources. The exhaustive per-tool schemas are in
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
 
 **What are those `{ "__type__": ... }` values I see in tool arguments?**
