@@ -276,3 +276,45 @@ test("runtime_assert_screen_text omits unset optionals (absence check)", async (
   await h.handler("runtime_assert_screen_text")({ text: "Game Over", present: false });
   assert.deepEqual(h.calls[0].params, { text: "Game Over", present: false });
 });
+
+test("runtime_screenshot_diff forwards reference and optional params", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", {
+    ok: true,
+    diff_ratio: 0,
+    differing_pixels: 0,
+    total_pixels: 100,
+    width: 10,
+    height: 10,
+    reference: "res://ref.png",
+  });
+  const r = await h.handler("runtime_screenshot_diff")({
+    reference: "res://ref.png",
+    tolerance: 0.01,
+    per_channel_threshold: 8,
+    region: { x: 0, y: 0, w: 10, h: 10 },
+  });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.screenshot_diff");
+  assert.deepEqual(h.calls[0].params, {
+    reference: "res://ref.png",
+    tolerance: 0.01,
+    per_channel_threshold: 8,
+    region: { x: 0, y: 0, w: 10, h: 10 },
+  });
+});
+
+test("runtime_screenshot_diff omits unset optionals", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", {
+    ok: true,
+    diff_ratio: 0,
+    differing_pixels: 0,
+    total_pixels: 100,
+    width: 10,
+    height: 10,
+    reference: "res://ref.png",
+  });
+  await h.handler("runtime_screenshot_diff")({ reference: "res://ref.png" });
+  assert.deepEqual(h.calls[0].params, { reference: "res://ref.png" });
+});

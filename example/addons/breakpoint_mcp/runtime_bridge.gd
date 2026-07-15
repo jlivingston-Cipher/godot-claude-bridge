@@ -263,6 +263,8 @@ func _dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _assert_perf(params)
 		"runtime.assert_screen_text":
 			return _assert_screen_text(params)
+		"runtime.screenshot_diff":
+			return _screenshot_diff(params)
 		_:
 			return _err("unknown_method", "No such method: %s" % method)
 
@@ -634,4 +636,75 @@ func _assert_screen_text(params: Dictionary) -> Dictionary:
 		"matches": count,
 		"present": present,
 		"samples": samples,
+	})
+
+
+func _screenshot_diff(params: Dictionary) -> Dictionary:
+	var reference := String(params.get("reference", ""))
+	var vp := get_viewport()
+	if vp == null:
+		return _err("no_viewport", "No viewport")
+	var tex := vp.get_texture()
+	if tex == null:
+		return _err("no_texture", "No viewport texture")
+	var img := tex.get_image()
+	if img == null:
+		return _err("no_image", "Could not read frame")
+	var ref_img := Image.new()
+	var err := ref_img.load(reference)
+	if err != OK:
+		return _err("bad_reference", "Could not load reference image: %s (error %d)" % [reference, err])
+	return _compare_images(img, ref_img, params, reference)
+
+
+func _compare_images(frame: Image, reference_img: Image, params: Dictionary, reference: String) -> Dictionary:
+	var tolerance := float(params.get("tolerance", 0.0))
+	var per_channel := int(params.get("per_channel_threshold", 0))
+	# Work on copies normalized to RGBA8 so get_data() is a byte-aligned comparison.
+	var a := Image.new()
+	a.copy_from(frame)
+	var b := Image.new()
+	b.copy_from(reference_img)
+	a.convert(Image.FORMAT_RGBA8)
+	b.convert(Image.FORMAT_RGBA8)
+	var region_v: Variant = params.get("region")
+	if region_v is Dictionary:
+		var rg: Dictionary = region_v
+		var rect := Rect2i(int(rg.get("x", 0)), int(rg.get("y", 0)), int(rg.get("w", 0)), int(rg.get("h", 0)))
+		a = a.get_region(rect)
+		b = b.get_region(rect)
+	var w := a.get_width()
+	var h := a.get_height()
+	if w != b.get_width() or h != b.get_height():
+		return _ok({
+			"ok": false,
+			"reason": "dimension_mismatch",
+			"diff_ratio": 1.0,
+			"differing_pixels": 0,
+			"total_pixels": 0,
+			"width": w,
+			"height": h,
+			"reference": reference,
+		})
+	var total := w * h
+	var da := a.get_data()
+	var db := b.get_data()
+	var differing := 0
+	var n := da.size()
+	var i := 0
+	while i < n:
+		for c in 4:
+			if absi(int(da[i + c]) - int(db[i + c])) > per_channel:
+				differing += 1
+				break
+		i += 4
+	var ratio := (float(differing) / float(total)) if total > 0 else 0.0
+	return _ok({
+		"ok": ratio <= tolerance,
+		"diff_ratio": ratio,
+		"differing_pixels": differing,
+		"total_pixels": total,
+		"width": w,
+		"height": h,
+		"reference": reference,
 	})

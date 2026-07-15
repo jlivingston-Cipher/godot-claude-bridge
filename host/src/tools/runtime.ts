@@ -282,4 +282,42 @@ export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): 
         ...(min_count !== undefined ? { min_count } : {}),
       }),
   );
+
+  server.registerTool(
+    "runtime_screenshot_diff",
+    {
+      title: "Runtime screenshot diff",
+      description:
+        "Capture the current frame and compare it to a reference PNG at a project path, returning diff stats and a " +
+        "pass/fail vs tolerance (read-only; the diff is computed engine-side so the host stays dependency-free). " +
+        "Establish the reference first by saving a runtime_screenshot as a project asset.",
+      inputSchema: {
+        reference: z.string().describe("res:// or user:// path to the reference PNG"),
+        tolerance: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Max fraction of differing pixels that still passes (default 0)"),
+        per_channel_threshold: z
+          .number()
+          .int()
+          .min(0)
+          .max(255)
+          .optional()
+          .describe("Per-channel delta (0-255) for a pixel to count as different (default 0)"),
+        region: z
+          .object({ x: z.number().int(), y: z.number().int(), w: z.number().int(), h: z.number().int() })
+          .optional()
+          .describe("Optional sub-region (applied to both frame and reference) to compare"),
+      },
+    },
+    async ({ reference, tolerance, per_channel_threshold, region }) =>
+      call("runtime.screenshot_diff", {
+        reference,
+        ...(tolerance !== undefined ? { tolerance } : {}),
+        ...(per_channel_threshold !== undefined ? { per_channel_threshold } : {}),
+        ...(region !== undefined ? { region } : {}),
+      }),
+  );
 }

@@ -521,6 +521,16 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     present: z.boolean(),
     samples: z.array(z.object({ path: z.string(), text: z.string() })),
   },
+  runtime_screenshot_diff: {
+    ok: z.boolean(),
+    diff_ratio: z.number(),
+    differing_pixels: z.number(),
+    total_pixels: z.number(),
+    width: z.number(),
+    height: z.number(),
+    reference: z.string(),
+    reason: z.string().optional(),
+  },
 
   // ---- Group K: knowledge & search ----
   // Host-side project index (tools/knowledge.ts) — no bridge/LSP; read the project files directly.
