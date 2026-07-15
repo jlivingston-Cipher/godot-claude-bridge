@@ -261,6 +261,8 @@ func _dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _assert_scene_structure(params)
 		"runtime.assert_perf":
 			return _assert_perf(params)
+		"runtime.assert_screen_text":
+			return _assert_screen_text(params)
 		_:
 			return _err("unknown_method", "No such method: %s" % method)
 
@@ -571,4 +573,65 @@ func _assert_perf(params: Dictionary) -> Dictionary:
 		"checked": checked,
 		"regressions": regressions,
 		"monitors": monitors,
+	})
+
+
+func _text_of(node: Node) -> String:
+	# The visible text a Control exposes via its `text` property (Label / Button /
+	# LineEdit / TextEdit / RichTextLabel / CheckBox / LinkButton …). Non-text nodes
+	# return null from get() and are skipped.
+	var v: Variant = node.get("text")
+	if v is String:
+		return String(v)
+	return ""
+
+
+func _assert_screen_text(params: Dictionary) -> Dictionary:
+	var needle := String(params.get("text", ""))
+	var present := bool(params.get("present", true))
+	var use_regex := bool(params.get("regex", false))
+	var case_sensitive := bool(params.get("case_sensitive", false))
+	var has_min := params.has("min_count")
+	var min_count := int(params.get("min_count", 0))
+	var re: RegEx = null
+	if use_regex:
+		re = RegEx.new()
+		var pattern := needle if case_sensitive else "(?i)" + needle
+		if re.compile(pattern) != OK:
+			return _err("bad_regex", "Invalid regex: %s" % needle)
+	var samples: Array = []
+	var count := 0
+	var base := _base()
+	if base != null:
+		var stack: Array = [base]
+		while not stack.is_empty():
+			var node: Node = stack.pop_back()
+			for child in node.get_children():
+				stack.append(child)
+			if not (node is CanvasItem):
+				continue
+			if not (node as CanvasItem).is_visible_in_tree():
+				continue
+			var txt := _text_of(node)
+			if txt == "":
+				continue
+			var matched := false
+			if use_regex:
+				matched = re.search(txt) != null
+			elif case_sensitive:
+				matched = txt.contains(needle)
+			else:
+				matched = txt.to_lower().contains(needle.to_lower())
+			if matched:
+				count += 1
+				if samples.size() < 20:
+					samples.append({"path": _path_of(node), "text": txt})
+	var ok := (count > 0) if present else (count == 0)
+	if present and has_min:
+		ok = count >= min_count
+	return _ok({
+		"ok": ok,
+		"matches": count,
+		"present": present,
+		"samples": samples,
 	})

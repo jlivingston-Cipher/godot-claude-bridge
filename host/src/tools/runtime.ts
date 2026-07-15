@@ -248,4 +248,38 @@ export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): 
         ...(direction !== undefined ? { direction } : {}),
       }),
   );
+
+  server.registerTool(
+    "runtime_assert_screen_text",
+    {
+      title: "Runtime assert screen text",
+      description:
+        "Assert that on-screen text is present (or absent) by scanning visible Control text in the LIVE scene tree " +
+        "(read-only; no OCR). Sees text on Label / RichTextLabel / Button / LineEdit / TextEdit / CheckBox / LinkButton " +
+        "and similar; does NOT see text drawn directly to the canvas or baked into textures.",
+      inputSchema: {
+        text: z.string().describe("Text (or regular expression) to look for"),
+        present: z
+          .boolean()
+          .optional()
+          .describe("Assert the text IS present (default true); set false to assert it is absent"),
+        regex: z.boolean().optional().describe("Treat `text` as a regular expression (default false = substring)"),
+        case_sensitive: z.boolean().optional().describe("Case-sensitive match (default false)"),
+        min_count: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Require at least this many matches (implies present)"),
+      },
+    },
+    async ({ text, present, regex, case_sensitive, min_count }) =>
+      call("runtime.assert_screen_text", {
+        text,
+        ...(present !== undefined ? { present } : {}),
+        ...(regex !== undefined ? { regex } : {}),
+        ...(case_sensitive !== undefined ? { case_sensitive } : {}),
+        ...(min_count !== undefined ? { min_count } : {}),
+      }),
+  );
 }

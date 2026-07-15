@@ -244,3 +244,35 @@ test("runtime_assert_perf omits tolerance and direction when not supplied", asyn
   await h.handler("runtime_assert_perf")({ baseline: { "time/fps": 60 } });
   assert.deepEqual(h.calls[0].params, { baseline: { "time/fps": 60 } });
 });
+
+test("runtime_assert_screen_text forwards text and optional flags", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", {
+    ok: true,
+    matches: 2,
+    present: true,
+    samples: [{ path: "HUD/Score", text: "Score: 100" }],
+  });
+  const r = await h.handler("runtime_assert_screen_text")({
+    text: "Score",
+    regex: false,
+    case_sensitive: false,
+    min_count: 1,
+  });
+  assert.notEqual(r.isError, true);
+  assert.deepEqual(r.structuredContent, {
+    ok: true,
+    matches: 2,
+    present: true,
+    samples: [{ path: "HUD/Score", text: "Score: 100" }],
+  });
+  assert.equal(h.calls[0].method, "runtime.assert_screen_text");
+  assert.deepEqual(h.calls[0].params, { text: "Score", regex: false, case_sensitive: false, min_count: 1 });
+});
+
+test("runtime_assert_screen_text omits unset optionals (absence check)", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { ok: true, matches: 0, present: false, samples: [] });
+  await h.handler("runtime_assert_screen_text")({ text: "Game Over", present: false });
+  assert.deepEqual(h.calls[0].params, { text: "Game Over", present: false });
+});
