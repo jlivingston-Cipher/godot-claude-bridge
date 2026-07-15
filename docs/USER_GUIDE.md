@@ -5,9 +5,9 @@ Welcome. This guide walks you, start to finish, through installing and using
 It is written for a Godot developer who has never seen the tool before. No prior
 knowledge of the Model Context Protocol (MCP) is assumed.
 
-- **Version:** host 1.13.0 · addon 1.4.2
+- **Version:** host 1.15.0 · addon 1.5.0
 - **License:** MIT
-- **What it exposes:** 271 tools + 5 MCP resources
+- **What it exposes:** 276 tools + 5 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
 
 ---
@@ -458,12 +458,15 @@ on the formal **MCP task model**: a task-aware client creates the job and then p
 awaits its result, or cancels it (`tasks/get` / `tasks/result` / `tasks/cancel`). A plain
 client still gets the blocking result, exactly as before.
 
-### Plane C — Runtime Bridge (`runtime_*`, 9 tools)
+### Plane C — Runtime Bridge (`runtime_*`, 14 tools)
 
 An autoload (`BreakpointRuntimeBridge`) that lives inside the **running game** and listens
 on `127.0.0.1:9081`. Through it, the assistant can read the live SceneTree, get and set runtime
 properties, call methods, emit signals, inject input for play-testing, read performance
-monitors, and capture in-game frames. On **Godot 4.5+** it additionally captures the
+monitors, and capture in-game frames. It also runs a family of **read-only runtime
+assertions** — node state, scene structure, on-screen text, performance baselines, and
+screenshot diffs — for checking a running game the way a test would. On **Godot 4.5+** it
+additionally captures the
 game's console (`print()`, warnings, errors) with zero configuration.
 
 ### Plane D — Semantic and Debugging
@@ -565,7 +568,7 @@ drive the live game → test.
 
 ## 8. Tool reference by family
 
-There are **271 tools** in total. This section summarizes them by family so you know what
+There are **276 tools** in total. This section summarizes them by family so you know what
 exists and where to look; for the exhaustive per-tool input/output JSON Schemas, see
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
@@ -646,12 +649,15 @@ Works without the editor open.
 - **`godot_run_managed`** / **`godot_output`** / **`godot_stop`** — run the game as a
   managed child process with captured stdout/stderr, read that console output, and stop it.
 
-### Plane C — Runtime bridge (`runtime_*`, 9 tools)
+### Plane C — Runtime bridge (`runtime_*`, 14 tools)
 
 Requires the game running. `runtime_get_tree`, `runtime_get_property`,
 `runtime_set_property` *(destructive)*, `runtime_call_method` *(destructive)*,
 `runtime_emit_signal` *(destructive)*, `runtime_inject_input` *(destructive)*,
-`runtime_get_monitors`, `runtime_screenshot`, and `runtime_get_log`.
+`runtime_get_monitors`, `runtime_screenshot`, and `runtime_get_log`. Plus a read-only
+verification family: `runtime_assert_node_state`, `runtime_assert_scene_structure`,
+`runtime_assert_perf`, `runtime_assert_screen_text`, and `runtime_screenshot_diff` (all
+non-destructive — they check the running game without changing it).
 
 ### Plane D — Semantic and debugging
 
@@ -868,7 +874,7 @@ deterministic in-engine stand-ins with no external model; the `command` backend 
 command you configure and should only point at trusted code.
 
 **How many tools are there, and where's the full list?**
-271 tools and 5 resources. The exhaustive per-tool schemas are in
+276 tools and 5 resources. The exhaustive per-tool schemas are in
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
 
 **What are those `{ "__type__": ... }` values I see in tool arguments?**

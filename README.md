@@ -6,8 +6,8 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.13.0 · addon 1.4.2 · 271 tools + 5 MCP resources · MIT.** The host builds against
-> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 367-test suite plus
+> **npm 1.15.0 · addon 1.5.0 · 276 tools + 5 MCP resources · MIT.** The host builds against
+> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 380-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
 Breakpoint MCP connects an MCP-compatible AI assistant to a running Godot editor and
@@ -22,7 +22,7 @@ reimplementing them, so behavior tracks the engine you already have.
 
 ## What it does
 
-Breakpoint MCP is organized into four capability **planes** (271 tools + 5 resources):
+Breakpoint MCP is organized into four capability **planes** (276 tools + 5 resources):
 
 - **Plane A — Live Editor Bridge** (~145 tools: `editor_*`, `scene_*`, `node_*`,
   `signal_*`, `resource_*`, `filesystem_*`, `anim_*`, and more): a Godot `EditorPlugin`
@@ -46,7 +46,10 @@ Breakpoint MCP is organized into four capability **planes** (271 tools + 5 resou
 - **Plane C — Runtime Bridge** (`runtime_*`): an autoload (`BreakpointRuntimeBridge`) the
   plugin registers into every run opens a loopback server **inside the running game** —
   live SceneTree, runtime property get/set, method calls, signal emission, input
-  injection for play-testing, performance monitors, and in-game frame capture. On Godot
+  injection for play-testing, performance monitors, and in-game frame capture — plus a
+  read-only verification family (`runtime_assert_*` and `runtime_screenshot_diff`) for
+  checking node state, scene structure, on-screen text, performance baselines, and
+  screenshot diffs against a running game. On Godot
   4.5+ it also captures the game's console (`print()`, warnings, errors) with zero
   configuration.
 
