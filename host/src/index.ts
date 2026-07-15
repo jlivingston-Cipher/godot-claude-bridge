@@ -1,28 +1,14 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, selectToolsets } from "./config.js";
 import { BridgeClient } from "./bridge.js";
 import { LspClient } from "./lsp.js";
 import { CsLspClient } from "./cslsp.js";
 import { CsDapClient } from "./csdap.js";
 import { StdioChannel } from "./stdio.js";
 import { DapClient } from "./dap.js";
-import { registerCliTools } from "./tools/cli.js";
-import { registerEditorTools } from "./tools/editor.js";
-import { registerLspTools } from "./tools/lsp.js";
-import { registerCsLspTools } from "./tools/cslsp.js";
-import { registerDapTools } from "./tools/dap.js";
-import { registerCsDapTools } from "./tools/csdap.js";
-import { registerRuntimeTools } from "./tools/runtime.js";
-import { registerProcessTools } from "./tools/processes.js";
-import { registerKnowledgeTools } from "./tools/knowledge.js";
-import { registerVcsTools } from "./tools/vcs.js";
-import { registerAssetGenTools } from "./tools/assetgen.js";
-import { registerNetcodeTools } from "./tools/netcode.js";
-import { registerBackendTools } from "./tools/backend.js";
-import { registerTabletopTools } from "./tools/tabletop.js";
-import { registerResources } from "./tools/resources.js";
+import { buildToolsets } from "./toolsets.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
 import { RESOURCE_CAPABILITIES, registerResourceSubscriptions } from "./subscriptions.js";
@@ -79,57 +65,50 @@ async function main(): Promise<void> {
   );
 
   // B1: enforce frozen output schemas on every structured tool. Must run before
-  // the register*Tools calls below — it wraps server.registerTool.
+  // any register*Tools call — it wraps server.registerTool.
   applyOutputSchemas(server);
 
-  // Plane B (headless CLI): works without the editor running.
-  registerCliTools(server, config);
-  // Plane A (live editor): requires the editor open with the Breakpoint MCP plugin.
-  registerEditorTools(server, bridge);
-  // Plane D (semantic): connects to Godot's GDScript language server (LSP, 6005).
-  registerLspTools(server, lsp, config);
-  // Plane D (C# semantic, D4 C2): drives OmniSharp over stdio for the cs_* tools.
-  registerCsLspTools(server, csLsp, config);
-  // Plane D (debugging): connects to Godot's Debug Adapter (DAP, 6006).
-  registerDapTools(server, dap, config);
-  // Plane D (C# debugging, D4 C3): drives netcoredbg over stdio for the cs_dbg_* tools.
-  registerCsDapTools(server, csDap, config);
-  // Plane C (runtime): connects to the in-game runtime autoload (9081).
-  registerRuntimeTools(server, runtime);
-  // Phase 4: managed run + captured console output (transparent print() logs).
-  const processes = registerProcessTools(server, config);
-  // Group K: host-side knowledge & search (project grep, symbol/usage index, idiom lookup).
-  registerKnowledgeTools(server, config);
-  // Group L: host-side version control (vcs_*). Read-only core over the `git` binary
-  // (status/log/diff/show/branches/blame) rooted at the project path — no editor, no
-  // language server, so it answers whenever the project is a git work tree. Mutating
-  // git tools are deferred pending a scope steer and will reuse the elicitation gate.
-  registerVcsTools(server, config);
-  // Group J: AI asset generation (delegated backend / connected client; degrades
-  // to a request spec when no backend is configured). Writes + imports via the bridge.
-  registerAssetGenTools(server, bridge, config);
-  // Group M: native multiplayer & backend scaffolding (mp_*). Pure authoring —
-  // undoable node ops (spawner/synchronizer/authority) + gated GDScript codegen
-  // (enet/webrtc peer, @rpc wiring, lobby). Hosts nothing; scaffolds everything.
-  registerNetcodeTools(server, bridge, config);
-  // Group M (second half): backend-SDK integration scaffolding (backend_* / *_scaffold).
-  // Detects the installed SDK (SilentWolf/Nakama/PlayFab/Photon) and generates gated
-  // GDScript against it; degrades cleanly when the SDK is absent or lacks the feature.
-  registerBackendTools(server, bridge, config);
-  // Group N: card/board/piece authoring composites (card_*). Host-side scripted
-  // sequences of existing editor-bridge primitives (scene/control/node/theme/
-  // resource) — they build + data-bind scenes, add no addon method, and invent
-  // no game rules or data.
-  registerTabletopTools(server, bridge, config);
-  // Phase 4: MCP resources (scene tree, editor state, runtime tree/log, ClassDB docs).
-  registerResources(server, bridge, runtime);
+  // The A/B/C/D planes ARE the grouping. Build the ordered toolset registry
+  // (the single source of truth, shared with the registration tests) and
+  // register only the selected groups. Default (BREAKPOINT_TOOLSETS unset) =
+  // every group → the full 276-tool surface, byte-identical to before. A filter
+  // lets a client that can't defer tools, or a user who wants a smaller default
+  // menu, load only the planes a project needs (GitHub-MCP `--toolsets` style).
+  let processes: { killAll: () => void } | undefined;
+  const toolsets = buildToolsets({
+    server,
+    bridge,
+    runtime,
+    lsp,
+    csLsp,
+    dap,
+    csDap,
+    config,
+    onProcesses: (h) => {
+      processes = h;
+    },
+  });
+  const enabled = selectToolsets(
+    toolsets.map((t) => t.id),
+    config.toolsets,
+    (unknown) => log(`ignoring unknown BREAKPOINT_TOOLSETS token(s): ${unknown.join(", ")}`),
+  );
+  for (const ts of toolsets) if (enabled.has(ts.id)) ts.run();
+
   // D3: resource subscriptions — push notifications/resources/updated when a
   // subscribed godot://… resource changes (editor selection / edited scene, or
-  // the running game's live SceneTree). Rapid changes are coalesced per-URI; the
-  // trailing window is overridable via BREAKPOINT_RESOURCE_COALESCE_MS.
+  // the running game's live SceneTree). Adds no tools (pure notification
+  // plumbing), so it's wired here rather than as a toolset, gated on `resources`.
+  // Rapid changes are coalesced per-URI; the trailing window is overridable via
+  // BREAKPOINT_RESOURCE_COALESCE_MS.
   const coalesceRaw = process.env.BREAKPOINT_RESOURCE_COALESCE_MS;
   const coalesceMs = coalesceRaw ? Number.parseInt(coalesceRaw, 10) : undefined;
-  registerResourceSubscriptions(server, bridge, runtime, undefined, { coalesceMs });
+  if (enabled.has("resources")) {
+    registerResourceSubscriptions(server, bridge, runtime, undefined, { coalesceMs });
+  }
+  if (config.toolsets) {
+    log(`toolsets enabled: ${[...enabled].sort().join(", ")} (${enabled.size}/${toolsets.length} groups)`);
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -147,7 +126,7 @@ async function main(): Promise<void> {
     csLsp.close();
     dap.close();
     csDap.close();
-    processes.killAll();
+    processes?.killAll();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

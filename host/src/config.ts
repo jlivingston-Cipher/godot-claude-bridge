@@ -85,6 +85,15 @@ export interface Config {
   assetGenCommand: string;
   assetGenProvider: string;
   assetGenTimeoutMs: number;
+  /**
+   * Plane/group toolset selection (BREAKPOINT_TOOLSETS). `null` = the full
+   * surface (default, backward-compatible). A non-empty list enables only the
+   * named register-groups — e.g. `runtime`, `editor`, `lsp` — or the plane
+   * aliases `a`/`b`/`c`/`d` (and `csharp`, `semantic`, `all`). Lets a client
+   * that can't defer tools, or a user who wants a smaller default menu, load
+   * only the planes a project needs. See `selectToolsets`.
+   */
+  toolsets: string[] | null;
 }
 
 export function loadConfig(): Config {
@@ -136,5 +145,65 @@ export function loadConfig(): Config {
     assetGenCommand: process.env.BREAKPOINT_ASSETGEN_CMD ?? "",
     assetGenProvider: process.env.BREAKPOINT_ASSETGEN_PROVIDER ?? "",
     assetGenTimeoutMs: Number.parseInt(process.env.BREAKPOINT_ASSETGEN_TIMEOUT_MS ?? "120000", 10),
+    toolsets: parseToolsets(process.env.BREAKPOINT_TOOLSETS),
   };
+}
+
+/** Parse the raw BREAKPOINT_TOOLSETS env into a normalized token list (or null
+ *  for "unset" → full surface). Comma/whitespace separated, lower-cased. */
+export function parseToolsets(raw: string | undefined): string[] | null {
+  if (raw == null) return null;
+  const toks = raw
+    .split(/[,\s]+/)
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  return toks.length ? toks : null;
+}
+
+/**
+ * Plane/convenience aliases → concrete toolset ids. Kept here (not in
+ * `toolsets.ts`) so selection has no dependency on the register* functions and
+ * stays trivially unit-testable.
+ */
+export const TOOLSET_ALIASES: Record<string, string[]> = {
+  a: ["editor"],
+  b: ["cli"],
+  c: ["runtime"],
+  d: ["lsp", "cslsp", "dap", "csdap"],
+  csharp: ["cslsp", "csdap"],
+  semantic: ["lsp", "cslsp", "dap", "csdap"],
+};
+
+/**
+ * Resolve a requested toolset list against the known ids.
+ *  - `requested == null`  → every id (the default full surface).
+ *  - aliases expand to their ids; unknown tokens are dropped (reported via
+ *    `onUnknown`, so `index.ts` can warn without this being impure).
+ *  - if nothing valid resolves, fall back to the full surface (a misconfigured
+ *    filter must never silently yield an empty, useless server).
+ * Returns a Set preserving membership only; the caller iterates the ordered
+ * toolset list, so registration order is unaffected.
+ */
+export function selectToolsets(
+  allIds: readonly string[],
+  requested: string[] | null,
+  onUnknown?: (tokens: string[]) => void,
+): Set<string> {
+  const known = new Set(allIds);
+  if (requested == null) return new Set(allIds);
+  const out = new Set<string>();
+  const unknown: string[] = [];
+  for (const tok of requested) {
+    if (tok === "all") {
+      for (const id of allIds) out.add(id);
+    } else if (TOOLSET_ALIASES[tok]) {
+      for (const id of TOOLSET_ALIASES[tok]) if (known.has(id)) out.add(id);
+    } else if (known.has(tok)) {
+      out.add(tok);
+    } else {
+      unknown.push(tok);
+    }
+  }
+  if (unknown.length && onUnknown) onUnknown(unknown);
+  return out.size ? out : new Set(allIds);
 }

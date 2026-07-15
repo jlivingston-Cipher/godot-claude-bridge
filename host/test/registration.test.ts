@@ -1,20 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerCliTools } from "../src/tools/cli.js";
-import { registerEditorTools } from "../src/tools/editor.js";
-import { registerLspTools } from "../src/tools/lsp.js";
-import { registerCsLspTools } from "../src/tools/cslsp.js";
-import { registerDapTools } from "../src/tools/dap.js";
-import { registerCsDapTools } from "../src/tools/csdap.js";
-import { registerRuntimeTools } from "../src/tools/runtime.js";
-import { registerProcessTools } from "../src/tools/processes.js";
-import { registerKnowledgeTools } from "../src/tools/knowledge.js";
-import { registerVcsTools } from "../src/tools/vcs.js";
-import { registerAssetGenTools } from "../src/tools/assetgen.js";
-import { registerNetcodeTools } from "../src/tools/netcode.js";
-import { registerBackendTools } from "../src/tools/backend.js";
-import { registerTabletopTools } from "../src/tools/tabletop.js";
-import { registerResources } from "../src/tools/resources.js";
+import { buildToolsets } from "../src/toolsets.js";
 import { applyOutputSchemas, outputSchemas } from "../src/schemas.js";
 import { loadConfig } from "../src/config.js";
 
@@ -44,26 +30,25 @@ function registerAll() {
     server: { elicitInput: async () => ({ action: "decline" }) },
   };
 
-  const mcp = server as unknown as Parameters<typeof registerCliTools>[0];
+  const mcp = server as unknown as Parameters<typeof applyOutputSchemas>[0];
   const stub = {} as unknown as never;
   const cfg = loadConfig();
 
   applyOutputSchemas(mcp); // wraps registerTool to inject frozen output schemas
-  registerCliTools(mcp, cfg);
-  registerEditorTools(mcp, stub);
-  registerLspTools(mcp, stub, cfg);
-  registerCsLspTools(mcp, stub, cfg);
-  registerDapTools(mcp, stub, cfg);
-  registerCsDapTools(mcp, stub, cfg);
-  registerRuntimeTools(mcp, stub);
-  registerProcessTools(mcp, cfg);
-  registerKnowledgeTools(mcp, cfg);
-  registerVcsTools(mcp, cfg);
-  registerAssetGenTools(mcp, stub, cfg);
-  registerNetcodeTools(mcp, stub, cfg);
-  registerBackendTools(mcp, stub, cfg);
-  registerTabletopTools(mcp, stub, cfg);
-  registerResources(mcp, stub, stub);
+  // buildToolsets is the SAME ordered registry index.ts drives, so running every
+  // toolset here asserts the real surface. Resource subscriptions add no tools
+  // and are wired separately in index.ts, so they're intentionally not run here.
+  const toolsets = buildToolsets({
+    server: mcp,
+    bridge: stub,
+    runtime: stub,
+    lsp: stub,
+    csLsp: stub,
+    dap: stub,
+    csDap: stub,
+    config: cfg,
+  });
+  for (const ts of toolsets) ts.run();
 
   return { calls, resources };
 }

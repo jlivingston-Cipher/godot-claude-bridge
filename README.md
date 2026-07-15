@@ -209,10 +209,38 @@ and wrapper key differ.
 | `GODOT_LSP_TIMEOUT_MS` / `GODOT_DAP_TIMEOUT_MS` | `15000` / `20000` | LSP / DAP timeouts |
 | `BREAKPOINT_RUNTIME_HOST` / `BREAKPOINT_RUNTIME_PORT` | `127.0.0.1` / `9081` | In-game runtime bridge (must match the autoload) |
 | `BREAKPOINT_RUNTIME_TIMEOUT_MS` | `15000` | Runtime request timeout |
+| `BREAKPOINT_TOOLSETS` | *(unset → all)* | Comma/space list of tool groups or planes to enable — see [Toolsets](#toolsets-optional--load-only-the-planes-you-need) |
 
 > **Renamed from `CLAUDE_*`:** the `BREAKPOINT_*` variables above (plus `BREAKPOINT_RESOURCE_COALESCE_MS`) were named `CLAUDE_*` in earlier versions. The legacy `CLAUDE_*` names were honoured with a one-time deprecation warning in `1.0.0` and **removed in `1.1.0`** — use the `BREAKPOINT_*` names. `GODOT_*` variables are unchanged.
 
 The full, annotated configuration reference is in the [User Guide](docs/USER_GUIDE.md).
+
+### Toolsets (optional — load only the planes you need)
+
+By default the server registers the full surface (276 tools). On Claude Code that costs
+nothing at decision time: **Tool Search** defers the catalog and loads each schema on demand
+(a measured **~86–98% upfront token reduction** — the model never sees all 276 at once). For
+clients that can't defer tools, or when you just want a smaller default menu, set
+`BREAKPOINT_TOOLSETS` to a comma- or space-separated list of groups; only those register. The
+four **planes already are the grouping**, so the aliases mirror them:
+
+| Token | Enables |
+|---|---|
+| `a` | Plane A — live editor authoring (`editor`) |
+| `b` | Plane B — headless CLI (`cli`) |
+| `c` | Plane C — running-game runtime + verification family (`runtime`) |
+| `d` | Plane D — GDScript & C# LSP/DAP (`lsp,cslsp,dap,csdap`) |
+| `csharp` | The C# language-server + debugger groups (`cslsp,csdap`) |
+| `all` | The full surface (the default) |
+
+…or any of the concrete group ids: `cli editor lsp cslsp dap csdap runtime processes
+knowledge vcs assetgen netcode backend tabletop resources`.
+
+Examples: `BREAKPOINT_TOOLSETS=c` → 14 runtime tools; `a,b` → 152 (editor + CLI);
+`editor,runtime,vcs` → 172. Unknown tokens are ignored, and a filter that resolves to nothing
+falls back to the full surface — a typo never yields an empty server. This is a **menu filter,
+not a capability cut**: every tool that loads is the same typed, schema-validated, undoable
+tool it always was.
 
 ## Compatibility
 
