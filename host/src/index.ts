@@ -9,6 +9,7 @@ import { CsDapClient } from "./csdap.js";
 import { StdioChannel } from "./stdio.js";
 import { DapClient } from "./dap.js";
 import { buildToolsets } from "./toolsets.js";
+import { registerRecipes } from "./recipes.js";
 import { applyOutputSchemas } from "./schemas.js";
 import { taskStore, TASK_CAPABILITIES } from "./tasks.js";
 import { RESOURCE_CAPABILITIES, registerResourceSubscriptions } from "./subscriptions.js";
@@ -109,6 +110,11 @@ async function main(): Promise<void> {
   if (config.toolsets) {
     log(`toolsets enabled: ${[...enabled].sort().join(", ")} (${enabled.size}/${toolsets.length} groups)`);
   }
+
+  // Recipes: a free, curated task-recipe layer exposed as MCP prompts (discoverable
+  // via prompts/list). Adds NO tools — the 276-tool count is unchanged — and drives
+  // the enforced tools above, so it's a skill-pack layer over typed/undoable tools.
+  registerRecipes(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

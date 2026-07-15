@@ -308,6 +308,24 @@ falls back to the full surface — a typo never yields an empty server. This is 
 not a capability cut**: every tool that loads is the same typed, schema-validated, undoable
 tool it always was.
 
+## Recipes (free, curated task workflows)
+
+Breakpoint ships a set of **recipes** — short, opinionated workflows that drive its own
+enforced tools to accomplish a common Godot task and then *verify* it. They're exposed as
+standard **MCP prompts** (discoverable via `prompts/list`), so a client can pull one on demand:
+
+- **`recipe_2d_player_controller`** — a movable `CharacterBody2D` with input actions + camera, then a runtime check that it actually moved.
+- **`recipe_wire_signal_and_assert`** — connect a signal and prove at runtime the handler fired.
+- **`recipe_debug_inspect_variable`** — set a breakpoint, launch under the debugger, read real call-stack values.
+- **`recipe_screenshot_regression`** — golden-image check for a scene via `runtime_screenshot_diff`.
+- **`recipe_type_safe_edit`** — edit GDScript with the language server (symbols, references, diagnostics) before running.
+- **`recipe_csharp_fix_and_debug`** — the same inspect → fix → debug loop for C# via OmniSharp + netcoredbg.
+
+A recipe is the same idea as a paid "skill pack", with two differences that matter: it's
+**free** (MIT, shipped in the server) and it sits **over typed, schema-validated, undoable
+tools** — so the contract is executed by the server, not merely described in prose the model
+might misapply. Recipes add **no tools** (the count stays 276) and cost nothing until pulled.
+
 ## Compatibility
 
 Breakpoint MCP is a standard MCP server that talks over stdio, so in principle it works
