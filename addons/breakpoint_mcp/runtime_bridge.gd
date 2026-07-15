@@ -259,6 +259,8 @@ func _dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _assert_node_state(params)
 		"runtime.assert_scene_structure":
 			return _assert_scene_structure(params)
+		"runtime.assert_perf":
+			return _assert_perf(params)
 		_:
 			return _err("unknown_method", "No such method: %s" % method)
 
@@ -535,3 +537,38 @@ func _deep_equal(a: Variant, b: Variant) -> bool:
 				return false
 		return true
 	return a == b
+
+
+func _assert_perf(params: Dictionary) -> Dictionary:
+	var raw_baseline: Variant = params.get("baseline", {})
+	var baseline: Dictionary = raw_baseline if typeof(raw_baseline) == TYPE_DICTIONARY else {}
+	var tol := float(params.get("tolerance", 0.0))
+	var raw_dir: Variant = params.get("direction", {})
+	var dir_overrides: Dictionary = raw_dir if typeof(raw_dir) == TYPE_DICTIONARY else {}
+	var regressions: Array = []
+	var monitors := {}
+	var checked := 0
+	for key_v in baseline.keys():
+		var key := String(key_v)
+		if not MONITORS.has(key):
+			continue
+		checked += 1
+		var current := float(Performance.get_monitor(MONITORS[key]))
+		var base_val := float(baseline[key])
+		monitors[key] = current
+		var direction := "higher_better" if key == "time/fps" else "lower_better"
+		if dir_overrides.has(key):
+			direction = String(dir_overrides[key])
+		var passed := true
+		if direction == "higher_better":
+			passed = current >= base_val * (1.0 - tol)
+		else:
+			passed = current <= base_val * (1.0 + tol)
+		if not passed:
+			regressions.append({"key": key, "baseline": base_val, "current": current, "direction": direction})
+	return _ok({
+		"ok": regressions.is_empty(),
+		"checked": checked,
+		"regressions": regressions,
+		"monitors": monitors,
+	})

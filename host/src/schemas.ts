@@ -502,6 +502,19 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
       }),
     ),
   },
+  runtime_assert_perf: {
+    ok: z.boolean(),
+    checked: z.number(),
+    regressions: z.array(
+      z.object({
+        key: z.string(),
+        baseline: z.number(),
+        current: z.number(),
+        direction: z.string(),
+      }),
+    ),
+    monitors: z.record(z.number()),
+  },
 
   // ---- Group K: knowledge & search ----
   // Host-side project index (tools/knowledge.ts) — no bridge/LSP; read the project files directly.

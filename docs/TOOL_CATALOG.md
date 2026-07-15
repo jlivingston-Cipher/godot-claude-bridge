@@ -1,6 +1,6 @@
 # Godot–Breakpoint MCP — MCP Tool-Schema Catalog
 
-Complete tool contract for the bridge — **273 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
+Complete tool contract for the bridge — **274 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
 
 > Design note: as of **v0.4.3 (track B1)** these output schemas are **enforced at runtime**. `host/src/schemas.ts` freezes the `structuredContent` shape of every data tool and `applyOutputSchemas()` injects it as that tool's `outputSchema`, which the MCP SDK validates on every success result (`isError` results are exempt). The shapes were frozen from the v0.4.2 live-validation run, so the documented contract below **is** the enforced contract. `z.object` is non-strict, so a tool may still return *extra* fields without failing validation (the schema pins the required envelope, not an exhaustive field list).
 
@@ -2532,6 +2532,13 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
 ```
 - **Output** `{ ok, checked, failures[] }` — read-only. `ok` is true when every expectation held; each failure is `{ path, reason, expected?, actual? }` where `reason` is one of `missing` / `type_mismatch` / `expected_absent_but_present`.
 
+### `runtime_assert_perf` ✅
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["baseline"], "properties": { "baseline": { "type": "object", "additionalProperties": { "type": "number" }, "description": "monitor key -> baseline value (captured earlier via runtime_get_monitors)" }, "tolerance": { "type": "number", "minimum": 0, "default": 0 }, "direction": { "type": "object", "additionalProperties": { "enum": ["higher_better", "lower_better"] } } } }
+```
+- **Output** `{ ok, checked, regressions[], monitors }` — read-only. `ok` is true when every checked monitor met its baseline within `tolerance`; each regression is `{ key, baseline, current, direction }`, and `monitors` maps every checked key to its current value. Direction defaults to `time/fps` higher-better and every other monitor lower-better, overridable per key. The baseline is supplied **inline** (capture it earlier via `runtime_get_monitors`), so the tool stays stateless and read-only — no in-plugin baseline store, no file writes.
+
 ---
 
 ---
@@ -4114,6 +4121,7 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `runtime_get_log` | C / Runtime | ✅ | – |
 | `runtime_assert_node_state` | C / Runtime | ✅ | – |
 | `runtime_assert_scene_structure` | C / Runtime | ✅ | – |
+| `runtime_assert_perf` | C / Runtime | ✅ | – |
 
 | `godot_run_managed` | B / Process | ✅ | – |
 | `godot_output` | B / Process | ✅ | – |

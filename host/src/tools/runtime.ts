@@ -217,4 +217,35 @@ export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): 
     },
     async ({ expect }) => call("runtime.assert_scene_structure", { expect }),
   );
+
+  server.registerTool(
+    "runtime_assert_perf",
+    {
+      title: "Runtime assert perf",
+      description:
+        "Assert that live Performance monitors meet a caller-supplied baseline within tolerance (read-only). " +
+        "Capture the baseline earlier with runtime_get_monitors and pass it back inline. Pass direction is inferred " +
+        "(time/fps is higher-better; every other monitor is lower-better) unless overridden per key.",
+      inputSchema: {
+        baseline: z
+          .record(z.number())
+          .describe("Monitor key -> baseline value (capture earlier via runtime_get_monitors)"),
+        tolerance: z
+          .number()
+          .nonnegative()
+          .optional()
+          .describe("Fractional tolerance applied to each comparison (default 0 = exact)"),
+        direction: z
+          .record(z.enum(["higher_better", "lower_better"]))
+          .optional()
+          .describe("Per-key override of the pass direction (defaults: time/fps higher_better, else lower_better)"),
+      },
+    },
+    async ({ baseline, tolerance, direction }) =>
+      call("runtime.assert_perf", {
+        baseline,
+        ...(tolerance !== undefined ? { tolerance } : {}),
+        ...(direction !== undefined ? { direction } : {}),
+      }),
+  );
 }

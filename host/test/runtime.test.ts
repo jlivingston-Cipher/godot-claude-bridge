@@ -209,3 +209,38 @@ test("runtime_assert_scene_structure forwards the expectation list", async () =>
   assert.equal(h.calls[0].method, "runtime.assert_scene_structure");
   assert.deepEqual(h.calls[0].params, { expect });
 });
+
+test("runtime_assert_perf forwards baseline/tolerance/direction", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", {
+    ok: true,
+    checked: 2,
+    regressions: [],
+    monitors: { "time/fps": 60, "render/total_draw_calls": 40 },
+  });
+  const r = await h.handler("runtime_assert_perf")({
+    baseline: { "time/fps": 60, "render/total_draw_calls": 50 },
+    tolerance: 0.1,
+    direction: { "time/fps": "higher_better" },
+  });
+  assert.notEqual(r.isError, true);
+  assert.deepEqual(r.structuredContent, {
+    ok: true,
+    checked: 2,
+    regressions: [],
+    monitors: { "time/fps": 60, "render/total_draw_calls": 40 },
+  });
+  assert.equal(h.calls[0].method, "runtime.assert_perf");
+  assert.deepEqual(h.calls[0].params, {
+    baseline: { "time/fps": 60, "render/total_draw_calls": 50 },
+    tolerance: 0.1,
+    direction: { "time/fps": "higher_better" },
+  });
+});
+
+test("runtime_assert_perf omits tolerance and direction when not supplied", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { ok: true, checked: 1, regressions: [], monitors: { "time/fps": 60 } });
+  await h.handler("runtime_assert_perf")({ baseline: { "time/fps": 60 } });
+  assert.deepEqual(h.calls[0].params, { baseline: { "time/fps": 60 } });
+});
