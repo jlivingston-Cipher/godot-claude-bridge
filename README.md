@@ -20,6 +20,46 @@ It speaks Godot's **own** protocols — the editor plugin's loopback bridge, and
 built-in **language server (LSP)** and **debug adapter (DAP)** — rather than
 reimplementing them, so behavior tracks the engine you already have.
 
+## Why Breakpoint?
+
+Most Godot MCP servers let an AI *see* and *edit* your game. Breakpoint's bet is the full
+**developer loop** — the same one a human uses in an IDE — built on two capabilities almost
+nothing else in the field has:
+
+- **A real step-debugger, for GDScript *and* C#.** Set a breakpoint, step, read the call
+  stack and real variable values, watch expressions, and evaluate in the paused frame —
+  over Godot's own **Debug Adapter** (and `netcoredbg` for C#). A server that only
+  screenshots the game and reads its live scene tree observes it from the outside;
+  Breakpoint can *stop* execution and look inside. This is the capability that is expensive
+  for anyone to copy.
+- **A real language server, for GDScript *and* C#.** Completion, hover, go-to-definition,
+  references, rename, and diagnostics — over Godot's built-in **LSP** (and OmniSharp for
+  C#) — so the assistant writes type-aware code and catches errors *before* running it.
+
+Everything is **schema-enforced, undo-safe, and confirmation-gated**: every edit goes
+through `EditorUndoRedoManager` (Ctrl-Z reverts anything the assistant did), destructive
+tools ask first, and every tool result is validated against a frozen output schema. It's
+**MIT and free** — the whole surface, no paid tier — and it's the only Godot MCP with a CI
+job that exercises the live editor, LSP, DAP, and runtime bridges against a **real headless
+Godot**.
+
+### "But it runs a Node process — isn't a single in-editor plugin simpler?"
+
+A zero-sidecar, GDScript-only plugin is genuinely simpler to install, and if all you need is
+scene and script edits from inside the editor, it's a fine choice. Breakpoint runs a small
+Node host **on purpose**: it is what lets the assistant act as a real **LSP and DAP client**
+(the step-debugging and type-aware editing above), run long jobs on the MCP **task model**,
+and connect the same way from any stdio MCP client. The host is the price of the debugger,
+not incidental plumbing — and the setup cost is one command:
+
+```bash
+npx breakpoint-mcp init     # copies + enables the addon and writes your MCP-client config
+npx breakpoint-mcp doctor   # verifies the Godot binary and all four bridges are live
+```
+
+If you never need to step through a bug or refactor against real symbols, you may not need
+the host at all. If you do, a zero-sidecar plugin cannot give it to you.
+
 ## What it does
 
 Breakpoint MCP is organized into four capability **planes** (276 tools + 5 resources):
