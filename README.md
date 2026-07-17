@@ -6,8 +6,8 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.16.0 · addon 1.5.0 · 276 tools + 5 MCP resources · MIT.** The host builds against
-> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 398-test suite plus
+> **npm 1.17.0 · addon 1.6.0 · 276 tools + 5 MCP resources · MIT.** The host builds against
+> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 407-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
 Breakpoint MCP connects an MCP-compatible AI assistant to a running Godot editor and
@@ -398,6 +398,12 @@ Breakpoint MCP is a **local co-development tool** and is built to keep you in co
   never raw file writes.
 - All sockets bind to **loopback (`127.0.0.1`) only**; handlers run on the editor **main
   thread**, so there are no threading hazards.
+- **Both bridges require a per-project shared secret** (default-on since **1.17.0**). The
+  addon mints a 64-char hex secret into the engine-managed, git-ignored `res://.godot/`, and
+  the host authenticates as the first frame on connect — so another local process on a shared
+  machine can neither drive the bridge nor bypass the confirmation gate. The secret is
+  compared in **constant time** and a bad handshake is refused without echoing it. Opt out
+  with `BREAKPOINT_BRIDGE_INSECURE=1`.
 - **Destructive tools are elicitation-gated:** the host asks the client to confirm before
   executing (for example `node_delete`, `project_set_setting`, `scene_new`, `gd_rename`
   with apply, the file/resource/script writers, and the `runtime_*` mutators). Pass
@@ -409,6 +415,20 @@ Breakpoint MCP is a **local co-development tool** and is built to keep you in co
   argument). These are opt-in and gated — point them only at code you trust.
 
 Security policy and how to report a vulnerability: see [SECURITY.md](SECURITY.md).
+
+### What the automation actually verifies (W/R/E)
+
+Breakpoint is explicit about *what kind of evidence* a result carries, using a three-tier
+honesty vocabulary:
+
+| Tier | Question | Evidence Breakpoint produces | Who asserts |
+|---|---|---|---|
+| **W — Wired** | Did the action actually happen? | Schema-frozen results, reversible via `EditorUndoRedoManager` | Automation |
+| **R — Runtime** | Does the running program behave? | Live assertions (`runtime_assert_*`), `runtime_screenshot_diff`, and a real DAP paused stack + variable values (GDScript **and** C#) | Automation |
+| **E — Experience** | Is it any good — fun, legible, the right feel? | Human perception; automation hands over evidence and leaves the verdict open | **Human only** |
+
+Most of the field proves R with a screenshot or a console line; Breakpoint proves it with an
+assertion, a diff, and a paused stack frame — and never lets automation claim **E**.
 
 ## Documentation
 
