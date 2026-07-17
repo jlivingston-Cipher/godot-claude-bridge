@@ -109,3 +109,37 @@ test("request() rejects with 'bridge_unavailable' when nothing is listening", as
   const client = new BridgeClient("127.0.0.1", deadPort, 5000);
   await assert.rejects(client.request("x"), isBridgeError("bridge_unavailable"));
 });
+
+// ---- loopback-auth handshake (host side) -----------------------------------
+
+test("prepends an auth line as the FIRST frame when a secret provider returns one", async () => {
+  const seen: BridgeReq[] = [];
+  const srv = await startBridge((req, s) => {
+    seen.push(req);
+    // The real addon marks the peer authed on a valid secret and awaits no reply
+    // for the auth line; only the following request gets a response.
+    if (req.method === "auth") return;
+    writeLine(s, { id: req.id, ok: true, result: {} });
+  });
+  const client = new BridgeClient("127.0.0.1", srv.port, 5000, "editor bridge", undefined, () => "hex-secret");
+  await client.request("editor.ping");
+  assert.equal(seen[0].method, "auth", "the auth line must precede the first request");
+  assert.deepEqual(seen[0].params, { secret: "hex-secret" });
+  assert.equal(seen[1].method, "editor.ping");
+  client.close();
+  await srv.close();
+});
+
+test("sends NO auth line when the secret provider yields null (backward-compatible)", async () => {
+  const seen: BridgeReq[] = [];
+  const srv = await startBridge((req, s) => {
+    seen.push(req);
+    writeLine(s, { id: req.id, ok: true, result: {} });
+  });
+  const client = new BridgeClient("127.0.0.1", srv.port, 5000, "editor bridge", undefined, () => null);
+  await client.request("editor.ping");
+  assert.equal(seen.length, 1, "no auth line should be sent when there is no secret");
+  assert.equal(seen[0].method, "editor.ping");
+  client.close();
+  await srv.close();
+});

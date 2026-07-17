@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig, selectToolsets } from "./config.js";
 import { BridgeClient } from "./bridge.js";
+import { resolveBridgeSecret } from "./secret.js";
 import { LspClient } from "./lsp.js";
 import { CsLspClient } from "./cslsp.js";
 import { CsDapClient } from "./csdap.js";
@@ -18,13 +19,21 @@ import { log } from "./logger.js";
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const bridge = new BridgeClient(config.bridgeHost, config.bridgePort, config.bridgeTimeoutMs);
+  const bridge = new BridgeClient(
+    config.bridgeHost,
+    config.bridgePort,
+    config.bridgeTimeoutMs,
+    "editor bridge",
+    undefined,
+    () => resolveBridgeSecret(config.projectPath, ["BREAKPOINT_BRIDGE_SECRET"]),
+  );
   const runtime = new BridgeClient(
     config.runtimeHost,
     config.runtimePort,
     config.runtimeTimeoutMs,
     "runtime bridge",
     "Is the project running? Launch it (godot_run_project or dbg_launch) with the Breakpoint MCP plugin enabled — it auto-registers the runtime autoload.",
+    () => resolveBridgeSecret(config.projectPath, ["BREAKPOINT_RUNTIME_SECRET", "BREAKPOINT_BRIDGE_SECRET"]),
   );
   const lsp = new LspClient(config.lspHost, config.lspPort, config.projectUri, config.lspTimeoutMs);
   // D4 C2: the C# semantic plane. OmniSharp is spawned over stdio (lazily, on the

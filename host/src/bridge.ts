@@ -47,6 +47,14 @@ export class BridgeClient {
     private readonly defaultTimeoutMs: number,
     private readonly label = "editor bridge",
     private readonly hint = 'Is the editor open with the "Breakpoint MCP" plugin enabled?',
+    /**
+     * Loopback-auth secret provider, read lazily on each connect. When it
+     * returns a non-empty string the client sends it as the FIRST line on the
+     * connection (see connect()); null/undefined → no auth line, matching an
+     * insecure or not-yet-provisioned bridge. Lazy so a secret minted after the
+     * host started (editor launched later) is picked up on the next (re)connect.
+     */
+    private readonly secretProvider?: () => string | null,
   ) {}
 
   /** Register a listener for addon-pushed resource-change events. */
@@ -66,6 +74,17 @@ export class BridgeClient {
         this.socket = socket;
         this.connecting = null;
         this.clearReconnect();
+        // Loopback-auth handshake: if a secret is available it MUST be the first
+        // line on the connection. TCP preserves order and the addon drains lines
+        // sequentially, so this is guaranteed to be processed before any request
+        // line — no await needed. With no secret we send nothing and behave
+        // exactly as before (backward-compatible with an insecure bridge). The
+        // addon's auth reply carries no id, so onMessage() ignores it; on a
+        // failed handshake the addon closes the socket and onClose() reconnects.
+        const secret = this.secretProvider?.() ?? null;
+        if (secret) {
+          socket.write(JSON.stringify({ method: "auth", params: { secret } }) + "\n");
+        }
         log(`bridge connected to ${this.host}:${this.port}`);
         resolve(socket);
       });

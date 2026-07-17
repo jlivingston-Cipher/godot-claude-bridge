@@ -45,9 +45,16 @@ const MONITORS := {
 	"audio/output_latency": Performance.AUDIO_OUTPUT_LATENCY,
 }
 
+const BridgeSecret := preload("res://addons/breakpoint_mcp/bridge_secret.gd")
+
 var _server: TCPServer
 var _clients: Array = [] # Array of {peer, buf}
 var _port: int = DEFAULT_PORT
+## Loopback-auth handshake state (default-on; see bridge_secret.gd), mirroring the
+## editor bridge_server. `_auth_required` is false only when auth is explicitly
+## disabled (BREAKPOINT_BRIDGE_INSECURE) or the secret can't be minted.
+var _secret: String = ""
+var _auth_required: bool = false
 var _log: Array = []     # ring buffer of {seq, level, message}
 var _log_seq: int = 0
 var _tree_dirty: bool = false
@@ -62,6 +69,7 @@ func _ready() -> void:
 	var env_port := OS.get_environment("BREAKPOINT_RUNTIME_PORT")
 	if env_port != "" and env_port.is_valid_int():
 		_port = int(env_port)
+	_setup_auth()
 	_server = TCPServer.new()
 	var err := _server.listen(_port, "127.0.0.1")
 	if err != OK:
@@ -77,6 +85,22 @@ func _ready() -> void:
 		tree.node_removed.connect(_on_tree_structure_changed)
 		tree.node_renamed.connect(_on_tree_structure_changed)
 	_install_log_capture()
+
+
+## Establish the loopback-auth secret unless explicitly disabled. Default-on:
+## BREAKPOINT_BRIDGE_INSECURE=1 (or =true) turns auth OFF (documented escape
+## hatch). If the secret can't be persisted, run WITHOUT auth rather than
+## bricking the bridge (a broken mint must not lock out the host).
+func _setup_auth() -> void:
+	var insecure := OS.get_environment("BREAKPOINT_BRIDGE_INSECURE").to_lower()
+	if insecure == "1" or insecure == "true":
+		_auth_required = false
+		push_warning("[breakpoint_runtime] BREAKPOINT_BRIDGE_INSECURE set — loopback bridge auth DISABLED")
+		return
+	_secret = BridgeSecret.load_or_mint()
+	_auth_required = _secret != ""
+	if not _auth_required:
+		push_error("[breakpoint_runtime] could not establish bridge secret — running WITHOUT auth")
 
 
 ## Public API: game code can route its own logs here for runtime.get_log to read.
@@ -119,7 +143,7 @@ func _process(_delta: float) -> void:
 	while _server.is_connection_available():
 		var peer := _server.take_connection()
 		if peer:
-			_clients.append({"peer": peer, "buf": ""})
+			_clients.append({"peer": peer, "buf": "", "authed": not _auth_required})
 	var alive: Array = []
 	for c in _clients:
 		var peer: StreamPeerTCP = c["peer"]
@@ -134,6 +158,10 @@ func _process(_delta: float) -> void:
 				var bytes: PackedByteArray = chunk[1]
 				c["buf"] += bytes.get_string_from_utf8()
 		_drain_lines(c)
+		if c.get("close", false):
+			peer.poll()
+			peer.disconnect_from_host()
+			continue
 		alive.append(c)
 	_clients = alive
 	# D3 follow-up: one runtime-tree push per frame if the SceneTree changed.
@@ -154,23 +182,44 @@ func _drain_lines(c: Dictionary) -> void:
 		var line := buf.substr(0, nl).strip_edges()
 		buf = buf.substr(nl + 1)
 		if line != "":
-			_handle_line(c["peer"], line)
+			_handle_line(c, line)
+			if c.get("close", false):
+				break
 	c["buf"] = buf
 
 
-func _handle_line(peer: StreamPeerTCP, line: String) -> void:
+func _handle_line(c: Dictionary, line: String) -> void:
+	var peer: StreamPeerTCP = c["peer"]
 	var parsed: Variant = JSON.parse_string(line)
 	if typeof(parsed) != TYPE_DICTIONARY:
+		if not c.get("authed", false):
+			_deny_unauth(c)
+			return
 		_send(peer, {"id": null, "ok": false, "error": {"code": "bad_json", "message": "Bad request"}})
 		return
 	var req: Dictionary = parsed
 	var id: Variant = req.get("id", null)
 	var method := String(req.get("method", ""))
 	var params: Dictionary = req.get("params", {}) if typeof(req.get("params")) == TYPE_DICTIONARY else {}
+	# Handshake gate: an unauthenticated peer may ONLY authenticate.
+	if not c.get("authed", false):
+		if method == "auth" and BridgeSecret.const_time_eq(String(params.get("secret", "")), _secret):
+			c["authed"] = true
+			_send(peer, {"id": id, "ok": true})
+		else:
+			_deny_unauth(c)
+		return
 	var result := _dispatch(method, params)
 	var response := {"id": id}
 	response.merge(result)
 	_send(peer, response)
+
+
+## Generic, no-echo denial for an unauthenticated peer; marks the connection for
+## closing. Never reveals the expected secret, the received value, or any detail.
+func _deny_unauth(c: Dictionary) -> void:
+	_send(c["peer"], {"id": null, "ok": false, "error": {"code": "unauthorized"}})
+	c["close"] = true
 
 
 func _send(peer: StreamPeerTCP, obj: Dictionary) -> void:
@@ -184,7 +233,7 @@ func _send(peer: StreamPeerTCP, obj: Dictionary) -> void:
 func broadcast_event(uri: String) -> void:
 	for c in _clients:
 		var peer: StreamPeerTCP = c["peer"]
-		if peer and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+		if peer and c.get("authed", false) and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 			_send(peer, {"event": "resource.changed", "uri": uri})
 
 

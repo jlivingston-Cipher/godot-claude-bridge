@@ -16,8 +16,10 @@ name: integration
 #                     compile + round-trip the interaction behaviour scripts, round-trip + play the card-flip animation,
 #                     and check board_tile_place's coordinate math against the engine's map_to_local. Also runs
 #                     editable_instance_smoke.gd (Finding-A) — proves a sealed sub-scene reverts overrides on reload
-#                     while an editable-instance persists them (the card_instance persist:true mechanism).
-#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE / BOARD_TILE / EDITABLE_INSTANCE / BRIDGE_REENTRANCY _SUMMARY / _FAIL markers.
+#                     while an editable-instance persists them (the card_instance persist:true mechanism). Also runs
+#                     bridge_auth_smoke.gd — the default-on loopback shared-secret handshake (pre-auth denied, wrong
+#                     secret denied, correct secret authenticates; constant-time compare).
+#                     Gates on the OPS_UNIT / CARD_BUILD / BOARD_BUILD / PIECE_BUILD / INTERACT_BUILD / CARD_SETFACE / BOARD_TILE / EDITABLE_INSTANCE / BRIDGE_REENTRANCY / BRIDGE_AUTH _SUMMARY / _FAIL markers.
 #   * cli-plane     — headless, deterministic, expected to pass. This is the gate.
 #   * runtime-plane — boots the example GAME headless (no editor, no GUI) and drives Plane C
 #                     against its in-game BreakpointRuntimeBridge autoload (:9081). Asserts D6
@@ -221,6 +223,20 @@ jobs:
           if grep -q "BRIDGE_REENTRANCY_FAIL" /tmp/bridge-reentrancy.log; then echo "::error::a bridge re-entrancy assertion failed"; exit 1; fi
           echo "Bridge re-entrancy regression passed: $(grep -o 'BRIDGE_REENTRANCY_SUMMARY.*' /tmp/bridge-reentrancy.log)"
 
+      - name: Run the loopback-bridge auth handshake smoke (default-on shared secret)
+        run: |
+          set -eu
+          "$GODOT_BIN" --headless --path "${{ github.workspace }}/example" \
+            --script res://tests/bridge_auth_smoke.gd > /tmp/bridge-auth.log 2>&1 || true
+          echo "=== bridge_auth_smoke.gd output ==="
+          cat /tmp/bridge-auth.log
+          echo "====================================="
+          # BRIDGE_AUTH_* markers are the source of truth (headless --script exit
+          # codes can be unreliable): require the summary, and fail on any FAIL.
+          grep -q "BRIDGE_AUTH_SUMMARY" /tmp/bridge-auth.log || { echo "::error::bridge_auth_smoke.gd produced no BRIDGE_AUTH_SUMMARY (script error?)"; exit 1; }
+          if grep -q "BRIDGE_AUTH_FAIL" /tmp/bridge-auth.log; then echo "::error::a bridge-auth handshake assertion failed"; exit 1; fi
+          echo "Bridge-auth handshake smoke passed: $(grep -o 'BRIDGE_AUTH_SUMMARY.*' /tmp/bridge-auth.log)"
+
   cli-plane:
     name: CLI plane vs real Godot (headless)
     runs-on: ubuntu-latest
@@ -290,6 +306,9 @@ jobs:
         working-directory: host
         env:
           GODOT_PROJECT: ${{ github.workspace }}/example
+          # The bridge auth handshake (default-on) is covered by bridge_auth_smoke.gd;
+          # this live probe connects without a secret, so disable auth for the boot.
+          BREAKPOINT_BRIDGE_INSECURE: '1'
         run: |
           set -eux
           # Plane C runs INSIDE the running game (no editor, no GUI): the runtime autoload opens
@@ -349,6 +368,9 @@ jobs:
           # A CI runner has no GPU, so Godot's default Vulkan backend segfaults on
           # init before the LSP can start. Force software OpenGL (Mesa llvmpipe).
           LIBGL_ALWAYS_SOFTWARE: '1'
+          # Bridge auth (default-on) is covered by bridge_auth_smoke.gd; this live
+          # probe connects without a secret, so disable auth for the boot.
+          BREAKPOINT_BRIDGE_INSECURE: '1'
         run: |
           set -eux
           xvfb-run -a -s "-screen 0 1280x720x24" \
@@ -421,6 +443,9 @@ jobs:
           # Same as the LSP plane: a CI runner has no GPU, so force software OpenGL
           # (Mesa llvmpipe) or Godot's default Vulkan backend segfaults on init.
           LIBGL_ALWAYS_SOFTWARE: '1'
+          # Bridge auth (default-on) is covered by bridge_auth_smoke.gd; this live
+          # probe connects without a secret, so disable auth for the boot.
+          BREAKPOINT_BRIDGE_INSECURE: '1'
         run: |
           set -eux
           xvfb-run -a -s "-screen 0 1280x720x24" \
@@ -624,6 +649,9 @@ jobs:
           # A CI runner has no GPU, so Godot's default Vulkan backend segfaults on init before the
           # addon bridge can start. Force software OpenGL (Mesa llvmpipe), same as the editor/dap planes.
           LIBGL_ALWAYS_SOFTWARE: '1'
+          # Bridge auth (default-on) is covered by bridge_auth_smoke.gd; this live
+          # probe connects without a secret, so disable auth for the boot.
+          BREAKPOINT_BRIDGE_INSECURE: '1'
         run: |
           set -eux
           xvfb-run -a -s "-screen 0 1280x720x24" \

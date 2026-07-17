@@ -58,6 +58,10 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# This regression targets the _process re-entrancy guard, not the auth
+	# handshake — run the bridge in insecure mode so the stub client's single
+	# line dispatches without a secret (the handshake has its own smoke).
+	OS.set_environment("BREAKPOINT_BRIDGE_INSECURE", "1")
 	OS.set_environment("BREAKPOINT_BRIDGE_PORT", str(TEST_PORT))
 	var server: Node = BridgeServer.new()
 	# Bind the loopback port directly: a node added to the root during
