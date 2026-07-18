@@ -47,9 +47,14 @@ test("doctor checkCapabilities reports the full surface when both groups are on"
   assert.equal(main.hint, undefined);
 });
 
-test("doctor flags a configured asset-gen backend when both groups are off, and clears it when enabled", () => {
+test("doctor flags a configured asset-gen backend unless code-execution is on", () => {
   const off = { ...loadConfig(), privilegedGroups: null, assetGenBackend: "command", assetGenCommand: "/bin/echo" };
   assert.ok(checkCapabilities(off).some((c) => c.name === "capability-assetgen"));
+
+  // network alone does NOT load the asset_gen_* tools — their only privileged
+  // path is the local command backend (code-execution), so the hint still fires.
+  const net = { ...off, privilegedGroups: ["network"] };
+  assert.ok(checkCapabilities(net).some((c) => c.name === "capability-assetgen"));
 
   const on = { ...off, privilegedGroups: ["code-execution"] };
   assert.ok(!checkCapabilities(on).some((c) => c.name === "capability-assetgen"));

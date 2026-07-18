@@ -236,13 +236,13 @@ export function checkCapabilities(config: Config): Check[] {
     (config.assetGenBackend && config.assetGenBackend !== "none") ||
     Boolean(config.assetGenCommand) ||
     Boolean(config.assetGenProvider);
-  if (assetGenConfigured && !enabled.has("code-execution") && !enabled.has("network")) {
+  if (assetGenConfigured && !enabled.has("code-execution")) {
     checks.push({
       name: "capability-assetgen",
       status: "ok",
       severity: "info",
-      detail: "asset-gen backend configured, but code-execution and network are both off — the asset_gen_* tools are not loaded",
-      hint: "Enable the matching group: BREAKPOINT_PRIVILEGED_GROUPS=code-execution (command backend) or network (provider backend).",
+      detail: "asset-gen backend configured, but code-execution is off — the asset_gen_* tools are not loaded",
+      hint: "Enable it: BREAKPOINT_PRIVILEGED_GROUPS=code-execution (the local command backend is the only privileged asset-gen path).",
     });
   }
   return checks;

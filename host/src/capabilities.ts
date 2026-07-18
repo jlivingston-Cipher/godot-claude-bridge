@@ -5,8 +5,7 @@
  *   • `code-execution` — tools that run arbitrary GDScript, invoke arbitrary
  *     methods, evaluate an expression in a paused debug frame, or run a local
  *     asset-gen *command* backend.
- *   • `network` — tools that egress beyond loopback: the asset-gen *provider*
- *     backend and the Group M backend SDK.
+ *   • `network` — tools that egress beyond loopback: the Group M backend SDK.
  *
  * Where toolsets filter whole planes, capability groups tag INDIVIDUAL tools and
  * DROP them at registration when their group isn't enabled — so a default
@@ -17,9 +16,9 @@
  *
  * A tool with NO capability tag is always registered. Semantics are a UNION: a
  * tool tagged with more than one group is registered when ANY of its groups is
- * enabled (the asset-gen generators are reachable via either the command backend
- * (code-execution) or the provider backend (network), so enabling either group
- * unlocks them).
+ * enabled. (No tool is multi-tagged today; the asset-gen generators were formerly
+ * `code-execution` + `network`, but their `network` path — an external *provider*
+ * backend — is not implemented, so they are `code-execution`-only until it ships.)
  *
  * This is defense-in-depth + a legible least-privilege default over a surface
  * that is already typed, schema-frozen, undoable, and destructive-op
@@ -38,7 +37,7 @@ export const CAPABILITY_GROUPS: readonly CapabilityGroup[] = ["code-execution", 
 export const GROUP_DESCRIBE: Record<CapabilityGroup, string> = {
   "code-execution":
     "Run arbitrary GDScript, invoke arbitrary methods, evaluate an expression in a paused debug frame, or run a local asset-gen command backend.",
-  network: "Egress beyond loopback — the asset-gen provider backend and the Group M backend SDK.",
+  network: "Egress beyond loopback — the Group M backend SDK.",
 };
 
 /**
@@ -54,14 +53,16 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, readonly CapabilityGroup
   runtime_call_method: ["code-execution"],
   dbg_evaluate: ["code-execution"],
   cs_dbg_evaluate: ["code-execution"],
-  // asset generation — reachable via the command backend (code-execution) OR the
-  // provider backend (network); registered when EITHER group is enabled.
-  asset_gen_configure: ["code-execution", "network"],
-  asset_gen_icon: ["code-execution", "network"],
-  asset_gen_sprite: ["code-execution", "network"],
-  asset_gen_texture: ["code-execution", "network"],
-  asset_gen_model: ["code-execution", "network"],
-  asset_gen_audio_sfx: ["code-execution", "network"],
+  // asset generation — the local command backend (code-execution) is the only
+  // privileged path. Formerly also tagged `network` for an external provider
+  // backend, but that backend is not implemented, so the network tag is dropped
+  // until it ships — keeps the advertised capability matching the real surface.
+  asset_gen_configure: ["code-execution"],
+  asset_gen_icon: ["code-execution"],
+  asset_gen_sprite: ["code-execution"],
+  asset_gen_texture: ["code-execution"],
+  asset_gen_model: ["code-execution"],
+  asset_gen_audio_sfx: ["code-execution"],
   // network — Group M backend SDK (egress to a backend provider)
   backend_configure: ["network"],
   backend_detect: ["network"],

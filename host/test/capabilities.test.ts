@@ -18,15 +18,16 @@ const FULL_TOOL_COUNT = 276;
 
 // The 14 privileged tools, split by which single group keeps them.
 const CODE_EXEC_ONLY = [
+  // arbitrary execution / invocation / paused-frame evaluation
   "cs_dbg_evaluate",
   "dbg_evaluate",
   "godot_run_headless_script",
   "godot_run_managed",
   "node_call_method",
   "runtime_call_method",
-].sort();
-const NETWORK_ONLY = ["backend_configure", "backend_detect"].sort();
-const ASSET_GEN_BOTH = [
+  // asset-gen generators — the local command backend is their only privileged
+  // path, so they load with code-execution alone (the network tag was dropped
+  // because no external provider backend is implemented).
   "asset_gen_audio_sfx",
   "asset_gen_configure",
   "asset_gen_icon",
@@ -34,7 +35,8 @@ const ASSET_GEN_BOTH = [
   "asset_gen_sprite",
   "asset_gen_texture",
 ].sort();
-const ALL_PRIVILEGED = [...CODE_EXEC_ONLY, ...NETWORK_ONLY, ...ASSET_GEN_BOTH].sort();
+const NETWORK_ONLY = ["backend_configure", "backend_detect"].sort();
+const ALL_PRIVILEGED = [...CODE_EXEC_ONLY, ...NETWORK_ONLY].sort();
 
 /**
  * Register the entire surface exactly as index.ts does — applyOutputSchemas, then
@@ -98,16 +100,14 @@ test("code-execution only keeps everything except the network-only tools (274)",
   const present = new Set(names);
   for (const t of NETWORK_ONLY) assert.ok(!present.has(t), `${t} needs the network group`);
   for (const t of CODE_EXEC_ONLY) assert.ok(present.has(t), `${t} should be present`);
-  for (const t of ASSET_GEN_BOTH) assert.ok(present.has(t), `${t} is reachable via code-execution`);
 });
 
-test("network only keeps everything except the pure code-execution tools (270)", () => {
+test("network only keeps everything except the pure code-execution tools (264)", () => {
   const names = registerWith(["network"]);
   assert.equal(names.length, FULL_TOOL_COUNT - CODE_EXEC_ONLY.length);
   const present = new Set(names);
   for (const t of CODE_EXEC_ONLY) assert.ok(!present.has(t), `${t} needs the code-execution group`);
   for (const t of NETWORK_ONLY) assert.ok(present.has(t), `${t} should be present`);
-  for (const t of ASSET_GEN_BOTH) assert.ok(present.has(t), `${t} is reachable via network`);
 });
 
 test("every tagged tool is a real tool in the full surface (no stale capability tags)", () => {
