@@ -39,6 +39,8 @@ Two differentiating capabilities are the reason to reach for Breakpoint:
   of inferring them from `print()` output and re-runs. A runnable example lives in
   [`example/demo/`](example/demo/): a buggy heal-on-hit combat scene where the debugger stops
   on `hp -= effective` and reveals `effective = -2` — a light hit *healing* instead of hurting.
+  The same bug is mirrored in C# at [`example-csharp/demo/`](example-csharp/demo/)
+  (`DemoCombat.TakeHit`), diagnosed the same way over `netcoredbg`.
 - **A language-server client for GDScript and C#.** Completion, hover, go-to-definition, find
   references, rename, and diagnostics — over Godot's LSP (and OmniSharp for C#). Edits are
   symbol-accurate rather than text-substituted, and type errors surface before the project

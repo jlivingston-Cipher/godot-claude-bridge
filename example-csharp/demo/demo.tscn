@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://bdemocs0combat"]
+
+[ext_resource type="Script" path="res://demo/DemoCombat.cs" id="1_democs"]
+
+[node name="Combat" type="Node2D"]
+script = ExtResource("1_democs")
+
+[node name="Label" type="Label" parent="."]
+offset_right = 200.0
+offset_bottom = 40.0
+text = "HP"
