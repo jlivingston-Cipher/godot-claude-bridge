@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://bqp0demo1combat"]
+
+[ext_resource type="Script" path="res://demo/demo_combat.gd" id="1_combat"]
+
+[node name="Combat" type="Node2D"]
+script = ExtResource("1_combat")
+
+[node name="Label" type="Label" parent="."]
+offset_right = 240.0
+offset_bottom = 48.0
+text = ""
