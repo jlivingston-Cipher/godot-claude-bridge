@@ -2,10 +2,17 @@
 ; C# / .NET counterpart of ../example (the GDScript fixture). Kept deliberately
 ; minimal: one scene, one C# script, the members every bridge plane exercises.
 ;
-; This project intentionally does NOT bundle the (GDScript) breakpoint_mcp addon:
-; the C#/.NET plane (D4) is served by OmniSharp (LSP) and the Godot Mono debugger
-; (DAP), which are independent of the GDScript editor/runtime bridge. Keeping the
-; addon out also avoids a third ADDON_VERSION copy under contract_check.py.
+; The C#/.NET diagnosis planes (D4) are served by OmniSharp (LSP) and the Godot
+; Mono debugger (DAP), independent of the GDScript editor/runtime bridge. This
+; project therefore does NOT bundle the editor plugin/bridge (operations.gd,
+; plugin.gd, bridge_server.gd) — so it carries NO ADDON_VERSION copy under
+; contract_check.py. It DOES bundle just the Plane-C runtime-bridge autoload
+; (runtime_bridge.gd + its variant_json.gd / bridge_secret.gd deps, registered
+; below) so the C# runtime-verify close mirrors ../example: run the scene, then
+; assert live C# node state (HealedEver == false, "YOU DIED" on screen) over the
+; runtime bridge — checks that FAIL before the clamp fix and PASS after. The
+; bridge reads C# auto-properties by their PascalCase names (Hp/HealedEver) with
+; no [Export] needed.
 
 config_version=5
 
@@ -26,3 +33,7 @@ project/assembly_name="ExampleCsharp"
 ; renderer segfaults on init without a GPU.
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[autoload]
+
+BreakpointRuntimeBridge="*res://addons/breakpoint_mcp/runtime_bridge.gd"

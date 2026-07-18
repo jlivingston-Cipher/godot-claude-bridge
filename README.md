@@ -40,7 +40,10 @@ Two differentiating capabilities are the reason to reach for Breakpoint:
   [`example/demo/`](example/demo/): a buggy heal-on-hit combat scene where the debugger stops
   on `hp -= effective` and reveals `effective = -2` — a light hit *healing* instead of hurting.
   The same bug is mirrored in C# at [`example-csharp/demo/`](example-csharp/demo/)
-  (`DemoCombat.TakeHit`), diagnosed the same way over `netcoredbg`.
+  (`DemoCombat.TakeHit`), diagnosed the same way over `netcoredbg` — and *verified* the
+  same way on both tracks: the read-only assertion family below proves the one-line clamp
+  over the runtime bridge (`HealedEver == false`, `"YOU DIED"` on screen), a check that
+  fails before the fix and passes after.
 - **A language-server client for GDScript and C#.** Completion, hover, go-to-definition, find
   references, rename, and diagnostics — over Godot's LSP (and OmniSharp for C#). Edits are
   symbol-accurate rather than text-substituted, and type errors surface before the project
