@@ -5,7 +5,7 @@ Welcome. This guide walks you, start to finish, through installing and using
 It is written for a Godot developer who has never seen the tool before. No prior
 knowledge of the Model Context Protocol (MCP) is assumed.
 
-- **Version:** host 1.18.1 · addon 1.6.0
+- **Version:** host 1.18.1 · addon 1.7.0
 - **License:** MIT
 - **What it exposes:** full 276 tools (secure-default 262 with the privileged groups off) + 6 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
@@ -696,9 +696,9 @@ non-destructive — they check the running game without changing it).
 
 ### MCP resources
 
-The five resources listed in [Concepts](#6-concepts): `godot://scene-tree`,
-`godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`, and
-`godot://class/{name}`.
+The six resources listed in [Concepts](#6-concepts): `godot://scene-tree`,
+`godot://editor-state`, `godot://runtime/tree`, `godot://runtime/log`,
+`godot://class/{name}`, and `godot://capabilities`.
 
 ---
 
@@ -732,6 +732,26 @@ Gated tools include (among others): `node_delete`, `project_set_setting`, `scene
 `runtime_call_method`, `runtime_emit_signal`, and `runtime_inject_input`. Scene, resource,
 filesystem, and asset writers are gated too. The authoritative per-tool list of what is
 destructive is in [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
+
+### Bridge authentication (shared secret)
+
+**Both loopback bridges require a per-project shared secret** (default-on since **1.17.0**).
+On enable, the addon mints a 64-char hex secret into the engine-managed, git-ignored
+`res://.godot/`, and the host sends it as the first line on connect — so another local process
+on a shared machine can neither drive a bridge nor bypass the confirmation gate. The secret is
+compared in constant time and a bad handshake is refused without echoing it. Opt out (not
+recommended) with `BREAKPOINT_BRIDGE_INSECURE=1`.
+
+### Pausing the agent
+
+Two layered controls let a person hold the agent on demand. In the editor, the **Breakpoint MCP**
+dock has a **"Pause Agent"** toggle: while engaged, the editor and runtime bridges reject new
+commands on those two planes (an op already running finishes; a bare liveness `ping` still
+answers). Headless or scripted, the host also honors **`SIGUSR1`** (pause) / **`SIGUSR2`**
+(resume) — a finer latch that holds only *mutating* actions but across the **whole** tool
+surface, with `BREAKPOINT_START_PAUSED=1` to start held. Neither is an "emergency stop": both
+hold *entry* to a new action and never interrupt one already in flight, and the per-tool
+confirmation above stays the primary control for destructive ops.
 
 ### Higher-trust surfaces (point them only at trusted code)
 

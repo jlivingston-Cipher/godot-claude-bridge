@@ -6,8 +6,8 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.18.1 · addon 1.6.0 · full 276 / secure-default 262 tools · 6 MCP resources · MIT.** The host builds against
-> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 421-test suite plus
+> **npm 1.18.1 · addon 1.7.0 · full 276 / secure-default 262 tools · 6 MCP resources · MIT.** The host builds against
+> the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 431-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
 Breakpoint MCP connects an MCP-compatible AI assistant to a running Godot editor and
@@ -134,10 +134,10 @@ Breakpoint MCP is organized into four capability **planes** (full **276 tools**,
   plane speaks OmniSharp (LSP) and netcoredbg (DAP). Capabilities are **feature-detected
   per engine build** and degrade to a clear "unsupported" message rather than erroring.
 
-Five **MCP resources** (`godot://scene-tree`, `godot://editor-state`,
-`godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`) expose
-pull-on-demand context, and clients can **subscribe** to be pushed updates when the
-editor selection, edited scene, or the live SceneTree changes.
+Six **MCP resources** (`godot://scene-tree`, `godot://editor-state`,
+`godot://runtime/tree`, `godot://runtime/log`, `godot://class/{name}`, and the always-on
+`godot://capabilities`) expose pull-on-demand context, and clients can **subscribe** to be
+pushed updates when the editor selection, edited scene, or the live SceneTree changes.
 
 ## Highlights
 
