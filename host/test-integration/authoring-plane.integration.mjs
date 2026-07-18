@@ -148,7 +148,12 @@ const near = (a, b) => typeof a === "number" && typeof b === "number" && Math.ab
 async function main() {
   const transport = new StdioClientTransport({
     command: "node", args: [DIST], cwd: HOST_DIR,
-    env: { ...process.env, GODOT_BIN, GODOT_PROJECT }, stderr: "inherit",
+    // This probe exercises the full tool surface, including the asset_gen_* and
+    // node_call_method (code-execution) and backend_* (network) families that the
+    // secure-default DROPS at registration since 1.18.0. Opt into all privileged
+    // groups so those tools register and the AUTH_ASSETGEN / AUTH_MP / AUTH_BACKEND
+    // families run their assertions instead of throwing "unknown tool".
+    env: { ...process.env, GODOT_BIN, GODOT_PROJECT, BREAKPOINT_PRIVILEGED_GROUPS: "all" }, stderr: "inherit",
   });
   const client = new Client({ name: "gcb-authoring", version: "1.0.0" }, { capabilities: { elicitation: {} } });
   // Auto-approve any confirmation prompt (belt-and-suspenders with GATED/confirm:true).
