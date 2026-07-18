@@ -6,7 +6,7 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.18.1 · addon 1.7.0 · full 276 / secure-default 262 tools · 6 MCP resources · MIT.** The host builds against
+> **npm 1.19.0 · addon 1.7.0 · full 276 / secure-default 262 tools · 6 MCP resources · MIT.** The host builds against
 > the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 431-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
