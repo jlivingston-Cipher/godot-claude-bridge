@@ -942,24 +942,34 @@ func _step_frames(params: Dictionary) -> Dictionary:
 		return _err("no_tree", "No scene tree")
 	var frames := clampi(int(params.get("frames", 1)), 1, 100000)
 	var kind := String(params.get("kind", "idle"))
-	var was_paused := tree.paused
-	var advanced := 0
-	for _i in frames:
-		tree.paused = false
-		if kind == "physics" or kind == "both":
+	var prev_scale := Engine.time_scale
+	# Advance by exactly `frames`: restore a normal time scale for the step (the caller froze via
+	# runtime_time_scale{scale:0}, which zeroes delta), and count real frames off the ENGINE frame
+	# counters. Freeze/step are driven by time_scale (delta), NOT get_tree().paused: pause is a
+	# per-node processing gate that desyncs from the frame counter by one frame at the step boundary
+	# (a node advances N-1 for N counted frames), whereas with time_scale the node processes every
+	# frame and the counter matches its work 1:1. time_scale is restored after.
+	Engine.time_scale = 1.0
+	if kind == "physics" or kind == "both":
+		var target_p := Engine.get_physics_frames() + frames
+		while Engine.get_physics_frames() < target_p:
 			await tree.physics_frame
-		if kind == "idle" or kind == "both":
+	else:
+		var target_i := Engine.get_process_frames() + frames
+		while Engine.get_process_frames() < target_i:
 			await tree.process_frame
-		tree.paused = true
-		advanced += 1
-	tree.paused = was_paused
-	return _ok({"frames_advanced": advanced, "frame_index": Engine.get_process_frames()})
+	Engine.time_scale = prev_scale
+	return _ok({"frames_advanced": frames, "frame_index": Engine.get_process_frames()})
 
 
 func _time_scale(params: Dictionary) -> Dictionary:
 	var previous := Engine.time_scale
 	var scale := maxf(0.0, float(params.get("scale", 1.0)))
 	Engine.time_scale = scale
+	# scale 0 freezes the game clock (delta -> 0): delta-based motion, tweens, timers and
+	# animations halt. runtime_step_frames temporarily restores a normal scale to advance an exact
+	# number of frames. Deliberately time_scale, not get_tree().paused — pause is a per-node
+	# processing gate that desyncs from the frame counter by one frame at the step boundary.
 	return _ok({"previous": previous, "current": Engine.time_scale})
 
 

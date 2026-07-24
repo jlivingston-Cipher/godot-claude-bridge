@@ -339,6 +339,29 @@ jobs:
       - name: Game log tail (on failure)
         if: always()
         run: tail -n 50 /tmp/godot-game.log || true
+      - name: Boot the frame-step probe scene and run the F4 deterministic step probe
+        working-directory: host
+        env:
+          GODOT_PROJECT: ${{ github.workspace }}/example
+          BREAKPOINT_BRIDGE_INSECURE: '1'
+          # A distinct port so this probe game coexists with the D6 capture game above (:9081).
+          BREAKPOINT_RUNTIME_PORT: '9082'
+        run: |
+          set -eux
+          # F4: boot the dedicated deterministic-mover scene headless (the autoload opens :9082),
+          # wait for the port, then drive freeze -> step N -> assert EXACT advance over the socket.
+          # This is the only place the async frame-step lane runs against a real SceneTree.
+          "$GODOT_BIN" --headless --path "$GODOT_PROJECT" res://tests/frame_step_probe.tscn >/tmp/godot-framestep.log 2>&1 &
+          for i in $(seq 1 40); do
+            if node -e "require('net').connect(9082,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))" 2>/dev/null; then
+              echo "frame-step probe port open"; break
+            fi
+            sleep 1
+          done
+          node test-integration/runtime-frame-step.integration.mjs
+      - name: Frame-step game log tail (on failure)
+        if: always()
+        run: tail -n 50 /tmp/godot-framestep.log || true
 
   editor-plane:
     name: editor / LSP plane vs real editor (experimental)

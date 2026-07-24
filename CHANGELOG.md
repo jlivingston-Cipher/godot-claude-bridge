@@ -4,6 +4,42 @@ All notable changes to Breakpoint MCP are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.21.1] — 2026-07-24
+
+Hardens the **deterministic-playtesting** primitives shipped in 1.21.0, adds their end-to-end
+integration proof, and ships a recipe that ties the loop together. Both fixes were surfaced by the new
+headless probe — the point of writing it. Host `1.21.0 → 1.21.1` (`package.json` + `serverInfo`), addon
+`1.9.0 → 1.9.1` (`ADDON_VERSION` + both `plugin.cfg`s); tool surface unchanged (**286 / 272** — recipes
+add no tools). Host gate **286 / 443 / 0**.
+
+### Fixed
+- **Freeze and stepping are driven by `time_scale`, not pause.** `runtime_time_scale{scale:0}` freezes
+  the game clock (delta → 0), halting delta-based motion, tweens, timers, and animations, and
+  `runtime_step_frames` restores a normal scale for the step and counts real frames off the engine
+  counters (`Engine.get_physics_frames()` / `get_process_frames()`) until they move by exactly `frames`.
+- **`runtime_step_frames` advances an exact frame count.** Earlier cuts used `get_tree().paused` for the
+  freeze and toggled it around the step — but pause is a *per-node processing gate* that desyncs from
+  the frame counter by one frame at the step boundary: the live probe on Godot 4.7 measured **29 for a
+  requested 30**, with both the toggle-per-await and pause-then-count variants. Gating on `time_scale`
+  (delta) instead means the node processes *every* physics frame, so its work is 1:1 with the counter
+  and the advance is exact by construction. (Validated by the headless probe — see Tests.)
+
+### Added
+- **`recipe_deterministic_playtest`** — an MCP prompt (discoverable via `prompts/list`) that drives the
+  full loop: freeze (`runtime_time_scale{scale:0}`) → optional `runtime_seed_rng` → `runtime_step_frames`
+  → `runtime_state_digest` / `runtime_assert_node_state` → `runtime_screenshot_diff` against a golden
+  frame → thaw. Adds no tools; the recipe count goes 6 → 7.
+
+### Tests
+- **Headless-Godot frame-step integration probe** — `host/test-integration/runtime-frame-step.integration.mjs`
+  with `example/tests/frame_step_probe.tscn` + `frame_step_mover.gd`, wired into the `runtime-plane` CI
+  job (all three Godot arms: 4.3 / 4.5 / 4.7). Boots a deterministic-mover scene headless on a dedicated
+  port (`:9082`, coexisting with the D6 capture game on `:9081`), then drives the async step lane
+  end-to-end over the socket: freeze holds the delta-gated mover's `ticks` steady, `runtime_step_frames
+  {frames:30, kind:physics}` advances it by **exactly 30**, and it stays frozen afterwards. This is the
+  only place the `runtime_step_frames` coroutine executes against a real `SceneTree`, and it is what
+  caught the pause-boundary off-by-one above (a green run requires the `time_scale`-based stepper).
+
 ## [1.21.0] — 2026-07-24
 
 Adds **deterministic playtesting** (finding **F4**) to Plane C — the last high-value gap from the

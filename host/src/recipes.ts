@@ -7,7 +7,7 @@
  * it's **free** (MIT, shipped in the server), and it sits **over typed,
  * schema-validated, undoable tools** — so the contract is executed by the
  * server, not merely described in prose the model might misapply. Recipes are
- * discoverable via MCP `prompts/list`; they add **no tools** (the 276-tool
+ * discoverable via MCP `prompts/list`; they add **no tools** (the 286-tool
  * count is unchanged) and cost nothing until a client pulls one.
  */
 import { z } from "zod";
@@ -40,6 +40,7 @@ export const RECIPE_NAMES = [
   "recipe_screenshot_regression",
   "recipe_type_safe_edit",
   "recipe_csharp_fix_and_debug",
+  "recipe_deterministic_playtest",
 ] as const;
 
 export function registerRecipes(server: RecipeServer): void {
@@ -219,6 +220,45 @@ export function registerRecipes(server: RecipeServer): void {
           `3. Debug: cs_dbg_set_breakpoints in ${path}, cs_dbg_launch, then at the stop cs_dbg_stack_trace + cs_dbg_variables + cs_dbg_evaluate to inspect real values; cs_dbg_step / cs_dbg_continue to walk the fix. (netcoredbg is spawned lazily, so this costs nothing until used.)`,
           "",
           "Same schema-validated, undoable discipline as the GDScript planes — C# is a first-class citizen here, not an afterthought.",
+          "",
+          SAFETY,
+        ].join("\n"),
+      );
+    },
+  );
+
+  // 7 — Deterministic playtesting: freeze, step exact frames, assert a golden frame.
+  server.registerPrompt(
+    "recipe_deterministic_playtest",
+    {
+      title: "Freeze the game, step exact frames, and assert a deterministic golden frame",
+      description: "Turn a flaky run-screenshot-guess loop into a frame-exact, reproducible one: freeze time, advance a fixed number of frames, then assert node state and diff a golden frame.",
+      argsSchema: {
+        scene_path: z.string().optional().describe("Scene to play-test (default res://main.tscn)"),
+        root_path: z.string().optional().describe("Node to snapshot/assert on (default '.', the running scene root)"),
+        frames: z.string().optional().describe("Frames to advance per step (default 30)"),
+        reference_path: z.string().optional().describe("Golden PNG for the screenshot diff (default res://tests/frame.png)"),
+        tolerance: z.string().optional().describe("Max fraction of differing pixels for the diff (default 0.0)"),
+      },
+    },
+    (a: Args) => {
+      const scene = str(a, "scene_path", "res://main.tscn");
+      const root = str(a, "root_path", ".");
+      const frames = str(a, "frames", "30");
+      const ref = str(a, "reference_path", "res://tests/frame.png");
+      const tol = str(a, "tolerance", "0.0");
+      return recipe(
+        "Deterministic, frame-exact playtesting with a golden-frame check.",
+        [
+          `Goal: drive ${scene} to an exact, reproducible frame and assert on it — no wall-clock flakiness.`,
+          "",
+          `1. Boot + freeze: godot_run_project. runtime_time_scale{scale:0} to FREEZE the game (this pauses the SceneTree, so nothing advances on its own). If the run uses randomness, runtime_seed_rng{seed:...} first so the whole playtest is reproducible.`,
+          `2. Baseline: runtime_state_digest{root:"${root}"} to snapshot the frozen state (positions / visibility / modulate, stable-ordered) — this is your deterministic "before".`,
+          `3. Step: runtime_step_frames{frames:${frames}, kind:"physics"} to advance EXACTLY ${frames} frames while frozen (use kind:"both" to also tick _process each step). The game stays frozen afterwards, so your reads are stable.`,
+          `4. Assert: runtime_state_digest{root:"${root}"} (or runtime_assert_node_state) that the node reached the expected, frame-exact state, then runtime_screenshot_diff against ${ref} with tolerance ${tol} — because you stepped a fixed number of frames the frame is reproducible, so the diff is stable (establish ${ref} once with runtime_screenshot on the first green run, then vcs_add it).`,
+          `5. Iterate or thaw: repeat 3–4 to walk frame-by-frame (every step is deterministic), or runtime_time_scale{scale:1} to thaw and resume normal play. godot_stop when done. On a failed assert you are one dbg_set_breakpoints + dbg_launch away from the exact value that diverged.`,
+          "",
+          "Why this beats run-screenshot-guess: freezing plus fixed-frame stepping converts a timing-dependent check into a frame-exact, reproducible one the runtime_assert_* family can verify — the R tier of the W/R/E model, made deterministic.",
           "",
           SAFETY,
         ].join("\n"),

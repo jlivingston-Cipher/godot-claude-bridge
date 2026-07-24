@@ -5,7 +5,7 @@ Welcome. This guide walks you, start to finish, through installing and using
 It is written for a Godot developer who has never seen the tool before. No prior
 knowledge of the Model Context Protocol (MCP) is assumed.
 
-- **Version:** host 1.21.0 · addon 1.9.0
+- **Version:** host 1.21.1 · addon 1.9.1
 - **License:** MIT
 - **What it exposes:** full 286 tools (secure-default 272 with the privileged groups off) + 6 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
