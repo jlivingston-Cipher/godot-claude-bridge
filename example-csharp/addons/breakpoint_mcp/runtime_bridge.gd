@@ -324,6 +324,16 @@ func _dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _assert_screen_text(params)
 		"runtime.screenshot_diff":
 			return _screenshot_diff(params)
+		"runtime.anim_play":
+			return _anim_play(params)
+		"runtime.anim_stop":
+			return _anim_stop(params)
+		"runtime.anim_get_state":
+			return _anim_get_state(params)
+		"runtime.node_add":
+			return _node_add(params)
+		"runtime.node_remove":
+			return _node_remove(params)
 		_:
 			return _err("unknown_method", "No such method: %s" % method)
 
@@ -767,3 +777,116 @@ func _compare_images(frame: Image, reference_img: Image, params: Dictionary, ref
 		"height": h,
 		"reference": reference,
 	})
+
+
+# ----------------------------------------------------- F8: animation ---------
+
+## Resolve a node and require it to be an AnimationPlayer.
+func _resolve_anim_player(path: String):
+	var node := _resolve(path)
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % path)
+	if not (node is AnimationPlayer):
+		return _err("not_animation_player", "%s is not an AnimationPlayer" % node.get_class())
+	return node as AnimationPlayer
+
+
+func _anim_state(ap: AnimationPlayer) -> Dictionary:
+	var anims: Array = []
+	for a in ap.get_animation_list():
+		anims.append(String(a))
+	return {
+		"playing": ap.is_playing(),
+		"current_animation": ap.current_animation,
+		"position": ap.current_animation_position,
+		"length": ap.current_animation_length,
+		"speed_scale": ap.speed_scale,
+		"animations": anims,
+	}
+
+
+func _anim_play(params: Dictionary) -> Dictionary:
+	var res = _resolve_anim_player(String(params.get("path", "")))
+	if res is Dictionary:
+		return res
+	var ap: AnimationPlayer = res
+	var anim := String(params.get("animation", ""))
+	if anim != "" and not ap.has_animation(anim):
+		return _err("no_animation", "AnimationPlayer has no animation '%s'" % anim)
+	var speed := float(params.get("custom_speed", 1.0))
+	var from_end := bool(params.get("from_end", false))
+	ap.play(anim, -1.0, speed, from_end)
+	return _ok({
+		"playing": ap.is_playing(),
+		"current_animation": ap.current_animation,
+		"speed_scale": ap.speed_scale,
+	})
+
+
+func _anim_stop(params: Dictionary) -> Dictionary:
+	var res = _resolve_anim_player(String(params.get("path", "")))
+	if res is Dictionary:
+		return res
+	var ap: AnimationPlayer = res
+	# keep_state:true pauses in place; default stops. pause()/stop() with no args are
+	# stable across Godot 4.2–4.5 (unlike stop()'s changing keep_state parameter).
+	if bool(params.get("keep_state", false)):
+		ap.pause()
+	else:
+		ap.stop()
+	return _ok({
+		"playing": ap.is_playing(),
+		"current_animation": ap.current_animation,
+		"position": ap.current_animation_position,
+	})
+
+
+func _anim_get_state(params: Dictionary) -> Dictionary:
+	var res = _resolve_anim_player(String(params.get("path", "")))
+	if res is Dictionary:
+		return res
+	var ap: AnimationPlayer = res
+	return _ok(_anim_state(ap))
+
+
+# ----------------------------------------------------- F8: node lifecycle ----
+
+func _node_add(params: Dictionary) -> Dictionary:
+	var parent := _resolve(String(params.get("parent", "")))
+	if parent == null:
+		return _err("bad_path", "Parent not found: %s" % params.get("parent", ""))
+	var child: Node = null
+	var scene_path := String(params.get("scene", ""))
+	if scene_path != "":
+		var ps: Variant = load(scene_path)
+		if ps == null or not (ps is PackedScene):
+			return _err("bad_scene", "Could not load PackedScene: %s" % scene_path)
+		child = (ps as PackedScene).instantiate()
+	else:
+		var type_name := String(params.get("type", ""))
+		if type_name == "":
+			return _err("bad_args", "Provide either 'scene' or 'type'")
+		if not ClassDB.class_exists(type_name) or not ClassDB.can_instantiate(type_name):
+			return _err("bad_type", "Cannot instantiate class: %s" % type_name)
+		var obj: Variant = ClassDB.instantiate(type_name)
+		if not (obj is Node):
+			return _err("not_a_node", "%s is not a Node" % type_name)
+		child = obj
+	if child == null:
+		return _err("instantiate_failed", "Failed to instantiate node")
+	var nm := String(params.get("name", ""))
+	if nm != "":
+		child.name = nm
+	parent.add_child(child)
+	return _ok({"added": true, "path": _path_of(child), "type": child.get_class()})
+
+
+func _node_remove(params: Dictionary) -> Dictionary:
+	var node := _resolve(String(params.get("path", "")))
+	if node == null:
+		return _err("bad_path", "Node not found: %s" % params.get("path", ""))
+	if node == _base():
+		return _err("cannot_remove_root", "Refusing to remove the current scene root")
+	var p := _path_of(node)
+	node.queue_free()
+	return _ok({"removed": true, "path": p})

@@ -5,9 +5,9 @@ Welcome. This guide walks you, start to finish, through installing and using
 It is written for a Godot developer who has never seen the tool before. No prior
 knowledge of the Model Context Protocol (MCP) is assumed.
 
-- **Version:** host 1.19.1 · addon 1.7.0
+- **Version:** host 1.20.0 · addon 1.8.0
 - **License:** MIT
-- **What it exposes:** full 276 tools (secure-default 262 with the privileged groups off) + 6 MCP resources
+- **What it exposes:** full 282 tools (secure-default 268 with the privileged groups off) + 6 MCP resources
 - **Requires:** Node.js ≥ 18 and Godot 4.2+ (4.4+ recommended)
 
 ---
@@ -377,8 +377,8 @@ Both launch lazily on first use.
 ### Capability groups (least-privilege, opt-in)
 
 Two **default-OFF** capability groups gate the higher-blast tools; with both off, those tools are
-**dropped at registration** (never listed), giving a **secure-default surface of 262 tools**. Opt in
-to load the **full 276**. `breakpoint-mcp init --trust full` sets this for you, and
+**dropped at registration** (never listed), giving a **secure-default surface of 268 tools**. Opt in
+to load the **full 282**. `breakpoint-mcp init --trust full` sets this for you, and
 `breakpoint-mcp doctor` reports each group's state. See
 [The safety and trust model](#9-the-safety-and-trust-model).
 
@@ -581,7 +581,7 @@ drive the live game → test.
 
 ## 8. Tool reference by family
 
-There are **276 tools** in total (the secure-default surface is **262** with the two privileged capability groups off — see [The safety and trust model](#9-the-safety-and-trust-model)). This section summarizes them by family so you know what
+There are **282 tools** in total (the secure-default surface is **268** with the two privileged capability groups off — see [The safety and trust model](#9-the-safety-and-trust-model)). This section summarizes them by family so you know what
 exists and where to look; for the exhaustive per-tool input/output JSON Schemas, see
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md). Tools marked **destructive** are
 confirmation-gated (Section 9).
@@ -907,7 +907,7 @@ deterministic in-engine stand-ins with no external model; the `command` backend 
 command you configure and should only point at trusted code.
 
 **How many tools are there, and where's the full list?**
-276 tools (secure-default 262) and 6 resources. The exhaustive per-tool schemas are in
+282 tools (secure-default 268) and 6 resources. The exhaustive per-tool schemas are in
 [`docs/TOOL_CATALOG.md`](TOOL_CATALOG.md).
 
 **What are those `{ "__type__": ... }` values I see in tool arguments?**

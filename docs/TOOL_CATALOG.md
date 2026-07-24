@@ -1,6 +1,6 @@
 # Godot–Breakpoint MCP — MCP Tool-Schema Catalog
 
-Complete tool contract for the bridge — **276 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
+Complete tool contract for the bridge — **282 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
 
 > Design note: as of **v0.4.3 (track B1)** these output schemas are **enforced at runtime**. `host/src/schemas.ts` freezes the `structuredContent` shape of every data tool and `applyOutputSchemas()` injects it as that tool's `outputSchema`, which the MCP SDK validates on every success result (`isError` results are exempt). The shapes were frozen from the v0.4.2 live-validation run, so the documented contract below **is** the enforced contract. `z.object` is non-strict, so a tool may still return *extra* fields without failing validation (the schema pins the required envelope, not an exhaustive field list).
 
@@ -2553,6 +2553,68 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
 ```
 - **Output** `{ ok, diff_ratio, differing_pixels, total_pixels, width, height, reference, reason? }` — read-only, **stats only**. Captures the current frame, loads `reference`, normalizes both to RGBA8, optionally crops both to `region`, then counts pixels whose per-channel delta exceeds `per_channel_threshold`. `diff_ratio` = differing / total; `ok` is true when `diff_ratio <= tolerance`. If the (post-crop) dimensions differ, returns `ok:false` with `reason:"dimension_mismatch"`. The diff is computed **engine-side** (`Image`), so the host stays dependency-free. Establish a reference by capturing `runtime_screenshot` and saving it as a project asset. **Future (gated):** an optional `write_diff` to save a highlighted diff image would be a file write — kept out of v1 to stay read-only.
 
+### `runtime_await_condition` ✅
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path", "property", "value"],
+  "properties": {
+    "path": { "type": "string" },
+    "property": { "type": "string" },
+    "value": { "$ref": "#/$defs/Variant", "description": "value to compare against (tagged-Variant form for complex types)" },
+    "op": { "enum": ["eq", "ne", "gt", "ge", "lt", "le"], "default": "eq" },
+    "timeout_ms": { "type": "integer", "minimum": 1, "default": 5000 },
+    "poll_interval_ms": { "type": "integer", "minimum": 1, "default": 100 } } }
+```
+- **Output** `{ met, polls, elapsed_ms, value }` — read-only. Polls `runtime_get_property` on `path`.`property` every `poll_interval_ms` until it satisfies `value` under `op` (`eq`/`ne` are structural; `gt`/`ge`/`lt`/`le` are numeric and false unless both sides are numbers), or `timeout_ms` elapses. `met` is true only if the condition held before timeout; `value` is the last-read value, `polls` the number of reads, `elapsed_ms` the wall-clock wait. Implemented host-side over the runtime bridge, so it works on every engine build the bridge supports; it never mutates the game, so it is **not** gated. Pair it with the `runtime_assert_*` family to wait for a state, then assert it.
+
+### `runtime_anim_play` ✅ · destructive (drives the running game)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"],
+  "properties": {
+    "path": { "type": "string", "description": "an AnimationPlayer node in the running scene" },
+    "animation": { "type": "string", "description": "animation name (default: the current/assigned one)" },
+    "custom_speed": { "type": "number", "default": 1.0 },
+    "from_end": { "type": "boolean", "default": false } } }
+```
+- **Output** `{ playing, current_animation, speed_scale }` — plays `animation` (or the currently-assigned one when omitted) on the live `AnimationPlayer`. Errors `not_animation_player` when `path` is another class and `no_animation` when the name is unknown.
+
+### `runtime_anim_stop` ✅ · destructive (drives the running game)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"],
+  "properties": {
+    "path": { "type": "string", "description": "an AnimationPlayer node in the running scene" },
+    "keep_state": { "type": "boolean", "default": false, "description": "pause in place instead of stopping" } } }
+```
+- **Output** `{ playing, current_animation, position }` — `keep_state:true` pauses in place (`AnimationPlayer.pause()`), otherwise stops (`stop()`). `pause()`/`stop()` with no arguments are used so the tool is stable across Godot 4.2–4.5.
+
+### `runtime_anim_get_state` ✅
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "description": "an AnimationPlayer node in the running scene" } } }
+```
+- **Output** `{ playing, current_animation, position, length, speed_scale, animations[] }` — read-only snapshot of a live `AnimationPlayer`; `animations` lists the available animation names.
+
+### `runtime_node_add` ✅ · destructive
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["parent"],
+  "properties": {
+    "parent": { "type": "string", "description": "parent node in the running scene" },
+    "type": { "type": "string", "description": "ClassDB class to instantiate (mutually exclusive with scene)" },
+    "scene": { "type": "string", "description": "res:// PackedScene to instantiate (mutually exclusive with type)" },
+    "name": { "type": "string" } } }
+```
+- **Output** `{ added, path, type }` — instantiates `scene` (a `PackedScene`) or `type` (a ClassDB class that `can_instantiate`), optionally renames it to `name`, and adds it under `parent`; `path` is the new node's live path. Errors: `bad_scene` / `bad_type` / `not_a_node` / `bad_args` (neither `scene` nor `type` given).
+
+### `runtime_node_remove` ✅ · destructive
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" } } }
+```
+- **Output** `{ removed, path }` — `queue_free()`s the node. Refuses to remove the current scene root (`cannot_remove_root`).
+
 ---
 
 ---
@@ -4138,6 +4200,12 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `runtime_assert_perf` | C / Runtime | ✅ | – |
 | `runtime_assert_screen_text` | C / Runtime | ✅ | – |
 | `runtime_screenshot_diff` | C / Runtime | ✅ | – |
+| `runtime_await_condition` | C / Runtime | ✅ | – |
+| `runtime_anim_play` | C / Runtime | ✅ | ✔ |
+| `runtime_anim_stop` | C / Runtime | ✅ | ✔ |
+| `runtime_anim_get_state` | C / Runtime | ✅ | – |
+| `runtime_node_add` | C / Runtime | ✅ | ✔ |
+| `runtime_node_remove` | C / Runtime | ✅ | ✔ |
 
 | `godot_run_managed` | B / Process | ✅ | – |
 | `godot_output` | B / Process | ✅ | – |
@@ -4198,4 +4266,4 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `interact_make_draggable` | N / Editor | ✅ | ✔ writes files |
 | `interact_add_drop_zone` | N / Editor | ✅ | ✔ writes files |
 
-**276 tools + 5 MCP resources implemented across Phases 0–4, spanning all four planes — headless CLI + host-side tools (`godot_*`, knowledge/search, and version control `vcs_*`), the live editor bridge (Groups A–N), semantic (LSP) + debugging (DAP) for both GDScript and C#, and the runtime bridge. Destructive tools are elicitation-gated; long jobs run on the MCP task model. All four planes live.**
+**282 tools + 5 MCP resources implemented across Phases 0–4, spanning all four planes — headless CLI + host-side tools (`godot_*`, knowledge/search, and version control `vcs_*`), the live editor bridge (Groups A–N), semantic (LSP) + debugging (DAP) for both GDScript and C#, and the runtime bridge. Destructive tools are elicitation-gated; long jobs run on the MCP task model. All four planes live.**

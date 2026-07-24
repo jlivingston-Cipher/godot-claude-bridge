@@ -4,6 +4,45 @@ All notable changes to Breakpoint MCP are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] — 2026-07-24
+
+Adds **six runtime-bridge tools** (Plane C) that close the highest-value gaps found in the
+2026-07 competitive audit (`RUNTIME_PROBE_AUDIT_2026-07-24.md`) against `yurineko73/Godot-MCP-Native`'s
+runtime probe — turning operations that were only reachable via the generic `runtime_call_method`
+escape hatch into typed, gated, discoverable tools, and adding a first-class wait primitive. Tool
+surface **276 → 282** (secure-default **262 → 268**; none of the six are privileged). The static
+contract gate stays green at the new count and the host suite runs **437 / 0**. **Addon-touching**
+(`runtime_bridge.gd` gained five dispatch handlers), so this cut bumps **host `1.19.1 → 1.20.0`**
+(`package.json` + MCP `serverInfo`) and **addon `1.7.0 → 1.8.0`** (`ADDON_VERSION` + both `plugin.cfg`s),
+and refreshes the tool-count refs across `README.md`, `host/README.md`, and `docs/USER_GUIDE.md`.
+
+### Added
+- **`runtime_await_condition`** (read-only, ungated) — poll a live node property until it satisfies a
+  comparison (`op`: `eq`/`ne` structural, `gt`/`ge`/`lt`/`le` numeric) or a timeout elapses. Implemented
+  host-side over `runtime.get_property` (no new bridge method), so it works on every engine build the
+  runtime bridge supports; returns `{ met, polls, elapsed_ms, value }`. Pairs with the `runtime_assert_*`
+  family: wait for a state, then assert it.
+- **`runtime_anim_play` / `runtime_anim_stop`** (gated) and **`runtime_anim_get_state`** (read-only) —
+  drive and inspect a live `AnimationPlayer`: play a named (or the assigned) animation with speed /
+  from-end, pause-or-stop, and read `{ playing, current_animation, position, length, speed_scale,
+  animations[] }`. Closes the runtime-animation gap (the existing `anim_*` tools are edit-time only).
+  `pause()`/`stop()` are called with no arguments so behavior is stable across Godot 4.2–4.5.
+- **`runtime_node_add` / `runtime_node_remove`** (gated) — spawn a node into the running game from a
+  `res://` PackedScene or a ClassDB `type` (optionally named) under a parent, and `queue_free()` a live
+  node (refusing the current scene root). Typed replacements for the `runtime_call_method(add_child/…)`
+  escape hatch.
+- Five new dispatch handlers in `addons/breakpoint_mcp/runtime_bridge.gd` (`runtime.anim_play`,
+  `runtime.anim_stop`, `runtime.anim_get_state`, `runtime.node_add`, `runtime.node_remove`); synced to
+  the `example/` and `example-csharp/` addon copies. `runtime_await_condition` needs no handler.
+
+### Tests
+- `host/test/runtime.test.ts`: the gated set grows from 4 → 8 (adds `runtime_anim_play`,
+  `runtime_anim_stop`, `runtime_node_add`, `runtime_node_remove`); new happy-path coverage for
+  `await_condition` (first-poll match + fast-timeout), animation play/get-state, and node add/remove.
+- Count assertions updated to **282** / secure-default **268** across `capabilities.test.ts`,
+  `toolsets.test.ts`, `registration.test.ts`, and the doctor/init capability strings
+  (`cli_capabilities.test.ts`). Host suite **437 / 0**; static contract gate **282**.
+
 ## [1.19.1] — 2026-07-21
 
 Sanitizes and re-themes the **debugger-led demo** used to record the GDScript and C# preview GIFs. **No shipped code changes** — the addon (`plugin.cfg` `1.7.0`) and the npm tarball (`dist/` + `addon/` + `host/README`) are byte-identical; this is a demo/docs/assets patch. Host `1.19.0` → **`1.19.1`** (cut here, tag-only per the repo's `v1.15`–`v1.18` convention — not published to npm). Tool surface unchanged (**276** / secure-default **262**); MCP `serverInfo` stays **`1.19.0`** since the shipped host binary is unchanged.

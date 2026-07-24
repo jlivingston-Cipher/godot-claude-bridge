@@ -21,6 +21,33 @@ function fail(err: unknown) {
   };
 }
 
+/**
+ * Compare a polled property value against an expected value under one of the
+ * restricted operators exposed by runtime_await_condition. eq/ne use structural
+ * (JSON) equality so tagged-Variant objects compare cleanly; the ordered
+ * operators are numeric-only and are false unless both sides are numbers.
+ */
+function compareValues(actual: unknown, expected: unknown, op: string): boolean {
+  const bothNum = typeof actual === "number" && typeof expected === "number";
+  switch (op) {
+    case "ne":
+      return JSON.stringify(actual) !== JSON.stringify(expected);
+    case "gt":
+      return bothNum && (actual as number) > (expected as number);
+    case "ge":
+      return bothNum && (actual as number) >= (expected as number);
+    case "lt":
+      return bothNum && (actual as number) < (expected as number);
+    case "le":
+      return bothNum && (actual as number) <= (expected as number);
+    case "eq":
+    default:
+      return JSON.stringify(actual) === JSON.stringify(expected);
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): void {
   const call = async (method: string, params: Record<string, unknown> = {}) => {
     try {
@@ -319,5 +346,155 @@ export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): 
         ...(per_channel_threshold !== undefined ? { per_channel_threshold } : {}),
         ...(region !== undefined ? { region } : {}),
       }),
+  );
+
+  // F8: deterministic-verification helper. Poll a live property until it meets a
+  // comparison, or a timeout elapses. Host-side over runtime.get_property (no new
+  // bridge method), so it works on every engine build the runtime bridge supports.
+  // Read-only: it never mutates the game, so it is not confirmation-gated.
+  server.registerTool(
+    "runtime_await_condition",
+    {
+      title: "Runtime await condition",
+      description:
+        "Poll a property on a LIVE node until it satisfies a comparison, or a timeout elapses (read-only verification). " +
+        "op is eq | ne | gt | ge | lt | le (the ordered operators require numeric values). Use this to wait for the " +
+        "running game to reach a state before asserting on it — e.g. wait for hp le 0, then runtime_assert_screen_text.",
+      inputSchema: {
+        path: z.string().describe("Node path (relative to the current scene; '/root/...' absolute allowed)"),
+        property: z.string().describe("Property to read on each poll"),
+        value: z.any().describe("Value to compare the property against (tagged-Variant form for complex types)"),
+        op: z.enum(["eq", "ne", "gt", "ge", "lt", "le"]).optional().describe("Comparison operator (default eq)"),
+        timeout_ms: z.number().int().positive().optional().describe("Maximum time to wait, in ms (default 5000)"),
+        poll_interval_ms: z.number().int().positive().optional().describe("Delay between polls, in ms (default 100)"),
+      },
+    },
+    async ({ path, property, value, op, timeout_ms, poll_interval_ms }) => {
+      const operator = op ?? "eq";
+      const interval = poll_interval_ms ?? 100;
+      const start = Date.now();
+      const deadline = start + (timeout_ms ?? 5000);
+      let polls = 0;
+      let last: unknown = null;
+      for (;;) {
+        polls++;
+        let res: { value?: unknown };
+        try {
+          res = (await runtime.request("runtime.get_property", { path, property })) as { value?: unknown };
+        } catch (err) {
+          return fail(err);
+        }
+        last = res?.value ?? null;
+        if (compareValues(last, value, operator)) {
+          return ok({ met: true, polls, elapsed_ms: Date.now() - start, value: last });
+        }
+        if (Date.now() >= deadline) {
+          return ok({ met: false, polls, elapsed_ms: Date.now() - start, value: last });
+        }
+        await sleep(interval);
+      }
+    },
+  );
+
+  server.registerTool(
+    "runtime_anim_play",
+    {
+      title: "Runtime play animation",
+      description:
+        "Play an animation on a LIVE AnimationPlayer node. DESTRUCTIVE (drives the running game) — gated by confirmation. " +
+        "Omit `animation` to (re)play the currently-assigned one.",
+      inputSchema: {
+        path: z.string().describe("Path to an AnimationPlayer node in the running scene"),
+        animation: z.string().optional().describe("Animation name to play (default: the current/assigned animation)"),
+        custom_speed: z.number().optional().describe("Playback speed multiplier (default 1.0; negative not supported here)"),
+        from_end: z.boolean().optional().describe("Start playback from the end (default false)"),
+        ...confirmField,
+      },
+    },
+    async ({ path, animation, custom_speed, from_end, confirm }) => {
+      const blocked = await gate(server, confirm, `Play animation "${animation ?? "(current)"}" on ${path}`);
+      if (blocked) return blocked;
+      return call("runtime.anim_play", {
+        path,
+        ...(animation !== undefined ? { animation } : {}),
+        ...(custom_speed !== undefined ? { custom_speed } : {}),
+        ...(from_end !== undefined ? { from_end } : {}),
+      });
+    },
+  );
+
+  server.registerTool(
+    "runtime_anim_stop",
+    {
+      title: "Runtime stop animation",
+      description:
+        "Stop (or pause) a LIVE AnimationPlayer node. DESTRUCTIVE (drives the running game) — gated by confirmation. " +
+        "keep_state:true pauses in place; false (default) stops.",
+      inputSchema: {
+        path: z.string().describe("Path to an AnimationPlayer node in the running scene"),
+        keep_state: z.boolean().optional().describe("Pause in place instead of stopping (default false)"),
+        ...confirmField,
+      },
+    },
+    async ({ path, keep_state, confirm }) => {
+      const blocked = await gate(server, confirm, `Stop animation on ${path}`);
+      if (blocked) return blocked;
+      return call("runtime.anim_stop", { path, ...(keep_state !== undefined ? { keep_state } : {}) });
+    },
+  );
+
+  server.registerTool(
+    "runtime_anim_get_state",
+    {
+      title: "Runtime animation state",
+      description:
+        "Read the playback state of a LIVE AnimationPlayer (read-only): current animation, whether it is playing, " +
+        "position, length, speed scale, and the list of available animations.",
+      inputSchema: { path: z.string().describe("Path to an AnimationPlayer node in the running scene") },
+    },
+    async ({ path }) => call("runtime.anim_get_state", { path }),
+  );
+
+  server.registerTool(
+    "runtime_node_add",
+    {
+      title: "Runtime add node",
+      description:
+        "Add a node to the LIVE running game as a child of `parent`. DESTRUCTIVE — gated by confirmation. " +
+        "Provide `scene` (a res:// PackedScene to instantiate) OR `type` (a ClassDB class to instantiate); `name` renames it.",
+      inputSchema: {
+        parent: z.string().describe("Path to the parent node in the running scene"),
+        type: z.string().optional().describe("Class name to instantiate (e.g. Node2D) — mutually exclusive with `scene`"),
+        scene: z.string().optional().describe("res:// path to a PackedScene to instantiate — mutually exclusive with `type`"),
+        name: z.string().optional().describe("Optional name for the new node"),
+        ...confirmField,
+      },
+    },
+    async ({ parent, type, scene, name, confirm }) => {
+      const blocked = await gate(server, confirm, `Add ${scene ?? type ?? "node"} under ${parent} in the running game`);
+      if (blocked) return blocked;
+      return call("runtime.node_add", {
+        parent,
+        ...(type !== undefined ? { type } : {}),
+        ...(scene !== undefined ? { scene } : {}),
+        ...(name !== undefined ? { name } : {}),
+      });
+    },
+  );
+
+  server.registerTool(
+    "runtime_node_remove",
+    {
+      title: "Runtime remove node",
+      description:
+        "Remove (queue_free) a node from the LIVE running game. DESTRUCTIVE — gated by confirmation. " +
+        "Refuses to remove the current scene root.",
+      inputSchema: { path: z.string().describe("Path to the node to remove in the running scene"), ...confirmField },
+    },
+    async ({ path, confirm }) => {
+      const blocked = await gate(server, confirm, `Remove ${path} from the running game`);
+      if (blocked) return blocked;
+      return call("runtime.node_remove", { path });
+    },
   );
 }

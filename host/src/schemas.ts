@@ -531,6 +531,20 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
     reference: z.string(),
     reason: z.string().optional(),
   },
+  // F8 additions: await/animation/node-lifecycle over the runtime bridge.
+  runtime_await_condition: { met: z.boolean(), polls: z.number(), elapsed_ms: z.number(), value: encodedValue },
+  runtime_anim_play: { playing: z.boolean(), current_animation: z.string(), speed_scale: z.number() },
+  runtime_anim_stop: { playing: z.boolean(), current_animation: z.string(), position: z.number() },
+  runtime_anim_get_state: {
+    playing: z.boolean(),
+    current_animation: z.string(),
+    position: z.number(),
+    length: z.number(),
+    speed_scale: z.number(),
+    animations: z.array(z.string()),
+  },
+  runtime_node_add: { added: z.boolean(), path: z.string(), type: z.string() },
+  runtime_node_remove: { removed: z.boolean(), path: z.string() },
 
   // ---- Group K: knowledge & search ----
   // Host-side project index (tools/knowledge.ts) — no bridge/LSP; read the project files directly.

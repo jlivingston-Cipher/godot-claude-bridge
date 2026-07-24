@@ -15,12 +15,17 @@ import {
  * mutates the LIVE running game, so its four mutators are the ones gated.
  */
 
-// The four destructive runtime tools (mutate the running game) that MUST gate.
+// The destructive runtime tools (mutate the running game) that MUST gate.
 const GATED = [
   "runtime_call_method",
   "runtime_emit_signal",
   "runtime_inject_input",
   "runtime_set_property",
+  // F8 additions — animation + node lifecycle drive the running game.
+  "runtime_anim_play",
+  "runtime_anim_stop",
+  "runtime_node_add",
+  "runtime_node_remove",
 ].sort();
 
 // Valid-enough args per tool so that gate summaries (some read args, e.g.
@@ -30,6 +35,13 @@ const ARGS: Record<string, Record<string, unknown>> = {
   runtime_call_method: { path: "/root/Player", method: "take_damage", args: [1] },
   runtime_emit_signal: { path: "/root/Player", signal: "died", args: [] },
   runtime_inject_input: { event: { kind: "action", action: "jump", pressed: true } },
+  // F8: read-only await + animation state, gated animation + node lifecycle.
+  runtime_await_condition: { path: "/root/Player", property: "hp", value: 0, timeout_ms: 30, poll_interval_ms: 5 },
+  runtime_anim_play: { path: "/root/Anim", animation: "walk" },
+  runtime_anim_stop: { path: "/root/Anim" },
+  runtime_anim_get_state: { path: "/root/Anim" },
+  runtime_node_add: { parent: "/root", type: "Node2D", name: "Spawned" },
+  runtime_node_remove: { path: "/root/Spawned" },
 };
 
 interface BridgeCall {
@@ -317,4 +329,78 @@ test("runtime_screenshot_diff omits unset optionals", async () => {
   });
   await h.handler("runtime_screenshot_diff")({ reference: "res://ref.png" });
   assert.deepEqual(h.calls[0].params, { reference: "res://ref.png" });
+});
+
+// ----------------------------------------------------------- F8: await/anim/node ----
+
+test("runtime_await_condition resolves met:true on the first matching poll (read-only, not gated)", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { path: "/root/Player", property: "hp", value: 0 });
+  const r = await h.handler("runtime_await_condition")({ path: "/root/Player", property: "hp", value: 0 });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.elicitReqs.length, 0, "await is read-only and must not prompt");
+  assert.equal(h.calls[0].method, "runtime.get_property");
+  assert.equal((r.structuredContent as { met: boolean }).met, true);
+  assert.equal((r.structuredContent as { polls: number }).polls, 1);
+});
+
+test("runtime_await_condition polls to a fast timeout when the condition never holds", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { path: "/root/Player", property: "hp", value: 5 });
+  const r = await h.handler("runtime_await_condition")({
+    path: "/root/Player",
+    property: "hp",
+    value: 0,
+    op: "le",
+    timeout_ms: 25,
+    poll_interval_ms: 5,
+  });
+  assert.notEqual(r.isError, true);
+  const sc = r.structuredContent as { met: boolean; polls: number };
+  assert.equal(sc.met, false);
+  assert.ok(sc.polls >= 1, "should have polled at least once");
+});
+
+test("runtime_anim_play forwards runtime.anim_play once confirmed, omitting unset optionals", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { playing: true, current_animation: "walk", speed_scale: 1 });
+  const r = await h.handler("runtime_anim_play")({ path: "/root/Anim", animation: "walk", confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.anim_play");
+  assert.deepEqual(h.calls[0].params, { path: "/root/Anim", animation: "walk" });
+});
+
+test("runtime_anim_get_state forwards runtime.anim_get_state (read-only, not gated)", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", {
+    playing: false,
+    current_animation: "",
+    position: 0,
+    length: 0,
+    speed_scale: 1,
+    animations: ["walk", "idle"],
+  });
+  const r = await h.handler("runtime_anim_get_state")({ path: "/root/Anim" });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.elicitReqs.length, 0);
+  assert.equal(h.calls[0].method, "runtime.anim_get_state");
+  assert.deepEqual(h.calls[0].params, { path: "/root/Anim" });
+});
+
+test("runtime_node_add forwards type/scene/name once confirmed", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { added: true, path: "/root/Spawned", type: "Node2D" });
+  const r = await h.handler("runtime_node_add")({ parent: "/root", type: "Node2D", name: "Spawned", confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.node_add");
+  assert.deepEqual(h.calls[0].params, { parent: "/root", type: "Node2D", name: "Spawned" });
+});
+
+test("runtime_node_remove forwards the node path once confirmed", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { removed: true, path: "/root/Spawned" });
+  const r = await h.handler("runtime_node_remove")({ path: "/root/Spawned", confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.node_remove");
+  assert.deepEqual(h.calls[0].params, { path: "/root/Spawned" });
 });

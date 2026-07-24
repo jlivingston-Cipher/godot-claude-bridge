@@ -305,7 +305,7 @@ export async function runInit(argv: string[], deps: { fetchFn?: FetchLike } = {}
   // Trust groups — surface the secure default so even a bare `init` teaches it.
   say("");
   if (privilegedGroups) {
-    say(`Higher-trust tool groups enabled: ${privilegedGroups} — the full 276-tool surface loads.`);
+    say(`Higher-trust tool groups enabled: ${privilegedGroups} — the full 282-tool surface loads.`);
   } else {
     say("Higher-trust tool groups are OFF by default (the secure default). The assistant loads the");
     say("everyday authoring/debug surface and drops the 14 code-execution + network tools (e.g.");
