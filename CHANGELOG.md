@@ -4,6 +4,45 @@ All notable changes to Breakpoint MCP are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] — 2026-07-24
+
+Adds **deterministic playtesting** (finding **F4**) to Plane C — the last high-value gap from the
+2026-07 competitive review (`DETERMINISTIC_PLAYTESTING_BUILD_SPEC_2026-07-24.md`), and the capability
+`masteryee-labs/Open-Godot-MCP` markets as its headline. Four new runtime tools let an agent freeze the
+game, advance an exact number of frames, snapshot state, and seed RNG — turning a flaky "run → screenshot
+→ guess" loop into a frame-exact, reproducible one that the `runtime_assert_*` family and
+`runtime_screenshot_diff` can assert against. It deepens the W/R/E **R-tier** rather than adding a new
+remit. Tool surface **282 → 286** (secure-default **268 → 272**; none of the four are privileged). Static
+contract gate green at the new count; host suite **443 / 0**. **Addon-touching** → host `1.20.0 → 1.21.0`
+(`package.json` + `serverInfo`) and addon `1.8.0 → 1.9.0` (`ADDON_VERSION` + both `plugin.cfg`s).
+
+### Added
+- **`runtime_step_frames`** (gated) — advance the running game by an exact number of frames while
+  otherwise frozen (`kind`: `idle` / `physics` / `both`). Runs on a new **async dispatch lane** in
+  `runtime_bridge.gd`: because the bridge autoload is `PROCESS_MODE_ALWAYS`, a coroutine can toggle
+  `get_tree().paused` around `await process_frame`/`physics_frame` per step while the bridge keeps
+  servicing the socket; the id'd response is sent when stepping completes (the host already correlates
+  out-of-order responses by id). Restores the caller's prior pause state.
+- **`runtime_time_scale`** (gated) — set `Engine.time_scale` (0 = freeze, 1 = normal, N = slow/fast);
+  returns `{ previous, current }`. Freeze, then step.
+- **`runtime_state_digest`** (read-only) — a compact, stable-ordered snapshot of a subtree's salient
+  state (position/rotation/scale/visibility/modulate by default, or a supplied field list) as
+  `{ digest, node_count }`; deterministic ordering suits frame-by-frame comparison.
+- **`runtime_seed_rng`** (gated) — seed the global RNG (`seed()`) for reproducible runs; documents that
+  it does not cover per-instance RNGs or physics determinism.
+- Async lane + four dispatch handlers in `addons/breakpoint_mcp/runtime_bridge.gd` (a placeholder
+  `runtime.step_frames` case keeps the static contract scan aware of the async method); synced to the
+  `example/` and `example-csharp/` addon copies.
+
+### Tests
+- `host/test/runtime.test.ts`: gated set 8 → 11 (`runtime_time_scale`, `runtime_step_frames`,
+  `runtime_seed_rng`); new happy-path coverage for all four. Count assertions **282 → 286** /
+  secure-default **272** across `capabilities.test.ts`, `toolsets.test.ts`, `registration.test.ts`, and
+  the doctor/init strings (`cli_capabilities.test.ts`). Host suite **443 / 0**; static contract gate **286**.
+- **Engine-side note:** the async frame-step logic executes only against real Godot — validated by the
+  headless-Godot integration lane and live runs, not the mocked host unit tests (the plan calls for a
+  short pause-toggle spike on Godot 4.2/4.4/4.5).
+
 ## [1.20.0] — 2026-07-24
 
 Adds **six runtime-bridge tools** (Plane C) that close the highest-value gaps found in the

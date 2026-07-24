@@ -545,6 +545,11 @@ export const outputSchemas: Record<string, z.ZodRawShape> = {
   },
   runtime_node_add: { added: z.boolean(), path: z.string(), type: z.string() },
   runtime_node_remove: { removed: z.boolean(), path: z.string() },
+  // F4 additions: deterministic playtesting (time control / frame stepping / state digest / RNG seed).
+  runtime_time_scale: { previous: z.number(), current: z.number() },
+  runtime_step_frames: { frames_advanced: z.number(), frame_index: z.number() },
+  runtime_state_digest: { digest: z.record(z.record(encodedValue)), node_count: z.number() },
+  runtime_seed_rng: { seed: z.number() },
 
   // ---- Group K: knowledge & search ----
   // Host-side project index (tools/knowledge.ts) — no bridge/LSP; read the project files directly.

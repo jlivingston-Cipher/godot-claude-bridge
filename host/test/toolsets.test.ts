@@ -4,7 +4,7 @@ import { buildToolsets } from "../src/toolsets.js";
 import { applyOutputSchemas } from "../src/schemas.js";
 import { loadConfig, selectToolsets, parseToolsets, TOOLSET_ALIASES } from "../src/config.js";
 
-const EXPECTED_TOOL_COUNT = 282;
+const EXPECTED_TOOL_COUNT = 286;
 
 /** A recording server that captures registered tool names. */
 function recorder() {
@@ -84,7 +84,7 @@ test("every alias target names a real toolset id", () => {
 });
 
 // --- the key property: toolsets partition the whole surface -----------------
-test("toolsets partition the full 282-tool surface (disjoint + lossless)", () => {
+test("toolsets partition the full 286-tool surface (disjoint + lossless)", () => {
   const full = recorder();
   for (const ts of build(full)) ts.run();
   assert.equal(full.calls.length, EXPECTED_TOOL_COUNT);

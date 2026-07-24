@@ -11,8 +11,8 @@
  * DROP them at registration when their group isn't enabled — so a default
  * session's advertised surface omits the high-blast tools entirely
  * (least-privilege by construction, mirroring `godot-agent-loop`). The full
- * 282-tool surface loads only when `BREAKPOINT_PRIVILEGED_GROUPS` opts the
- * groups back in; the secure-default surface is 282 − 14 = 268 tools.
+ * 286-tool surface loads only when `BREAKPOINT_PRIVILEGED_GROUPS` opts the
+ * groups back in; the secure-default surface is 286 − 14 = 272 tools.
  *
  * A tool with NO capability tag is always registered. Semantics are a UNION: a
  * tool tagged with more than one group is registered when ANY of its groups is

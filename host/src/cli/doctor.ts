@@ -224,7 +224,7 @@ export function checkCapabilities(config: Config): Check[] {
       severity: "info",
       detail:
         dropped.length === 0
-          ? `${state} — full 282-tool surface`
+          ? `${state} — full 286-tool surface`
           : `${state} (secure default) — ${dropped.length} higher-trust tool(s) dropped from the surface`,
       hint:
         dropped.length === 0

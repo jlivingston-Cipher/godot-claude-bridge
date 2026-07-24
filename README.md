@@ -6,7 +6,7 @@
 > Developed and tested with **Claude**; MCP is an open protocol, so other clients can
 > connect too (see [Compatibility](#compatibility)).
 >
-> **npm 1.20.0 · addon 1.8.0 · full 282 / secure-default 268 tools · 6 MCP resources · MIT.** The host builds against
+> **npm 1.21.0 · addon 1.9.0 · full 286 / secure-default 272 tools · 6 MCP resources · MIT.** The host builds against
 > the stable `@modelcontextprotocol/sdk` 1.x API and is exercised by a 431-test suite plus
 > real-Godot integration jobs on Node 18/20/22.
 
@@ -95,7 +95,7 @@ if you do, that is exactly what it buys.
 
 ## What it does
 
-Breakpoint MCP is organized into four capability **planes** (full **282 tools**, or **268** with the two privileged capability groups off by default — see [Safety & trust model](#safety--trust-model) — plus **6 resources**):
+Breakpoint MCP is organized into four capability **planes** (full **286 tools**, or **272** with the two privileged capability groups off by default — see [Safety & trust model](#safety--trust-model) — plus **6 resources**):
 
 - **Plane A — Live Editor Bridge** (~145 tools: `editor_*`, `scene_*`, `node_*`,
   `signal_*`, `resource_*`, `filesystem_*`, `anim_*`, and more): a Godot `EditorPlugin`
@@ -283,7 +283,7 @@ and wrapper key differ.
 | `BREAKPOINT_RUNTIME_HOST` / `BREAKPOINT_RUNTIME_PORT` | `127.0.0.1` / `9081` | In-game runtime bridge (must match the autoload) |
 | `BREAKPOINT_RUNTIME_TIMEOUT_MS` | `15000` | Runtime request timeout |
 | `BREAKPOINT_TOOLSETS` | *(unset → all)* | Comma/space list of tool groups or planes to enable — see [Toolsets](#toolsets-optional--load-only-the-planes-you-need) |
-| `BREAKPOINT_PRIVILEGED_GROUPS` | *(unset → none)* | Comma/space list of the default-OFF capability groups to enable: `code-execution`, `network`, or `all`. Off → secure-default **268** tools; opting in loads the **full 282** — see [Safety & trust model](#safety--trust-model) |
+| `BREAKPOINT_PRIVILEGED_GROUPS` | *(unset → none)* | Comma/space list of the default-OFF capability groups to enable: `code-execution`, `network`, or `all`. Off → secure-default **272** tools; opting in loads the **full 286** — see [Safety & trust model](#safety--trust-model) |
 
 > **Renamed from `CLAUDE_*`:** the `BREAKPOINT_*` variables above (plus `BREAKPOINT_RESOURCE_COALESCE_MS`) were named `CLAUDE_*` in earlier versions. The legacy `CLAUDE_*` names were honoured with a one-time deprecation warning in `1.0.0` and **removed in `1.1.0`** — use the `BREAKPOINT_*` names. `GODOT_*` variables are unchanged.
 
@@ -291,9 +291,9 @@ The full, annotated configuration reference is in the [User Guide](docs/USER_GUI
 
 ### Toolsets (optional — load only the planes you need)
 
-By default the server registers the full surface (282 tools). On Claude Code that costs
+By default the server registers the full surface (286 tools). On Claude Code that costs
 nothing at decision time: **Tool Search** defers the catalog and loads each schema on demand
-(a measured **~86–98% upfront token reduction** — the model never sees all 282 at once). For
+(a measured **~86–98% upfront token reduction** — the model never sees all 286 at once). For
 clients that can't defer tools, or when you just want a smaller default menu, set
 `BREAKPOINT_TOOLSETS` to a comma- or space-separated list of groups; only those register. The
 four **planes already are the grouping**, so the aliases mirror them:
@@ -331,7 +331,7 @@ standard **MCP prompts** (discoverable via `prompts/list`), so a client can pull
 
 Recipes are skills which ride on top of typed, schema-validated, undoable tools — so the
 contract is executed by the server, not merely described in prose which a model might
-misapply. Recipes also add no tools (the count stays 282) and cost nothing until pulled.
+misapply. Recipes also add no tools (the count stays 286) and cost nothing until pulled.
 
 ## Compatibility
 
@@ -421,8 +421,8 @@ Breakpoint MCP is a **local co-development tool** and is built to keep you in co
   methods, evaluates in a paused frame, or spawns the local asset-gen `command` backend) and
   `network` (egress beyond loopback — the Group M backend-SDK scaffolding). With both off, those
   tools are **dropped at registration** and never appear in `tools/list`, so the secure-default
-  surface is **268 tools**; opt in with `BREAKPOINT_PRIVILEGED_GROUPS=code-execution,network` (or
-  `all`, or `breakpoint-mcp init --trust full`) to load the full **282**. The always-on
+  surface is **272 tools**; opt in with `BREAKPOINT_PRIVILEGED_GROUPS=code-execution,network` (or
+  `all`, or `breakpoint-mcp init --trust full`) to load the full **286**. The always-on
   **`godot://capabilities`** resource lists every group, its state, and the exact tools it gates,
   so a disabled tool is discoverable rather than a silent gap. Defense-in-depth and a legible
   least-privilege story over an already typed / undoable / gated surface — not the closing of an

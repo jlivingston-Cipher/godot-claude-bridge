@@ -47,6 +47,10 @@ const MONITORS := {
 
 const BridgeSecret := preload("res://addons/breakpoint_mcp/bridge_secret.gd")
 const PauseLatch := preload("res://addons/breakpoint_mcp/pause_latch.gd")
+# F4: methods dispatched on the async lane (they await frames); see _handle_line / _dispatch_async.
+const ASYNC_METHODS := ["runtime.step_frames"]
+# F4: default salient fields captured by runtime.state_digest when no explicit list is given.
+const _DIGEST_DEFAULT_FIELDS := ["position", "global_position", "rotation", "scale", "visible", "modulate"]
 
 var _server: TCPServer
 var _clients: Array = [] # Array of {peer, buf}
@@ -219,6 +223,12 @@ func _handle_line(c: Dictionary, line: String) -> void:
 		held.merge(PauseLatch.held_response(method))
 		_send(peer, held)
 		return
+	# F4: async lane — methods that await frames can't use the synchronous dispatch (which sends
+	# its response immediately). Start a coroutine that sends the id'd response when done; the host
+	# correlates responses by id, so an out-of-order async response is fine.
+	if method in ASYNC_METHODS:
+		_dispatch_async(c, id, method, params)
+		return
 	var result := _dispatch(method, params)
 	var response := {"id": id}
 	response.merge(result)
@@ -334,6 +344,17 @@ func _dispatch(method: String, params: Dictionary) -> Dictionary:
 			return _node_add(params)
 		"runtime.node_remove":
 			return _node_remove(params)
+		"runtime.time_scale":
+			return _time_scale(params)
+		"runtime.state_digest":
+			return _state_digest(params)
+		"runtime.seed_rng":
+			return _seed_rng(params)
+		"runtime.step_frames":
+			# Dispatched on the async lane (see _handle_line / _dispatch_async); this placeholder
+			# keeps the static contract check (which scans _dispatch case labels) aware of the
+			# method. It is not reached in normal operation.
+			return _err("async_only", "runtime.step_frames is dispatched on the async lane")
 		_:
 			return _err("unknown_method", "No such method: %s" % method)
 
@@ -890,3 +911,92 @@ func _node_remove(params: Dictionary) -> Dictionary:
 	var p := _path_of(node)
 	node.queue_free()
 	return _ok({"removed": true, "path": p})
+
+
+# ----------------------------------------------- F4: deterministic playtesting ----
+
+## Async dispatch lane: run a coroutine that awaits frames, then send the id'd response. Started
+## as a bare (un-awaited) call from _handle_line so _process never blocks; it resumes on the
+## engine's frame signals and sends when complete.
+func _dispatch_async(c: Dictionary, id: Variant, method: String, params: Dictionary) -> void:
+	var result: Dictionary
+	match method:
+		"runtime.step_frames":
+			result = await _step_frames(params)
+		_:
+			result = _err("async_only", "not an async method: %s" % method)
+	var peer: StreamPeerTCP = c.get("peer")
+	if peer != null and peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+		var response := {"id": id}
+		response.merge(result)
+		_send(peer, response)
+
+
+## Advance the game by an exact number of frames while otherwise frozen. Toggles
+## get_tree().paused false -> (await one frame) -> true per step (the standard Godot frame-step
+## idiom); the bridge keeps servicing the socket throughout because it is PROCESS_MODE_ALWAYS.
+## Restores the caller's prior pause state when done.
+func _step_frames(params: Dictionary) -> Dictionary:
+	var tree := get_tree()
+	if tree == null:
+		return _err("no_tree", "No scene tree")
+	var frames := clampi(int(params.get("frames", 1)), 1, 100000)
+	var kind := String(params.get("kind", "idle"))
+	var was_paused := tree.paused
+	var advanced := 0
+	for _i in frames:
+		tree.paused = false
+		if kind == "physics" or kind == "both":
+			await tree.physics_frame
+		if kind == "idle" or kind == "both":
+			await tree.process_frame
+		tree.paused = true
+		advanced += 1
+	tree.paused = was_paused
+	return _ok({"frames_advanced": advanced, "frame_index": Engine.get_process_frames()})
+
+
+func _time_scale(params: Dictionary) -> Dictionary:
+	var previous := Engine.time_scale
+	var scale := maxf(0.0, float(params.get("scale", 1.0)))
+	Engine.time_scale = scale
+	return _ok({"previous": previous, "current": Engine.time_scale})
+
+
+func _seed_rng(params: Dictionary) -> Dictionary:
+	var s := int(params.get("seed", 0))
+	seed(s)
+	return _ok({"seed": s})
+
+
+## Read a compact, stable-ordered snapshot of a subtree's salient state (read-only). Default
+## fields are the common transform/visibility properties; a caller may pass an explicit list.
+func _state_digest(params: Dictionary) -> Dictionary:
+	var root := _resolve(String(params.get("root", "")))
+	if root == null:
+		return _err("bad_path", "Node not found: %s" % params.get("root", ""))
+	var raw_fields: Variant = params.get("fields", [])
+	var fields: Array = raw_fields if typeof(raw_fields) == TYPE_ARRAY else []
+	var max_depth := int(params.get("max_depth", 8))
+	var digest := {}
+	var count := _digest_walk(root, 0, max_depth, fields, digest)
+	return _ok({"digest": digest, "node_count": count})
+
+
+func _digest_walk(node: Node, depth: int, max_depth: int, fields: Array, digest: Dictionary) -> int:
+	var entry := {}
+	if fields.is_empty():
+		for f in _DIGEST_DEFAULT_FIELDS:
+			var dv: Variant = node.get(f)
+			if dv != null:
+				entry[f] = Codec.encode(dv)
+	else:
+		for f in fields:
+			var fn := String(f)
+			entry[fn] = Codec.encode(node.get(fn))
+	digest[_path_of(node)] = entry
+	var count := 1
+	if depth < max_depth:
+		for ch in node.get_children():
+			count += _digest_walk(ch, depth + 1, max_depth, fields, digest)
+	return count

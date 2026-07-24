@@ -497,4 +497,88 @@ export function registerRuntimeTools(server: McpServer, runtime: BridgeClient): 
       return call("runtime.node_remove", { path });
     },
   );
+
+  // F4: deterministic playtesting — freeze time, step exact frames, snapshot state, seed RNG.
+  server.registerTool(
+    "runtime_time_scale",
+    {
+      title: "Runtime time scale",
+      description:
+        "Set Engine.time_scale on the running game: 0 freezes time, 1 is normal, >1 fast, <1 slow-motion. " +
+        "DESTRUCTIVE (alters the running game's clock) — gated by confirmation. Freeze with scale 0, then " +
+        "runtime_step_frames to advance deterministically before asserting.",
+      inputSchema: {
+        scale: z.number().min(0).describe("0 = freeze, 1 = normal, N = slow/fast (negative is clamped to 0)"),
+        ...confirmField,
+      },
+    },
+    async ({ scale, confirm }) => {
+      const blocked = await gate(server, confirm, `Set time scale to ${scale} on the running game`);
+      if (blocked) return blocked;
+      return call("runtime.time_scale", { scale });
+    },
+  );
+
+  server.registerTool(
+    "runtime_step_frames",
+    {
+      title: "Runtime step frames",
+      description:
+        "Advance the running game by an exact number of frames while otherwise frozen, for deterministic, " +
+        "frame-accurate playtesting. DESTRUCTIVE — gated by confirmation. `kind` selects which loop to tick each " +
+        "step: idle (default), physics, or both. Pair with runtime_time_scale{scale:0} to freeze, then assert.",
+      inputSchema: {
+        frames: z.number().int().positive().describe("Number of frames to advance"),
+        kind: z.enum(["idle", "physics", "both"]).optional().describe("Which loop to tick each step (default idle)"),
+        ...confirmField,
+      },
+    },
+    async ({ frames, kind, confirm }) => {
+      const blocked = await gate(server, confirm, `Advance ${frames} frame(s) of the running game`);
+      if (blocked) return blocked;
+      return call("runtime.step_frames", { frames, ...(kind !== undefined ? { kind } : {}) });
+    },
+  );
+
+  server.registerTool(
+    "runtime_state_digest",
+    {
+      title: "Runtime state digest",
+      description:
+        "Capture a compact, stable-ordered JSON snapshot of a live subtree's salient state (read-only) — position, " +
+        "rotation, scale, visibility, and modulate by default, or a caller-supplied field list. Deterministic ordering " +
+        "makes it ideal for frame-by-frame comparison alongside runtime_step_frames.",
+      inputSchema: {
+        root: z.string().describe("Root node path in the running scene"),
+        fields: z
+          .array(z.string())
+          .optional()
+          .describe("Property names to capture per node (default: position/global_position/rotation/scale/visible/modulate when present)"),
+        max_depth: z.number().int().nonnegative().optional().describe("Max recursion depth (default 8)"),
+      },
+    },
+    async ({ root, fields, max_depth }) =>
+      call("runtime.state_digest", {
+        root,
+        ...(fields !== undefined ? { fields } : {}),
+        ...(max_depth !== undefined ? { max_depth } : {}),
+      }),
+  );
+
+  server.registerTool(
+    "runtime_seed_rng",
+    {
+      title: "Runtime seed RNG",
+      description:
+        "Seed the running game's GLOBAL random number generator (GDScript seed()) so a playtest is reproducible. " +
+        "DESTRUCTIVE (changes RNG state) — gated by confirmation. Note: seeds only the global RNG (randi/randf), not " +
+        "per-instance RandomNumberGenerators or physics determinism.",
+      inputSchema: { seed: z.number().int().describe("Seed value for the global RNG"), ...confirmField },
+    },
+    async ({ seed, confirm }) => {
+      const blocked = await gate(server, confirm, `Seed the running game's global RNG with ${seed}`);
+      if (blocked) return blocked;
+      return call("runtime.seed_rng", { seed });
+    },
+  );
 }

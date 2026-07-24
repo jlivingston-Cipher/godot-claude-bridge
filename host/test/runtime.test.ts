@@ -26,6 +26,10 @@ const GATED = [
   "runtime_anim_stop",
   "runtime_node_add",
   "runtime_node_remove",
+  // F4 additions — time control / frame stepping / RNG seed drive the running game.
+  "runtime_time_scale",
+  "runtime_step_frames",
+  "runtime_seed_rng",
 ].sort();
 
 // Valid-enough args per tool so that gate summaries (some read args, e.g.
@@ -42,6 +46,11 @@ const ARGS: Record<string, Record<string, unknown>> = {
   runtime_anim_get_state: { path: "/root/Anim" },
   runtime_node_add: { parent: "/root", type: "Node2D", name: "Spawned" },
   runtime_node_remove: { path: "/root/Spawned" },
+  // F4: gated time/frame/RNG mutators + read-only state digest.
+  runtime_time_scale: { scale: 0 },
+  runtime_step_frames: { frames: 2, kind: "idle" },
+  runtime_state_digest: { root: "/root" },
+  runtime_seed_rng: { seed: 42 },
 };
 
 interface BridgeCall {
@@ -403,4 +412,57 @@ test("runtime_node_remove forwards the node path once confirmed", async () => {
   assert.notEqual(r.isError, true);
   assert.equal(h.calls[0].method, "runtime.node_remove");
   assert.deepEqual(h.calls[0].params, { path: "/root/Spawned" });
+});
+
+// ------------------------------------------------ F4: deterministic playtesting ----
+
+test("runtime_time_scale forwards runtime.time_scale with the scale once confirmed", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { previous: 1, current: 0 });
+  const r = await h.handler("runtime_time_scale")({ scale: 0, confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.time_scale");
+  assert.deepEqual(h.calls[0].params, { scale: 0 });
+});
+
+test("runtime_step_frames forwards frames + kind once confirmed", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { frames_advanced: 3, frame_index: 1234 });
+  const r = await h.handler("runtime_step_frames")({ frames: 3, kind: "both", confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.step_frames");
+  assert.deepEqual(h.calls[0].params, { frames: 3, kind: "both" });
+});
+
+test("runtime_step_frames omits kind when not supplied", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { frames_advanced: 1, frame_index: 1 });
+  await h.handler("runtime_step_frames")({ frames: 1, confirm: true });
+  assert.deepEqual(h.calls[0].params, { frames: 1 });
+});
+
+test("runtime_state_digest forwards runtime.state_digest (read-only, not gated)", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { digest: { ".": { visible: true } }, node_count: 1 });
+  const r = await h.handler("runtime_state_digest")({ root: "/root" });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.elicitReqs.length, 0);
+  assert.equal(h.calls[0].method, "runtime.state_digest");
+  assert.deepEqual(h.calls[0].params, { root: "/root" });
+});
+
+test("runtime_state_digest forwards optional fields/max_depth when supplied", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { digest: {}, node_count: 0 });
+  await h.handler("runtime_state_digest")({ root: "/root", fields: ["position"], max_depth: 3 });
+  assert.deepEqual(h.calls[0].params, { root: "/root", fields: ["position"], max_depth: 3 });
+});
+
+test("runtime_seed_rng forwards the seed once confirmed", async () => {
+  const h = makeHarness();
+  h.setBridge("resolve", { seed: 42 });
+  const r = await h.handler("runtime_seed_rng")({ seed: 42, confirm: true });
+  assert.notEqual(r.isError, true);
+  assert.equal(h.calls[0].method, "runtime.seed_rng");
+  assert.deepEqual(h.calls[0].params, { seed: 42 });
 });

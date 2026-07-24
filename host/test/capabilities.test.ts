@@ -14,7 +14,7 @@ import {
   toolAllowed,
 } from "../src/capabilities.js";
 
-const FULL_TOOL_COUNT = 282;
+const FULL_TOOL_COUNT = 286;
 
 // The 14 privileged tools, split by which single group keeps them.
 const CODE_EXEC_ONLY = [
@@ -81,20 +81,20 @@ function registerWith(tokens: string[] | null) {
   return calls.map((c) => c.name);
 }
 
-test("secure default (no groups) drops exactly the 14 privileged tools → 268", () => {
+test("secure default (no groups) drops exactly the 14 privileged tools → 272", () => {
   const names = registerWith(null);
   assert.equal(names.length, FULL_TOOL_COUNT - ALL_PRIVILEGED.length);
-  assert.equal(names.length, 268);
+  assert.equal(names.length, 272);
   const present = new Set(names);
   for (const t of ALL_PRIVILEGED) assert.ok(!present.has(t), `${t} should be dropped by default`);
 });
 
-test("enabling both groups (or 'all') restores the full 282-tool surface", () => {
+test("enabling both groups (or 'all') restores the full 286-tool surface", () => {
   assert.equal(registerWith(["code-execution", "network"]).length, FULL_TOOL_COUNT);
   assert.equal(registerWith(["all"]).length, FULL_TOOL_COUNT);
 });
 
-test("code-execution only keeps everything except the network-only tools (280)", () => {
+test("code-execution only keeps everything except the network-only tools (284)", () => {
   const names = registerWith(["code-execution"]);
   assert.equal(names.length, FULL_TOOL_COUNT - NETWORK_ONLY.length);
   const present = new Set(names);
@@ -102,7 +102,7 @@ test("code-execution only keeps everything except the network-only tools (280)",
   for (const t of CODE_EXEC_ONLY) assert.ok(present.has(t), `${t} should be present`);
 });
 
-test("network only keeps everything except the pure code-execution tools (270)", () => {
+test("network only keeps everything except the pure code-execution tools (274)", () => {
   const names = registerWith(["network"]);
   assert.equal(names.length, FULL_TOOL_COUNT - CODE_EXEC_ONLY.length);
   const present = new Set(names);

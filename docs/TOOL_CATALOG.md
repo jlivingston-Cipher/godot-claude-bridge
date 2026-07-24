@@ -1,6 +1,6 @@
 # Godot–Breakpoint MCP — MCP Tool-Schema Catalog
 
-Complete tool contract for the bridge — **282 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
+Complete tool contract for the bridge — **286 tools + 5 MCP resources, all implemented (Phases 0–4)**. Each tool lists its **plane**, **status** (`✅ implemented`), a **destructive** flag (destructive tools are elicitation-gated and accept a `confirm` argument — see "Destructive-action gating" below), and its **input** and **output** JSON Schemas (draft 2020-12).
 
 > Design note: as of **v0.4.3 (track B1)** these output schemas are **enforced at runtime**. `host/src/schemas.ts` freezes the `structuredContent` shape of every data tool and `applyOutputSchemas()` injects it as that tool's `outputSchema`, which the MCP SDK validates on every success result (`isError` results are exempt). The shapes were frozen from the v0.4.2 live-validation run, so the documented contract below **is** the enforced contract. `z.object` is non-strict, so a tool may still return *extra* fields without failing validation (the schema pins the required envelope, not an exhaustive field list).
 
@@ -2615,6 +2615,34 @@ Restart the current C# debug session. Uses the DAP `restart` request when the ad
 ```
 - **Output** `{ removed, path }` — `queue_free()`s the node. Refuses to remove the current scene root (`cannot_remove_root`).
 
+### `runtime_time_scale` ✅ · destructive (alters the running game's clock)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["scale"], "properties": { "scale": { "type": "number", "minimum": 0, "description": "0 = freeze, 1 = normal, N = slow/fast" } } }
+```
+- **Output** `{ previous, current }` — sets `Engine.time_scale` (negative clamped to 0) and reports the prior and new values. Freeze with `scale:0`, then `runtime_step_frames` to advance deterministically.
+
+### `runtime_step_frames` ✅ · destructive (drives the running game)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["frames"], "properties": { "frames": { "type": "integer", "minimum": 1 }, "kind": { "enum": ["idle", "physics", "both"], "default": "idle" } } }
+```
+- **Output** `{ frames_advanced, frame_index }` — advances the game by exactly `frames` frames while otherwise frozen, ticking the idle loop (default), the physics loop, or both each step. Dispatched on the runtime bridge's **async lane** (it awaits engine frame signals; the bridge stays responsive because its autoload is `PROCESS_MODE_ALWAYS`) and restores the caller's prior pause state when done. `frame_index` is `Engine.get_process_frames()` after stepping. Pair with `runtime_time_scale{scale:0}` to freeze, then assert.
+
+### `runtime_state_digest` ✅
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["root"], "properties": { "root": { "type": "string" }, "fields": { "type": "array", "items": { "type": "string" } }, "max_depth": { "type": "integer", "minimum": 0, "default": 8 } } }
+```
+- **Output** `{ digest, node_count }` — read-only. Walks the subtree at `root` (to `max_depth`, default 8) and emits `digest` as a stable-ordered map of node path → `{ field: value }`. Default fields are `position` / `global_position` / `rotation` / `scale` / `visible` / `modulate` (only those present on each node); pass `fields` to capture a specific set. Deterministic ordering makes it ideal for frame-by-frame comparison alongside `runtime_step_frames`.
+
+### `runtime_seed_rng` ✅ · destructive (changes RNG state)
+- **Input**
+```json
+{ "type": "object", "additionalProperties": false, "required": ["seed"], "properties": { "seed": { "type": "integer" } } }
+```
+- **Output** `{ seed }` — seeds the running game's **global** RNG via GDScript `seed()` so a playtest is reproducible. Note: affects only the global RNG (`randi`/`randf`), not per-instance `RandomNumberGenerator`s or physics determinism.
+
 ---
 
 ---
@@ -4206,6 +4234,10 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `runtime_anim_get_state` | C / Runtime | ✅ | – |
 | `runtime_node_add` | C / Runtime | ✅ | ✔ |
 | `runtime_node_remove` | C / Runtime | ✅ | ✔ |
+| `runtime_time_scale` | C / Runtime | ✅ | ✔ |
+| `runtime_step_frames` | C / Runtime | ✅ | ✔ |
+| `runtime_state_digest` | C / Runtime | ✅ | – |
+| `runtime_seed_rng` | C / Runtime | ✅ | ✔ |
 
 | `godot_run_managed` | B / Process | ✅ | – |
 | `godot_output` | B / Process | ✅ | – |
@@ -4266,4 +4298,4 @@ via `BREAKPOINT_RESOURCE_COALESCE_MS`; `0` disables it) collapse into at most on
 | `interact_make_draggable` | N / Editor | ✅ | ✔ writes files |
 | `interact_add_drop_zone` | N / Editor | ✅ | ✔ writes files |
 
-**282 tools + 5 MCP resources implemented across Phases 0–4, spanning all four planes — headless CLI + host-side tools (`godot_*`, knowledge/search, and version control `vcs_*`), the live editor bridge (Groups A–N), semantic (LSP) + debugging (DAP) for both GDScript and C#, and the runtime bridge. Destructive tools are elicitation-gated; long jobs run on the MCP task model. All four planes live.**
+**286 tools + 5 MCP resources implemented across Phases 0–4, spanning all four planes — headless CLI + host-side tools (`godot_*`, knowledge/search, and version control `vcs_*`), the live editor bridge (Groups A–N), semantic (LSP) + debugging (DAP) for both GDScript and C#, and the runtime bridge. Destructive tools are elicitation-gated; long jobs run on the MCP task model. All four planes live.**
